@@ -1,0 +1,25 @@
+# NoaToDo — Abhängigkeiten
+# Fenster / WebView2-Wrapper
+pywebview
+
+# HTTP zu Microsoft Graph
+httpx
+
+# Microsoft-Authentifizierung (Public Client, Auth-Code + PKCE)
+msal
+
+# Tokens sicher im Windows Credential Manager
+keyring
+
+# Lokale Windows-Benachrichtigungen
+winotify
+
+# --- Verschlüsselung (Doppel-Kaskade, siehe Bauplan B.7) ---
+# Schicht 1: SQLCipher / AES-256 (Pflicht)
+# Hinweis: sqlcipher3-binary hat keine Windows-Wheels. sqlcipher3-wheels
+# liefert vorgebaute Windows-Wheels mit identischer sqlcipher3-API.
+sqlcipher3-wheels
+# Schicht 2: ChaCha20-Poly1305 (Pflicht)
+cryptography
+# Passphrase-Hash + Schlüsselableitung
+argon2-cffi

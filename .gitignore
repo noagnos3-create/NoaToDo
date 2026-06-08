@@ -1,0 +1,33 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+
+# Virtual environment
+Code/venv/
+venv/
+.venv/
+
+# App data — encrypted DB, logs, runtime state (never commit user data)
+Code/data/
+data/
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+*.log
+
+# Secrets / local config
+.env
+*.secret
+
+# Claude Code local settings
+.claude/
+
+# OS / editor
+Thumbs.db
+desktop.ini
+.DS_Store
+.vscode/
+.idea/
