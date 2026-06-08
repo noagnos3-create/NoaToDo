@@ -6,7 +6,7 @@ Fehler auf, kommt ``{"error": code, "message": ...}`` zurück (Fehlerkonvention 
 
 In Phase 2 sind alle lokalen Methoden echt (lesen/schreiben die DB). Die
 Microsoft- und Sicherheits-Methoden sind sinnvolle Platzhalter und werden in den
-Phasen 7–11 ausgefüllt.
+Phasen 7-11 ausgefüllt.
 """
 from __future__ import annotations
 
@@ -53,7 +53,16 @@ class Api:
         self.db = database
         self.online = True
         self.locked = False
-        self.window = None  # von main.py gesetzt, für Backend->Frontend-Events
+        # Unterstrich-Präfix ist Pflicht: PyWebView durchsucht das Api-Objekt
+        # rekursiv nach exponierbaren Methoden (util.get_functions) und steigt
+        # dabei in jedes öffentliche Attribut ab. Ein dort liegendes Window-
+        # Objekt würde über window.dom.body ein evaluate_js() auslösen, bevor das
+        # Fenster bereit ist -> "Main window failed to start". Namen mit "_"
+        # werden von der Introspektion übersprungen.
+        self._window = None  # von main.py gesetzt, für Backend->Frontend-Events
+        self._mini = False        # kompakter Mini-Fenster-Modus aktiv?
+        self._restore_geom = None  # gemerkte Fenstergeometrie vor dem Mini-Modus
+        self._on_setting_change = None  # optionaler Callback(key, value) für main.py
 
     # =====================================================================
     # Gesamtzustand
@@ -154,10 +163,10 @@ class Api:
             lines.append(lst["name"])
             lines.append("=" * len(lst["name"]))
             for t in lst["open"]:
-                meta = f" — {t['meta']}" if t.get("meta") else ""
+                meta = f", {t['meta']}" if t.get("meta") else ""
                 lines.append(f"[ ] {t['text']}{meta}")
             for t in lst["done"]:
-                meta = f" — {t['meta']}" if t.get("meta") else ""
+                meta = f", {t['meta']}" if t.get("meta") else ""
                 lines.append(f"[x] {t['text']}{meta}")
             ext = "txt"
         return {"filename": f"{safe}.{ext}", "content": "\n".join(lines)}
@@ -174,7 +183,49 @@ class Api:
     # =====================================================================
     @bridge
     def set_setting(self, key: str, value: Any) -> dict[str, Any]:
-        return self.db.set_setting(key, value)
+        result = self.db.set_setting(key, value)
+        if self._on_setting_change:
+            self._on_setting_change(key, value)
+        return result
+
+    # =====================================================================
+    # Fenster (Mini-/Kompaktmodus)
+    # =====================================================================
+    @bridge
+    def set_mini(self, flag: bool) -> dict[str, Any]:
+        """Schaltet den kompakten Mini-Fenster-Modus um.
+
+        Im Mini-Modus wird das Fenster auf ein schmales Lesefenster verkleinert
+        und oben rechts am Bildschirm angeheftet, sodass nur die gerade offene
+        Liste sichtbar bleibt. Beim Verlassen wird die vorherige Größe/Position
+        wiederhergestellt.
+        """
+        win = self._window
+        if win is None:
+            return {"error": "no_window", "message": "Kein Fenster verfügbar."}
+        flag = bool(flag)
+        if flag == self._mini:
+            return {"mini": self._mini}
+        if flag:
+            # Aktuelle Geometrie merken (defensiv, falls Attribute fehlen).
+            self._restore_geom = {
+                "w": int(getattr(win, "width", 1200) or 1200),
+                "h": int(getattr(win, "height", 800) or 800),
+                "x": getattr(win, "x", None),
+                "y": getattr(win, "y", None),
+            }
+            screen_w, _screen_h = _primary_screen_size()
+            mini_w, mini_h, margin = 360, 600, 16
+            win.resize(mini_w, mini_h)
+            win.move(max(0, screen_w - mini_w - margin), margin)
+            self._mini = True
+        else:
+            geom = self._restore_geom or {"w": 1200, "h": 800, "x": None, "y": None}
+            win.resize(int(geom["w"]), int(geom["h"]))
+            if geom.get("x") is not None and geom.get("y") is not None:
+                win.move(int(geom["x"]), int(geom["y"]))
+            self._mini = False
+        return {"mini": self._mini}
 
     # =====================================================================
     # Status / Diagnose
@@ -200,7 +251,7 @@ class Api:
         }
 
     # =====================================================================
-    # Microsoft (Stubs — Phasen 8/9)
+    # Microsoft (Stubs: Phasen 8/9)
     # =====================================================================
     @bridge
     def sign_in(self) -> dict[str, Any]:
@@ -220,7 +271,7 @@ class Api:
         return {"online": self.online}
 
     # =====================================================================
-    # Sicherheit (Stubs — Phase 11)
+    # Sicherheit (Stubs: Phase 11)
     # =====================================================================
     @bridge
     def lock(self) -> dict[str, Any]:
@@ -238,6 +289,20 @@ class Api:
         self.locked = True
         self.online = False
         return {"locked": True}
+
+
+def _primary_screen_size() -> tuple[int, int]:
+    """Liefert die Größe des primären Bildschirms (best effort, Fallback 1920x1080)."""
+    try:
+        import webview
+
+        screens = webview.screens
+        if screens:
+            scr = screens[0]
+            return int(scr.width), int(scr.height)
+    except Exception:
+        pass
+    return 1920, 1080
 
 
 def _webview2_version() -> str:

@@ -333,7 +333,7 @@ class Database:
 
     # -- Seed --------------------------------------------------------------
     def seed_if_empty(self) -> None:
-        """Startfüllung aus Bauplan Anhang 1 — nur wenn die DB leer ist."""
+        """Startfüllung aus Bauplan Anhang 1, nur wenn die DB leer ist."""
         if not self.is_empty():
             return
         seed_lists = _SEED_DATA
@@ -430,7 +430,7 @@ _SEED_DATA: list[tuple[str, bool, list[tuple[str, str | None]], list[tuple[str, 
     (
         "Travel", False,
         [
-            ("Lisbon — Alfama walking route", None),
+            ("Lisbon, Alfama walking route", None),
             ("Kyoto in shoulder season", None),
             ("Dolomites hut-to-hut", None),
             ("Reykjavík stopover", None),

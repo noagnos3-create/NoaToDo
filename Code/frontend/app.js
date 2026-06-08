@@ -1,10 +1,10 @@
-// NoaToDo — Frontend-Logik (Bauplan Phase 6).
+// NoaToDo, Frontend-Logik (Bauplan Phase 6).
 // Vanilla-Portierung der React-Komponenten aus "NoaToDo UI Konzept.html".
 // Das Backend (pywebview.api.*) ist die Wahrheitsquelle; state ist nur Cache.
 'use strict';
 
 // ===========================================================================
-// Icons — 1:1 aus dem Konzept (Anhang 2). 24er-Grid, Strichstärke 1.7.
+// Icons, 1:1 aus dem Konzept (Anhang 2). 24er-Grid, Strichstärke 1.7.
 // ===========================================================================
 function _svg(children, extra) {
   const base = {
@@ -29,10 +29,14 @@ const Icons = {
   Check: _svg(_p('M5 12l5 5L19 6')),
   Gear: _svg(_c(12, 12, 3) + _p('M12 2v3M12 19v3M4.2 4.2l2.1 2.1M17.7 17.7l2.1 2.1M2 12h3M19 12h3M4.2 19.8l2.1-2.1M17.7 6.3l2.1-2.1')),
   Chevron: _svg(_p('M6 9l6 6 6-6')),
+  ChevRight: _svg(_p('M9 6l6 6-6 6')),
+  ChevLeft: _svg(_p('M15 6l-6 6 6 6')),
   Grip: _svg(_c(9, 6, 1) + _c(15, 6, 1) + _c(9, 12, 1) + _c(15, 12, 1) + _c(9, 18, 1) + _c(15, 18, 1), { fill: 'currentColor', stroke: 'none' }),
   Plane: _svg(_p('M21 16v-2l-8-5V3.5a1.5 1.5 0 0 0-3 0V9l-8 5v2l8-2.5V19l-2 1.5V22l3.5-1 3.5 1v-1.5L13 19v-5.5l8 2.5z')),
   Wifi: _svg(_p('M5 12.5a10 10 0 0 1 14 0M8 15.8a5.5 5.5 0 0 1 8 0') + _c(12, 19, 0.6), { fill: 'currentColor' }),
   Expand: _svg(_p('M8 3H3v5M16 3h5v5M8 21H3v-5M16 21h5v-5')),
+  Mini: _svg(_p('M21 9V6a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h4') + _r(12, 13, 10, 7, 2)),
+  Maximize: _svg(_p('M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7')),
   Palette: _svg(_p('M12 3a9 9 0 1 0 0 18c1.5 0 2-1 2-2 0-.7-.5-1.2-.5-2 0-.8.7-1.5 1.5-1.5H17a4 4 0 0 0 4-4c0-4.4-4-8.5-9-8.5z') + _c(7.5, 11, 1) + _c(11, 7.5, 1) + _c(15.5, 8.5, 1), { fill: 'none' }),
   Share: _svg(_p('M12 15V3M8.5 6.5L12 3l3.5 3.5') + _p('M6 11H5a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-6a2 2 0 0 0-2-2h-1')),
   Help: _svg(_c(12, 12, 9) + _p('M9.2 9.3a2.8 2.8 0 0 1 5.4 1c0 1.8-2.6 2-2.6 3.7') + _c(12, 17.3, 0.6), { fill: 'none' }),
@@ -63,6 +67,8 @@ let state = {
   menu: null,        // 'notif' | 'profile'
   modal: null,       // 'emergency' | 'status' | 'rename' | 'delete' | 'shortcuts' | 'settings'
   focus: false,
+  mini: false,       // kompakter Mini-Fenster-Modus (oben rechts angeheftet)
+  railPinned: false, // Tool-Rail fixiert (per Chevron-Griff), bleibt sichtbar
   colorOpen: false,
   adding: false,     // Inline-"New list"-Eingabe sichtbar
   doneOpen: false,   // "Completed"-Sektion eingeklappt?
@@ -70,41 +76,22 @@ let state = {
 
 const root = document.getElementById('root');
 const api = () => window.pywebview.api;
+// HTML-Escaping fuer JEDE Einsetzung von (potenziell) Fremddaten in innerHTML.
+// Maskiert & < > " ', deckt damit Text-, doppelt- UND einfach-gequotete
+// Attribut-Kontexte ab. Das fehlende ' war eine latente Luecke: sobald ein
+// Attribut mit einfachen Anfuehrungszeichen Fremddaten enthaelt, koennte ein
+// Wert sonst ausbrechen. Zusammen mit der CSP (index.html) und der spaeteren
+// textContent-Umstellung (Bauplan Phase 9, Pflicht-Gate) ist das Defense-in-Depth.
 const esc = (s) => String(s == null ? '' : s)
   .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
-  .replace(/"/g, '&quot;');
+  .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
 const activeList = () => state.lists.find((l) => l.id === state.activeId) || state.lists[0] || null;
 
 // ===========================================================================
 // Render-Funktionen (1:1 zu den Konzept-Komponenten)
 // ===========================================================================
 function renderHeader() {
-  const I = Icons;
-  const notifCount = 3;
-  return `
-    <header class="header">
-      <button class="h-icon-btn" data-act="toggle-sidebar" title="Toggle lists">
-        ${state.focus || !sidebarVisible() ? I.Menu : I.Close}
-      </button>
-      <div class="brand">
-        <span class="brand-mark">${I.Shield}</span>
-        <span class="brand-name">Noa<b>ToDo</b></span>
-        <span class="brand-status mono"><span class="dot"></span>LOCAL · ENCRYPTED</span>
-      </div>
-      <div class="header-spacer"></div>
-      <div class="header-right">
-        <div class="notif-wrap">
-          <button class="h-icon-btn" data-act="open-notif" title="Notifications">
-            ${I.Bell}${notifCount > 0 ? `<span class="badge">${notifCount}</span>` : ''}
-          </button>
-          ${state.menu === 'notif' ? renderNotifMenu() : ''}
-        </div>
-        <div class="notif-wrap">
-          <button class="avatar" data-act="open-profile" title="Profile">NA</button>
-          ${state.menu === 'profile' ? renderProfileMenu() : ''}
-        </div>
-      </div>
-    </header>`;
+  return `<button class="sidebar-toggle" data-act="toggle-sidebar" title="Listen ein-/ausblenden">${Icons.Plus}</button>`;
 }
 
 function sidebarVisible() {
@@ -159,13 +146,13 @@ function renderMain() {
   const list = activeList();
   if (!list) {
     return `<main class="main"><div class="main-inner">
-      <div class="empty-note">// no lists yet — create one in the sidebar</div>
+      <div class="empty-note">// no lists yet, create one in the sidebar</div>
     </div></main>`;
   }
   const airplane = !state.online;
 
   const openSection = list.open.length === 0
-    ? `<div class="empty-note">// nothing open — you're all caught up</div>`
+    ? `<div class="empty-note">// nothing open, you're all caught up</div>`
     : `<div class="task-list" data-tasklist="open">${list.open.map(renderTask).join('')}</div>`;
 
   const doneSection = list.done.length > 0 ? `
@@ -221,18 +208,76 @@ function renderMain() {
     </main>`;
 }
 
+// Kompaktes Mini-Fenster: nur die Kopfzeile + die offenen Aufgaben der aktiven
+// Liste. Wird genutzt, wenn das Fenster oben rechts angeheftet ist (set_mini).
+function renderMini() {
+  const I = Icons;
+  const list = activeList();
+  const open = list ? list.open : [];
+  const rows = open.length
+    ? `<div class="task-list" data-tasklist="open">${open.map(renderTask).join('')}</div>`
+    : `<div class="empty-note">// nothing open</div>`;
+  return `
+    <div class="mini">
+      <div class="mini-bar">
+        <span class="mini-dot"></span>
+        <span class="mini-title">${esc(list ? list.name : 'NoaToDo')}</span>
+        <span class="mini-count mono">${open.length}</span>
+        <button class="mini-btn" data-act="tb-mini" title="Restore window">${I.Maximize}</button>
+      </div>
+      <div class="mini-scroll">
+        ${rows}
+        <div class="new-task" data-act="focus-newtask">
+          <span class="plus">${I.Plus}</span>
+          <input id="new-task-input" placeholder="New task…" />
+          <span class="kbd">↵</span>
+        </div>
+      </div>
+    </div>`;
+}
+
+// Fokusmodus: alles weg ausser Listenname + Liste. Verlassen nur per Esc oder
+// dem kleinen orangenen X unten rechts.
+function renderFocus() {
+  const I = Icons;
+  const list = activeList();
+  const exit = `<button class="focus-exit" data-act="exit-focus" title="Fokus verlassen (Esc)">${I.Close}</button>`;
+  if (!list) {
+    return `<div class="focus-view"><div class="focus-inner">
+      <div class="empty-note">// no lists yet</div>
+    </div></div>${exit}`;
+  }
+  const openRows = list.open.length
+    ? `<div class="task-list" data-tasklist="open">${list.open.map(renderTask).join('')}</div>`
+    : `<div class="empty-note">// nothing open, you're all caught up</div>`;
+  const doneRows = list.done.length
+    ? `<div class="focus-done">${list.done.map(renderTask).join('')}</div>` : '';
+  return `
+    <div class="focus-view">
+      <div class="focus-inner">
+        <h1 class="list-title">${esc(list.name)}</h1>
+        ${openRows}
+        <div class="new-task" data-act="focus-newtask">
+          <span class="plus">${I.Plus}</span>
+          <input id="new-task-input" placeholder="New task…" />
+          <span class="kbd">↵</span>
+        </div>
+        ${doneRows}
+      </div>
+    </div>${exit}`;
+}
+
+// Subtiler Chevron-Griff am rechten Rand: pinnt die Tool-Rail.
+// ">" = Auto-Hide (Standard), "<" = fixiert (bleibt sichtbar).
+function renderRailPin() {
+  const I = Icons;
+  const glyph = state.railPinned ? I.ChevLeft : I.ChevRight;
+  const title = state.railPinned ? 'Werkzeugleiste lösen' : 'Werkzeugleiste anheften';
+  return `<button class="rail-pin${state.railPinned ? ' pinned' : ''}" data-act="rail-pin" title="${title}">${glyph}</button>`;
+}
+
 function renderToolbar() {
   const I = Icons;
-  if (state.focus) {
-    return `
-      <div class="toolbar">
-        <div class="toolbar-rail" style="background:transparent;border:none;box-shadow:none">
-          <button class="tool-btn" data-act="exit-focus" title="Exit focus (Esc)">
-            ${I.Close}<span class="tip">Exit focus<span class="k">Esc</span></span>
-          </button>
-        </div>
-      </div>`;
-  }
   const btn = (icon, label, hotkey, act, opt) => {
     opt = opt || {};
     const cls = 'tool-btn' + (opt.danger ? ' danger' : '') + (opt.active ? ' active' : '');
@@ -242,6 +287,7 @@ function renderToolbar() {
   return `
     <div class="toolbar">
       <div class="toolbar-rail">
+        ${btn(I.Mini, 'Mini window', '', 'tb-mini')}
         ${btn(I.Expand, 'Focus mode', 'F', 'tb-focus')}
         ${btn(I.Palette, 'Accent color', '', 'tb-color', { active: state.colorOpen })}
         ${btn(I.Share, 'Export', '⌘E', 'tb-export')}
@@ -324,9 +370,9 @@ function renderModal() {
           <div class="modal-stripe"></div>
           <div class="modal-body">
             <div class="modal-icon danger">${I.Alert}</div>
-            <h3>Panic — lock everything?</h3>
+            <h3>Panic, lock everything?</h3>
             <p>This immediately locks NoaToDo, drops the in-memory cache, and pulls the local database offline. Cloud sync stays paused until you unlock with your passphrase.
-            Nothing is deleted — <span class="mono">tasks.db</span> stays encrypted on this machine.</p>
+            Nothing is deleted, <span class="mono">tasks.db</span> stays encrypted on this machine.</p>
           </div>
           <div class="modal-actions">
             <button class="btn" data-act="modal-close">Cancel</button>
@@ -338,7 +384,7 @@ function renderModal() {
       const rows = [
         ['Local database', 'tasks.db', 'var(--secure)', 'healthy'],
         ['Encryption', 'AES-256 + ChaCha20 · Argon2id', 'var(--secure)', 'active'],
-        ['Microsoft Graph', online ? 'Tasks.Read · token valid' : 'offline — sync paused', online ? 'var(--secure)' : 'var(--text-faint)', online ? 'connected' : 'paused'],
+        ['Microsoft Graph', online ? 'Tasks.Read · token valid' : 'offline, sync paused', online ? 'var(--secure)' : 'var(--text-faint)', online ? 'connected' : 'paused'],
         ['Last sync', online ? 'while online' : 'while online', 'var(--text-faint)', ''],
         ['WebView2 runtime', 'system', 'var(--secure)', 'ok'],
       ];
@@ -470,16 +516,42 @@ function applyChrome() {
   root.setAttribute('data-density', state.settings.density || 'comfortable');
   root.setAttribute('data-toolbar', state.settings.toolbar || 'floating');
   root.setAttribute('data-sidebar', sidebarVisible() ? 'open' : 'closed');
+  root.setAttribute('data-mini', state.mini ? 'on' : 'off');
+  root.setAttribute('data-focus', state.focus ? 'on' : 'off');
+  applyRail();
   root.style.setProperty('--accent', state.settings.accent || '#d97757');
+}
+
+// Sichtbarkeit der rechten Tool-Rail (ausserhalb von Fokus/Mini):
+//  - fixiert (Pin),
+//  - oder linke Sidebar offen,
+//  - oder Cursor nahe am rechten Rand (railHover).
+function railVisible() {
+  if (state.focus || state.mini) return false;
+  return state.railPinned || sidebarVisible() || railHover;
+}
+function applyRail() {
+  root.setAttribute('data-rail', railVisible() ? 'shown' : 'hidden');
 }
 
 function render() {
   applyChrome();
+  if (state.mini) {
+    root.innerHTML = renderMini() + renderLock();
+    wireInputs();
+    return;
+  }
+  if (state.focus) {
+    root.innerHTML = renderFocus() + renderLock();
+    wireInputs();
+    return;
+  }
   root.innerHTML =
     renderHeader() +
     renderSidebar() +
     renderMain() +
     renderToolbar() +
+    renderRailPin() +
     renderAccentPop() +
     renderModal() +
     renderLock();
@@ -580,7 +652,7 @@ async function setOnline(flag) {
   const res = await api().set_online(flag);
   state.online = res && typeof res.online === 'boolean' ? res.online : flag;
   render();
-  pushToast(flag ? 'Back online — syncing' : 'Going offline', flag ? 'MS To Do' : 'sync paused');
+  pushToast(flag ? 'Back online, syncing' : 'Going offline', flag ? 'MS To Do' : 'sync paused');
 }
 
 async function setSetting(key, value) {
@@ -617,6 +689,41 @@ async function doCopy() {
   if (res && res.error) return pushToast(res.message || 'Error');
   try { await navigator.clipboard.writeText(res.text); } catch (e) { /* ignore */ }
   pushToast('Copied to clipboard', list.open.length + ' tasks');
+}
+
+async function doMini(flag) {
+  const res = await api().set_mini(flag);
+  state.mini = res && typeof res.mini === 'boolean' ? res.mini : flag;
+  if (state.mini) {
+    // Im Mini-Modus alles Überlagernde schließen, damit nur die Liste bleibt.
+    state.focus = false; state.menu = null; state.modal = null;
+    state.colorOpen = false; state.adding = false;
+  }
+  render();
+}
+
+// --- Tool-Rail: Auto-Hide / Pin -------------------------------------------
+let railHover = false;  // Cursor nahe rechtem Rand bzw. über der Rail?
+
+function toggleRailPin() {
+  state.railPinned = !state.railPinned;
+  railHover = false;
+  api().set_setting('railPinned', state.railPinned ? 'true' : 'false');
+  render();
+}
+
+// Pragmatische Naehe-Erkennung: innerhalb von ~100px zum rechten Rand (oder
+// direkt ueber der Rail) gleitet sie ein, sonst wieder aus. Kein Re-Render
+// nur das data-rail-Attribut wird umgeschaltet (CSS-Transition macht den Rest).
+function onMouseMove(e) {
+  if (state.focus || state.mini || state.railPinned || sidebarVisible()) {
+    railHover = false;
+    return;
+  }
+  const near = e.clientX >= window.innerWidth - 100;
+  const overBar = !!(e.target.closest && e.target.closest('.toolbar'));
+  const next = near || overBar;
+  if (next !== railHover) { railHover = next; applyRail(); }
 }
 
 async function doLock() {
@@ -707,7 +814,9 @@ async function onClick(e) {
     case 'toggle-done': state.doneOpen = !state.doneOpen; render(); break;
     case 'focus-newtask': { const i = document.getElementById('new-task-input'); if (i) i.focus(); break; }
     case 'net': await setOnline(!state.online); break;
+    case 'tb-mini': await doMini(!state.mini); break;
     case 'tb-focus': state.focus = !state.focus; state.menu = null; render(); break;
+    case 'rail-pin': toggleRailPin(); break;
     case 'tb-color': state.colorOpen = !state.colorOpen; state.menu = null; render(); break;
     case 'tb-export': await doExport(); break;
     case 'tb-help': state.modal = 'shortcuts'; render(); break;
@@ -737,6 +846,7 @@ function onKeyGlobal(e) {
   const typing = /^(INPUT|TEXTAREA)$/.test(e.target.tagName);
   const meta = e.metaKey || e.ctrlKey;
   if (e.key === 'Escape') {
+    if (state.mini) { doMini(false); return; }
     state.menu = null; state.modal = null; state.colorOpen = false;
     state.focus = false; state.adding = false; render(); return;
   }
@@ -756,7 +866,7 @@ function onKeyGlobal(e) {
 }
 
 // ===========================================================================
-// Drag & Drop — Reihenfolge offener Aufgaben (Bridge: reorder)
+// Drag & Drop, Reihenfolge offener Aufgaben (Bridge: reorder)
 // ===========================================================================
 let dragId = null;
 function onDragStart(e) {
@@ -822,6 +932,8 @@ async function boot() {
   try {
     const st = await api().get_state();
     Object.assign(state, st);
+    // Pin-Zustand der Tool-Rail aus den Settings rekonstruieren (als String abgelegt).
+    state.railPinned = state.settings.railPinned === 'true' || state.settings.railPinned === true;
     if (state.lists.length && !state.activeId) state.activeId = state.lists[0].id;
   } catch (err) {
     root.innerHTML = '<pre style="padding:24px">boot error: ' + err + '</pre>';
@@ -829,6 +941,7 @@ async function boot() {
   }
   document.addEventListener('click', onClick);
   document.addEventListener('keydown', onKeyGlobal);
+  document.addEventListener('mousemove', onMouseMove);
   document.addEventListener('dragstart', onDragStart);
   document.addEventListener('dragover', onDragOver);
   document.addEventListener('drop', onDrop);

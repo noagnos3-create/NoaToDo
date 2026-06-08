@@ -9,7 +9,7 @@ Code/venv/
 venv/
 .venv/
 
-# App data — encrypted DB, logs, runtime state (never commit user data)
+# App data: encrypted DB, logs, runtime state (never commit user data)
 Code/data/
 data/
 *.db

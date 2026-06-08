@@ -1,4 +1,4 @@
-# Technisches Fundament — Lokale To-Do-App
+# Technisches Fundament: Lokale To-Do-App
 
 > Dieser Abschnitt beschreibt NUR das technische Fundament (auf welcher Basis
 > gebaut wird). Die eigentliche App-Idee, Funktionen und Design folgen separat.
@@ -28,7 +28,7 @@ bleibt die App klein und ressourcenschonend.
 | Lokale Datenbank | **SQLite** (Pythons eingebautes `sqlite3`-Modul) |
 | HTTP zu Microsoft Graph | **httpx** |
 | Microsoft-Authentifizierung | **msal** (Public Client, Authorization-Code-Flow mit PKCE) |
-| Berechtigung (Scope) | **`Tasks.Read`** (nur lesen — passt zum One-Way-Konzept) |
+| Berechtigung (Scope) | **`Tasks.Read`** (nur lesen, passt zum One-Way-Konzept) |
 | Token sicher speichern | **keyring** (legt Tokens im Windows Credential Manager ab, nicht im Klartext) |
 | Lokale Benachrichtigungen | **winotify** (oder `plyer`) |
 
@@ -83,18 +83,18 @@ todo-app/
 Was passiert mit einer **importierten** Aufgabe, wenn sie sich gleichzeitig in
 der Cloud (Handy) und lokal ändert? Zwei saubere Optionen:
 
-- **A — Cloud besitzt importierte Aufgaben:** beim Sync überschreibt der
+- **A, Cloud besitzt importierte Aufgaben:** beim Sync überschreibt der
   Microsoft-Stand die lokalen Änderungen an importierten Aufgaben.
-- **B — Eingefrorene Kopie:** eine importierte Aufgabe wird einmal kopiert und
+- **B, Eingefrorene Kopie:** eine importierte Aufgabe wird einmal kopiert und
   danach von Microsoft nicht mehr angefasst.
 
-(Rein lokal erstellte Aufgaben sind davon nie betroffen — die gehören immer dir.)
+(Rein lokal erstellte Aufgaben sind davon nie betroffen, die gehören immer dir.)
 
-## 7. Privatsphäre — was wo bleibt
+## 7. Privatsphäre: was wo bleibt
 
 - **Bleibt lokal:** alle selbst erstellten Aufgaben, alle lokalen Bearbeitungen,
   die gesamte SQLite-Datenbank, die Zugangs-Tokens.
 - **Kommt aus der Cloud:** ausschliesslich die aus Microsoft To Do gelesenen
   Aufgaben. (Wichtige Ehrlichkeit: diese Daten liegen ohnehin schon bei
-  Microsoft — der Privatsphäre-Gewinn ist, dass nichts aus dieser App je dorthin
+  Microsoft, der Privatsphäre-Gewinn ist, dass nichts aus dieser App je dorthin
   zurückfliesst.)

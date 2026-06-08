@@ -3,9 +3,9 @@
    Fonts lokal in frontend/fonts/ (kein externer Font-Load -> local-first). */
 
 /* ===========================================================================
-   NoaToDo — "warm terminal / local-first vault" design system
+   NoaToDo, "warm terminal / local-first vault" design system
    Aesthetic: security/hacker cues (mono labels, lock & shield, status line)
-   executed warm — paper + charcoal, terracotta accent. Not cold neon.
+   executed warm, paper + charcoal, terracotta accent. Not cold neon.
    =========================================================================== */
 
 /* cyrillic-ext */
@@ -420,10 +420,8 @@ input { font: inherit; }
   position: fixed; inset: 0;
   display: grid;
   grid-template-columns: auto 1fr auto;
-  grid-template-rows: auto 1fr;
-  grid-template-areas:
-    "header header header"
-    "sidebar main toolbar";
+  grid-template-rows: 1fr;
+  grid-template-areas: "sidebar main toolbar";
   background:
     linear-gradient(var(--bg-grid) 1px, transparent 1px) 0 0 / 100% 28px,
     var(--bg);
@@ -448,65 +446,21 @@ input { font: inherit; }
 }
 
 /* ===========================================================================
-   HEADER
+   SIDEBAR TOGGLE, schwebendes +/× oben links, dreht sich zur Animation
    =========================================================================== */
-.header {
-  grid-area: header;
-  position: relative; z-index: 6;
-  display: flex; align-items: center; gap: 14px;
-  height: 56px; padding: 0 14px;
-  background: color-mix(in oklab, var(--surface) 75%, transparent);
-  backdrop-filter: blur(8px);
-  border-bottom: 1px solid var(--border);
-}
-.h-icon-btn {
+.sidebar-toggle {
+  position: fixed; top: 10px; left: 10px; z-index: 200;
+  width: 34px; height: 34px; border-radius: 9px;
   display: grid; place-items: center;
-  width: 38px; height: 38px; border-radius: 9px;
   color: var(--text-dim);
   transition: background .14s, color .14s;
 }
-.h-icon-btn:hover { background: var(--surface-3); color: var(--text); }
-.h-icon-btn svg { width: 19px; height: 19px; }
-
-.brand { display: flex; align-items: center; gap: 10px; }
-.brand-mark {
-  display: grid; place-items: center;
-  width: 30px; height: 30px; border-radius: 8px;
-  background: var(--accent); color: var(--accent-ink);
-  box-shadow: 0 2px 8px color-mix(in oklab, var(--accent) 45%, transparent);
+.sidebar-toggle:hover { background: var(--surface-2); color: var(--text); }
+.sidebar-toggle svg {
+  width: 20px; height: 20px;
+  transition: transform .3s cubic-bezier(.4,0,.2,1);
 }
-.brand-mark svg { width: 17px; height: 17px; }
-.brand-name { font-weight: 700; font-size: 18px; letter-spacing: -.02em; }
-.brand-name b { color: var(--accent); }
-.brand-status {
-  display: flex; align-items: center; gap: 7px;
-  margin-left: 4px; padding: 4px 9px; border-radius: 999px;
-  background: var(--secure-wash);
-  border: 1px solid color-mix(in oklab, var(--secure) 35%, transparent);
-  color: var(--secure);
-}
-.brand-status .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--secure);
-  box-shadow: 0 0 0 0 color-mix(in oklab, var(--secure) 70%, transparent); animation: pulse 2.6s infinite; }
-@keyframes pulse { 0%{box-shadow:0 0 0 0 color-mix(in oklab,var(--secure) 55%,transparent);} 70%{box-shadow:0 0 0 6px transparent;} 100%{box-shadow:0 0 0 0 transparent;} }
-
-.header-spacer { flex: 1; }
-.header-right { display: flex; align-items: center; gap: 6px; }
-.notif-wrap { position: relative; }
-.badge {
-  position: absolute; top: 5px; right: 5px;
-  min-width: 16px; height: 16px; padding: 0 4px; border-radius: 999px;
-  background: var(--danger); color: #fff;
-  font-family: var(--font-mono); font-size: 10px; font-weight: 700;
-  display: grid; place-items: center;
-  border: 2px solid var(--surface);
-}
-.avatar {
-  width: 34px; height: 34px; border-radius: 50%;
-  background: linear-gradient(135deg, var(--accent), color-mix(in oklab, var(--accent) 50%, #7a3b22));
-  color: #fff; display: grid; place-items: center;
-  font-weight: 600; font-size: 13px;
-  border: 1px solid color-mix(in oklab, #000 12%, var(--accent));
-}
+.app[data-sidebar="open"] .sidebar-toggle svg { transform: rotate(45deg); }
 
 /* ===========================================================================
    SIDEBAR
@@ -520,7 +474,7 @@ input { font: inherit; }
   transition: width .26s cubic-bezier(.4,0,.2,1), opacity .2s, padding .26s;
 }
 .app[data-sidebar="closed"] .sidebar { width: 0; opacity: 0; border-right-color: transparent; }
-.sidebar-inner { width: 256px; display: flex; flex-direction: column; height: 100%; padding: 14px 10px 10px; }
+.sidebar-inner { width: 256px; display: flex; flex-direction: column; height: 100%; padding: 54px 10px 10px; }
 
 .side-label {
   display: flex; align-items: center; gap: 6px;
@@ -675,35 +629,57 @@ input { font: inherit; }
 /* ===========================================================================
    RIGHT TOOLBAR (vertical rail)
    =========================================================================== */
-.toolbar { grid-area: toolbar; position: relative; z-index: 5; display: flex; align-items: stretch; }
+.toolbar {
+  grid-area: toolbar; position: relative; z-index: 5;
+  display: flex; align-items: stretch;
+  transition: transform .24s cubic-bezier(.4,0,.2,1), opacity .2s ease;
+}
+/* Auto-Hide: Rail gleitet nach rechts aus dem Bild (CSS-gesteuert via data-rail) */
+.app[data-rail="hidden"] .toolbar {
+  transform: translateX(calc(100% + 24px)); opacity: 0; pointer-events: none;
+}
+.app[data-rail="shown"] .toolbar { transform: translateX(0); opacity: 1; }
+
+/* Subtiler Chevron-Griff rechts: pinnt die Rail (">" auto, "<" fixiert) */
+.rail-pin {
+  position: fixed; right: 1px; top: 50%; transform: translateY(-50%);
+  z-index: 6; display: grid; place-items: center;
+  width: 14px; height: 50px; border-radius: 6px 0 0 6px;
+  color: var(--text-faint); opacity: .3;
+  transition: opacity .16s, color .16s, background .16s;
+}
+.rail-pin:hover { opacity: 1; color: var(--text); background: var(--surface-3); }
+.rail-pin.pinned { opacity: .85; color: var(--accent); }
+.rail-pin svg { width: 13px; height: 13px; }
+
 .toolbar-rail {
-  display: flex; flex-direction: column; align-items: center; gap: 3px;
-  padding: 10px 8px;
+  display: flex; flex-direction: column; align-items: center; gap: 4px;
+  padding: 12px 9px;
 }
 /* flush vs floating */
 .app[data-toolbar="flush"] .toolbar-rail {
-  width: 60px; background: color-mix(in oklab, var(--surface) 60%, transparent);
+  width: 66px; background: color-mix(in oklab, var(--surface) 60%, transparent);
   border-left: 1px solid var(--border);
 }
 .app[data-toolbar="floating"] .toolbar { align-items: center; padding-right: 14px; }
 .app[data-toolbar="floating"] .toolbar-rail {
   background: var(--surface); border: 1px solid var(--border);
-  border-radius: 16px; box-shadow: var(--shadow);
-  padding: 8px 7px;
+  border-radius: 18px; box-shadow: var(--shadow);
+  padding: 10px 8px;
 }
 
 .tool-btn {
   position: relative; display: grid; place-items: center;
-  width: 42px; height: 42px; border-radius: 10px;
+  width: 46px; height: 46px; border-radius: 12px;
   color: var(--text-dim); transition: background .14s, color .14s, transform .1s;
 }
 .tool-btn:hover { background: var(--surface-3); color: var(--text); }
 .tool-btn:active { transform: scale(.92); }
-.tool-btn svg { width: 19px; height: 19px; }
+.tool-btn svg { width: 21px; height: 21px; }
 .tool-btn.danger { color: var(--danger); }
 .tool-btn.danger:hover { background: var(--danger-wash); }
 .tool-btn.active { color: var(--accent); background: var(--accent-wash); }
-.tool-sep { width: 24px; height: 1px; background: var(--border); margin: 5px 0; }
+.tool-sep { width: 26px; height: 1px; background: var(--border); margin: 6px 0; }
 
 /* tooltip */
 .tool-btn .tip {
@@ -715,6 +691,52 @@ input { font: inherit; }
 }
 .tool-btn .tip .k { opacity: .55; margin-left: 6px; }
 .tool-btn:hover .tip { opacity: 1; transform: translateY(-50%) translateX(0); }
+
+/* ===========================================================================
+   FOKUSMODUS (nur Listenname + Liste; Verlassen per Esc oder orangem X)
+   =========================================================================== */
+.app[data-focus="on"] { display: block; }
+.focus-view { position: absolute; inset: 0; z-index: 1; overflow-y: auto; }
+.focus-inner { max-width: 720px; margin: 0 auto; padding: 72px 24px 96px; }
+.focus-done { margin-top: 22px; }
+.focus-exit {
+  position: fixed; right: 22px; bottom: 22px; z-index: 60;
+  display: grid; place-items: center; width: 40px; height: 40px;
+  border-radius: 50%; background: #e07a2c; color: #fff;
+  box-shadow: var(--shadow-lg); opacity: .9;
+  transition: opacity .15s, transform .1s;
+}
+.focus-exit:hover { opacity: 1; transform: translateY(-1px); }
+.focus-exit:active { transform: scale(.92); }
+.focus-exit svg { width: 19px; height: 19px; }
+
+/* ===========================================================================
+   MINI WINDOW (kompaktes, oben rechts angeheftetes Lesefenster)
+   =========================================================================== */
+.app[data-mini="on"] { display: block; height: 100vh; background: var(--bg); }
+.mini { display: flex; flex-direction: column; height: 100vh; }
+.mini-bar {
+  display: flex; align-items: center; gap: 9px;
+  flex: none; padding: 11px 13px;
+  background: var(--surface); border-bottom: 1px solid var(--border);
+}
+.mini-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--accent); flex: none; }
+.mini-title {
+  flex: 1; min-width: 0; font-family: var(--font-sans); font-weight: 600;
+  font-size: 14px; color: var(--text);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.mini-count { flex: none; font-size: 11px; font-weight: 600; color: var(--text-faint); }
+.mini-btn {
+  flex: none; display: grid; place-items: center; width: 30px; height: 30px;
+  border-radius: 8px; color: var(--text-dim);
+  transition: background .14s, color .14s, transform .1s;
+}
+.mini-btn:hover { background: var(--surface-3); color: var(--text); }
+.mini-btn:active { transform: scale(.92); }
+.mini-btn svg { width: 17px; height: 17px; }
+.mini-scroll { flex: 1; overflow-y: auto; padding: 8px 10px 14px; }
+.mini-scroll .task-list { display: flex; flex-direction: column; gap: 1px; }
 
 /* ===========================================================================
    OVERLAYS (modals, menus, lock, shortcuts, toasts)

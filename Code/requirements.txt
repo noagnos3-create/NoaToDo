@@ -1,4 +1,4 @@
-# NoaToDo — Abhängigkeiten
+# NoaToDo: Abhängigkeiten
 # Fenster / WebView2-Wrapper
 pywebview
 
