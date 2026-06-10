@@ -232,6 +232,10 @@ class Database:
             raise KeyError(task_id)
         return self._task_dict(row)
 
+    def get_task(self, task_id: str) -> dict[str, Any] | None:
+        row = self.conn.execute("SELECT * FROM tasks WHERE id = ?", (task_id,)).fetchone()
+        return self._task_dict(row) if row is not None else None
+
     def delete_task(self, task_id: str) -> dict[str, Any]:
         self.conn.execute("DELETE FROM tasks WHERE id = ?", (task_id,))
         self.conn.commit()

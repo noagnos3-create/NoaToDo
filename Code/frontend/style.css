@@ -458,7 +458,9 @@ input { font: inherit; }
 .sidebar-toggle:hover { background: var(--surface-2); color: var(--text); }
 .sidebar-toggle svg {
   width: 20px; height: 20px;
-  transition: transform .3s cubic-bezier(.4,0,.2,1);
+  /* schnelle Drehung mit leichtem Ueberschwingen, damit das +/x sich bewegt
+     statt instant umzuschnappen */
+  transition: transform .26s cubic-bezier(.34, 1.56, .64, 1);
 }
 .app[data-sidebar="open"] .sidebar-toggle svg { transform: rotate(45deg); }
 
@@ -467,14 +469,28 @@ input { font: inherit; }
    =========================================================================== */
 .sidebar {
   grid-area: sidebar; position: relative; z-index: 5;
-  width: 256px; display: flex; flex-direction: column;
+  width: var(--sidebar-width, 256px); display: flex; flex-direction: column;
   background: color-mix(in oklab, var(--surface) 60%, transparent);
   border-right: 1px solid var(--border);
   overflow: hidden;
   transition: width .26s cubic-bezier(.4,0,.2,1), opacity .2s, padding .26s;
 }
 .app[data-sidebar="closed"] .sidebar { width: 0; opacity: 0; border-right-color: transparent; }
-.sidebar-inner { width: 256px; display: flex; flex-direction: column; height: 100%; padding: 54px 10px 10px; }
+.app[data-resizing] .sidebar { transition: none; }
+.sidebar-inner { width: var(--sidebar-width, 256px); display: flex; flex-direction: column; height: 100%; padding: 54px 10px 10px; }
+
+.sidebar-resize-handle {
+  position: absolute; top: 0; right: 0; bottom: 0; width: 6px;
+  cursor: col-resize; z-index: 20;
+}
+.sidebar-resize-handle::after {
+  content: ''; position: absolute; top: 0; right: 2px; bottom: 0; width: 1px;
+  background: var(--border);
+  opacity: 0;
+  transition: opacity .2s;
+}
+.sidebar-resize-handle:hover::after,
+.app[data-resizing] .sidebar-resize-handle::after { opacity: 1; }
 
 .side-label {
   display: flex; align-items: center; gap: 6px;
@@ -494,8 +510,10 @@ input { font: inherit; }
 .list-item .li-dot { width: 8px; height: 8px; border-radius: 2px; background: currentColor; opacity: .55; flex-shrink: 0; }
 .list-item .li-name { flex: 1; font-size: 14px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .list-item .li-count {
-  font-family: var(--font-mono); font-size: 11px; font-weight: 600;
-  min-width: 22px; height: 20px; padding: 0 6px; border-radius: 6px;
+  font-family: var(--font-mono); font-size: 8.5px; font-weight: 600;
+  min-width: 14px; height: 13px; padding: 0 4px; border-radius: 4px;
+  /* etwas nach links ruecken, aber weiterhin Abstand zum rechten Rand lassen */
+  margin-right: 6px;
   background: var(--surface-3); color: var(--text-faint);
   display: grid; place-items: center;
 }
@@ -543,7 +561,12 @@ input { font: inherit; }
    MAIN
    =========================================================================== */
 .main { grid-area: main; position: relative; z-index: 1; overflow-y: auto; }
-.main-inner { max-width: 720px; margin: 0 auto; padding: 30px 32px 80px; }
+/* Flex-Spalte mit min-height:100%, damit das sticky .list-dock per margin-top:auto
+   immer am unteren Rand sitzt, auch bei wenig Inhalt (kein Mitscrollen). */
+.main-inner {
+  max-width: 720px; margin: 0 auto; padding: 30px 32px 24px;
+  min-height: 100%; display: flex; flex-direction: column;
+}
 
 .title-row { display: flex; align-items: flex-start; gap: 16px; margin-bottom: 4px; }
 .list-title { font-size: 32px; font-weight: 700; letter-spacing: -.025em; line-height: 1.1; }
@@ -625,6 +648,93 @@ input { font: inherit; }
 .new-task .kbd { font-family: var(--font-mono); font-size: 10px; color: var(--text-faint); border: 1px solid var(--border); border-radius: 5px; padding: 2px 5px; }
 
 .empty-note { font-family: var(--font-mono); font-size: 12px; color: var(--text-faint); padding: 14px; text-align: center; border: 1px dashed var(--border); border-radius: 11px; }
+
+/* ===========================================================================
+   FLOATING LIST DOCK (fest unten verankert). Drei freistehende Teile, NICHT zu
+   einer grossen Pille verbunden: Namens-Pille | "+"-Knopf | (bei Bedarf) eine
+   Eingabe-Pille, die knapp oberhalb-rechts vom "+" schwebt.
+   Position: fixed, scrollt NICHT mit der Liste.
+   =========================================================================== */
+/* Sticky statt fixed: bleibt unten am Bildschirm verankert (main fuellt die
+   Fensterhoehe), wird dabei aber innerhalb der Inhaltsspalte zentriert, also
+   genau unter den Aufgaben, nicht ueber dem ganzen Viewport. So sind Name UND
+   "+" als Gruppe mittig, statt dass der breite Name allein zentriert wirkt.
+   margin-top:auto schiebt das Dock bei wenig Inhalt ganz nach unten. */
+.list-dock {
+  position: sticky; bottom: 24px; z-index: 25;
+  align-self: center; margin-top: auto;
+  width: -moz-fit-content; width: fit-content; max-width: 100%;
+  display: flex; align-items: center; gap: 12px;
+}
+
+/* Eigenstaendige Namens-Pille (behaelt ihren Platz, egal ob man hinzufuegt). */
+.dock-pill {
+  flex: none; display: flex; align-items: center; gap: 18px;
+  padding: 22px 34px; border-radius: 999px;
+  background: color-mix(in oklab, var(--surface) 84%, transparent);
+  border: 1px solid var(--border); box-shadow: var(--shadow-lg);
+  -webkit-backdrop-filter: blur(12px) saturate(1.25);
+  backdrop-filter: blur(12px) saturate(1.25);
+}
+.dock-dot { width: 15px; height: 15px; border-radius: 5px; flex: none; }
+.dock-name {
+  font-size: 31px; font-weight: 650; letter-spacing: -.01em; color: var(--text);
+  max-width: 440px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.dock-count {
+  font-family: var(--font-mono); font-size: 16px; font-weight: 600;
+  min-width: 32px; height: 30px; padding: 0 10px; border-radius: 9px;
+  display: inline-grid; place-items: center;
+  background: var(--surface-3); color: var(--text-faint);
+}
+
+/* Der "+"-Knopf steht frei neben der Namens-Pille (eigener Kreis). Der Wrapper
+   ist nur Bezugspunkt fuer die absolut schwebende Eingabe-Pille. */
+.dock-add-wrap { position: relative; flex: none; }
+.dock-add {
+  width: 44px; height: 44px; border-radius: 50%;
+  display: grid; place-items: center;
+  background: var(--accent); color: var(--accent-ink);
+  box-shadow: 0 4px 12px color-mix(in oklab, var(--accent) 38%, transparent);
+  transition: box-shadow .2s, background .2s;
+}
+/* Hover/Klick: nur dezent heller, kein Versetzen oder Skalieren (kein Springen). */
+.dock-add:hover { box-shadow: 0 6px 16px color-mix(in oklab, var(--accent) 46%, transparent); }
+/* "+"-zu-"x"-Drehung: dreht mit leichtem Ueberschwung (federnd) zum "x". */
+.dock-add svg { width: 20px; height: 20px; transition: transform .42s cubic-bezier(.34, 1.56, .64, 1); }
+.dock-add.active svg { transform: rotate(45deg); }
+
+/* Eingabe-Pille: schwebt losgeloest knapp oberhalb und leicht rechts vom "+". */
+.dock-input {
+  position: absolute; bottom: calc(100% + 8px); left: 18px;
+  display: flex; align-items: center; gap: 10px;
+  padding: 9px 16px; border-radius: 999px;
+  background: color-mix(in oklab, var(--surface) 88%, transparent);
+  border: 1px solid var(--accent-line); box-shadow: var(--shadow-lg);
+  -webkit-backdrop-filter: blur(12px) saturate(1.25);
+  backdrop-filter: blur(12px) saturate(1.25);
+  transform-origin: bottom left;
+  animation: dock-grow .2s cubic-bezier(.34, 1.56, .64, 1);
+}
+.dock-input input {
+  width: 220px; max-width: 38vw; min-width: 0;
+  background: none; border: none; outline: none;
+  color: var(--text); font-size: 15px; font-weight: 500;
+}
+.dock-input input::placeholder { color: var(--text-faint); }
+/* Kleines "x" am rechten Rand der Eingabe-Pille zum Schliessen (statt ↵). */
+.dock-input .dock-close {
+  flex: none; width: 24px; height: 24px; border-radius: 50%;
+  display: grid; place-items: center;
+  background: none; color: var(--text-faint);
+  transition: background .14s, color .14s;
+}
+.dock-input .dock-close svg { width: 15px; height: 15px; }
+.dock-input .dock-close:hover { background: var(--surface-3); color: var(--text); }
+@keyframes dock-grow {
+  from { opacity: 0; transform: translateY(6px) scale(.85); }
+  to   { opacity: 1; transform: none; }
+}
 
 /* ===========================================================================
    RIGHT TOOLBAR (vertical rail)
@@ -823,7 +933,8 @@ input { font: inherit; }
 .lock-dots i.fill { background: var(--accent); }
 
 /* toast */
-.toast-wrap { position: fixed; bottom: 22px; left: 50%; transform: translateX(-50%); z-index: 70; display: flex; flex-direction: column; gap: 8px; align-items: center; }
+/* bottom angehoben, damit Toasts ueber dem fest verankerten .list-dock stehen. */
+.toast-wrap { position: fixed; bottom: 92px; left: 50%; transform: translateX(-50%); z-index: 70; display: flex; flex-direction: column; gap: 8px; align-items: center; }
 .toast {
   display: flex; align-items: center; gap: 10px;
   padding: 11px 16px; border-radius: 11px;
@@ -846,7 +957,7 @@ input { font: inherit; }
 .main::-webkit-scrollbar-track, .list-scroll::-webkit-scrollbar-track { background: transparent; }
 
 @media (max-width: 720px) {
-  .main-inner { padding: 22px 18px 80px; }
+  .main-inner { padding: 22px 18px 24px; }
   .list-title { font-size: 26px; }
 }
 
@@ -862,3 +973,45 @@ input { font: inherit; }
 .seg-btn:hover { color: var(--text); }
 .seg-btn.on { background: var(--surface); color: var(--text);
   box-shadow: 0 1px 2px rgba(0,0,0,.12), inset 0 0 0 1px var(--border); }
+
+/* ===========================================================================
+   NoaToDo-Ergänzung Phase 6.5 (nicht aus dem Konzept): Inline-Bearbeiten
+   und Einzel-Löschen von Aufgaben. Nutzt nur bestehende Tokens.
+   =========================================================================== */
+.task .t-del {
+  appearance: none; border: 0; background: transparent; cursor: pointer;
+  flex-shrink: 0; display: grid; place-items: center;
+  width: 22px; height: 22px; border-radius: 6px; padding: 0;
+  color: var(--text-faint); opacity: 0;
+  transition: opacity .14s, color .14s, background .14s;
+}
+.task:hover .t-del { opacity: .55; }
+.task .t-del:hover { opacity: 1; color: var(--danger);
+  background: color-mix(in oklab, var(--danger) 12%, transparent); }
+.task .t-del svg { width: 14px; height: 14px; }
+
+.task.editing { border-color: var(--accent-line); box-shadow: var(--shadow); }
+.task.editing .edit-text, .task.editing .edit-meta {
+  background: var(--surface-2); border: 1px solid var(--accent-line);
+  border-radius: 8px; color: var(--text); outline: none; padding: 6px 9px;
+  min-width: 0;
+}
+.task.editing .edit-text { flex: 1; font-size: var(--task-fs); font-weight: 500; font-family: inherit; }
+.task.editing .edit-meta { width: 132px; font-family: var(--font-mono); font-size: 10.5px; color: var(--text-dim); }
+.task.editing .edit-text:focus, .task.editing .edit-meta:focus { border-color: var(--accent); }
+
+/* Auswahl einer Aufgabe (Klick auf die Karte): Ziel fuer "Copy task" und den
+   Bleistift der Tool-Rail. Akzent-Rahmen + sanfter Wash + Akzent-Balken links,
+   bewusst nah an der "active"-Optik der Sidebar-Listeneintraege. */
+.task { cursor: default; position: relative; }
+.task.selected {
+  border-color: var(--accent);
+  background: color-mix(in oklab, var(--accent-wash) 65%, var(--surface));
+  box-shadow: 0 0 0 1px color-mix(in oklab, var(--accent) 35%, transparent), var(--shadow);
+}
+.task.selected::before {
+  content: ''; position: absolute; left: -1px; top: 9px; bottom: 9px;
+  width: 3px; border-radius: 99px; background: var(--accent);
+}
+.task.selected .t-text { color: var(--text); }
+.task.selected .t-grip, .task.selected .t-del { opacity: .55; }

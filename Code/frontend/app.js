@@ -69,9 +69,13 @@ let state = {
   focus: false,
   mini: false,       // kompakter Mini-Fenster-Modus (oben rechts angeheftet)
   railPinned: false, // Tool-Rail fixiert (per Chevron-Griff), bleibt sichtbar
+  sidebarWidth: 256, // Sidebar-Breite in px, per Drag veraenderbar
   colorOpen: false,
   adding: false,     // Inline-"New list"-Eingabe sichtbar
+  addingTask: false, // Inline-"New task"-Eingabe im unteren Dock sichtbar
   doneOpen: false,   // "Completed"-Sektion eingeklappt?
+  editingId: null,   // Aufgabe, die gerade inline bearbeitet wird (Doppelklick)
+  selectedId: null,  // per Klick ausgewaehlte Aufgabe (Ziel fuer Copy/Edit der Rail)
 };
 
 const root = document.getElementById('root');
@@ -125,19 +129,33 @@ function renderSidebar() {
           <button class="settings-btn" data-act="settings">${I.Gear} Settings</button>
         </div>
       </div>
+      <div class="sidebar-resize-handle" id="sidebar-resize-handle"></div>
     </aside>`;
 }
 
 function renderTask(t) {
   const I = Icons;
+  // Inline-Bearbeitung (Doppelklick): Text + Meta direkt in der Karte aendern.
+  // Enter speichert (edit_task), Esc bricht ab, Klick daneben speichert.
+  if (state.editingId === t.id) {
+    return `
+    <div class="task editing${t.done ? ' done' : ''}" data-task-id="${esc(t.id)}">
+      <button class="check" data-act="toggle-task" data-id="${esc(t.id)}" aria-label="toggle">${I.Check}</button>
+      <input class="edit-text" id="edit-task-text" value="${esc(t.text)}" />
+      <input class="edit-meta" id="edit-task-meta" value="${esc(t.meta || '')}" placeholder="meta" />
+    </div>`;
+  }
   const meta = (t.meta && !t.done) ? `<span class="t-meta">${esc(t.meta)}</span>` : '';
   const draggable = t.done ? '' : 'draggable="true"';
+  // Klick auf die Karte (ausserhalb der Buttons) waehlt sie aus: die Auswahl
+  // ist das Ziel fuer "Copy task" und den Bleistift in der Tool-Rail.
+  const selected = state.selectedId === t.id ? ' selected' : '';
   return `
-    <div class="task${t.done ? ' done' : ''}" data-task-id="${esc(t.id)}" ${draggable}>
+    <div class="task${t.done ? ' done' : ''}${selected}" data-task-id="${esc(t.id)}"
+         data-act="select-task" data-id="${esc(t.id)}" ${draggable}>
       <button class="check" data-act="toggle-task" data-id="${esc(t.id)}" aria-label="toggle">${I.Check}</button>
       <span class="t-text">${esc(t.text)}</span>
       ${meta}
-      <span class="t-grip">${I.Grip}</span>
     </div>`;
 }
 
@@ -149,8 +167,6 @@ function renderMain() {
       <div class="empty-note">// no lists yet, create one in the sidebar</div>
     </div></main>`;
   }
-  const airplane = !state.online;
-
   const openSection = list.open.length === 0
     ? `<div class="empty-note">// nothing open, you're all caught up</div>`
     : `<div class="task-list" data-tasklist="open">${list.open.map(renderTask).join('')}</div>`;
@@ -175,21 +191,6 @@ function renderMain() {
   return `
     <main class="main">
       <div class="main-inner">
-        <div class="banner-row">
-          <button class="airplane-pill${airplane ? '' : ' online'}" data-act="net">
-            ${airplane ? I.Plane : I.Globe}${airplane ? 'Airplane mode on' : 'Online'}
-          </button>
-        </div>
-        <h1 class="list-title">${esc(list.name)}</h1>
-        <div class="title-meta">
-          <span class="tag">${list.open.length} open</span>
-          <span class="sep"></span>
-          <span class="tag">${list.done.length} done</span>
-          <span class="sep"></span>
-          <span class="tag" style="color:${list.synced ? 'var(--secure)' : 'var(--text-faint)'}">
-            ${list.synced ? '↯ synced from MS To Do' : '✦ local only'}
-          </span>
-        </div>
         <div class="section">
           <div class="section-head">
             <span class="s-title">Open tasks</span>
@@ -197,15 +198,42 @@ function renderMain() {
             <span class="line"></span>
           </div>
           ${openSection}
-          <div class="new-task" data-act="focus-newtask">
-            <span class="plus">${I.Plus}</span>
-            <input id="new-task-input" placeholder="New task…" />
-            <span class="kbd">↵</span>
-          </div>
         </div>
         ${doneSection}
+        ${renderListDock(list)}
       </div>
     </main>`;
+}
+
+// Unteres, fest am Bildschirmrand verankertes Dock (scrollt NICHT mit der Liste).
+// Links die Namens-Pille der Liste, daneben ein runder "+"-Knopf. Ein Klick auf
+// "+" laesst rechts daneben eine zweite Pille als Eingabefeld erscheinen; der
+// Listenname bleibt sichtbar. Das "+" dreht sich dabei (gleiche Animation wie
+// der Sidebar-Schalter oben links) zu einem "x": ein erneuter Klick bricht ab,
+// schliesst das Eingabefeld und dreht das "x" zurueck zum "+".
+// Der kleine Punkt kodiert den Sync-Status (gruen = aus MS To Do, Akzent = lokal).
+function renderListDock(list) {
+  const I = Icons;
+  const adding = state.addingTask;
+  const dotStyle = list.synced ? 'background:var(--secure)' : 'background:var(--accent)';
+  const inputPill = adding ? `
+        <div class="dock-input" data-keep>
+          <input id="new-task-input" placeholder="New task…" />
+          <button class="dock-close" data-act="dock-toggle" title="Schließen">${I.Close}</button>
+        </div>` : '';
+  return `
+    <div class="list-dock">
+      <div class="dock-pill" title="${esc(list.name)}">
+        <span class="dock-dot" style="${dotStyle}"></span>
+        <span class="dock-name">${esc(list.name)}</span>
+        <span class="dock-count">${list.open.length}</span>
+      </div>
+      <div class="dock-add-wrap">
+        <button class="dock-add${adding ? ' active' : ''}" data-act="dock-toggle"
+          title="${adding ? 'Abbrechen' : 'Neues To-Do hinzufügen'}">${I.Plus}</button>
+        ${inputPill}
+      </div>
+    </div>`;
 }
 
 // Kompaktes Mini-Fenster: nur die Kopfzeile + die offenen Aufgaben der aktiven
@@ -296,9 +324,9 @@ function renderToolbar() {
         ${btn(state.locked ? I.Lock : I.Unlock, 'Lock app', '⌘L', 'tb-lock')}
         ${btn(I.Alert, 'Emergency', '⌘⇧!', 'tb-emergency', { danger: true })}
         <div class="tool-sep"></div>
-        ${btn(I.Copy, 'Copy list', '⌘C', 'tb-copy')}
-        ${btn(I.Pencil, 'Rename list', '', 'tb-rename')}
-        ${btn(I.Trash, 'Delete list', '', 'tb-delete')}
+        ${btn(I.Copy, 'Copy task', '', 'tb-copy')}
+        ${btn(I.Pencil, state.selectedId ? 'Edit task' : 'Rename list', '', 'tb-rename')}
+        ${btn(I.Trash, 'Delete task', '', 'tb-delete')}
         <div class="tool-sep"></div>
         ${btn(I.Diag, 'App status', '', 'tb-status')}
         ${btn(I.Globe, state.online ? 'Go offline' : 'Go online', 'G', 'net', { active: state.online })}
@@ -418,25 +446,29 @@ function renderModal() {
             <button class="btn btn-primary" data-act="do-rename">Save</button>
           </div>
         </div>`);
-    case 'delete':
+    case 'delete': {
+      const selTask = state.selectedId && list
+        ? [...(list.open || []), ...(list.done || [])].find((t) => t.id === state.selectedId)
+        : null;
       return scrim(`
         <div class="modal">
           <div class="modal-body">
             <div class="modal-icon danger">${I.Trash}</div>
-            <h3>Delete &ldquo;${esc(list ? list.name : '')}&rdquo;?</h3>
-            <p>This removes the list and its tasks from your local database. Lists synced from Microsoft To Do reappear on the next sync.</p>
+            <h3>Delete task?</h3>
+            <p>${selTask ? `&ldquo;${esc(selTask.text)}&rdquo;` : 'No task selected.'}</p>
           </div>
           <div class="modal-actions">
             <button class="btn" data-act="modal-close">Cancel</button>
-            <button class="btn btn-danger" data-act="do-delete">Delete</button>
+            ${selTask ? `<button class="btn btn-danger" data-act="do-delete">Delete</button>` : ''}
           </div>
         </div>`);
+    }
     case 'shortcuts': {
       const sc = [
         ['New task', ['↵']], ['New list', ['N']],
         ['Toggle sidebar', ['⌘', 'B']], ['Focus mode', ['F']],
         ['Lock app', ['⌘', 'L']], ['Emergency lock', ['⌘', '⇧', '!']],
-        ['Export list', ['⌘', 'E']], ['Copy list', ['⌘', 'C']],
+        ['Export list', ['⌘', 'E']],
         ['Toggle theme', ['⌘', 'J']], ['Online / offline', ['G']],
       ];
       const grid = sc.map((s) => `
@@ -520,6 +552,7 @@ function applyChrome() {
   root.setAttribute('data-focus', state.focus ? 'on' : 'off');
   applyRail();
   root.style.setProperty('--accent', state.settings.accent || '#d97757');
+  root.style.setProperty('--sidebar-width', (state.sidebarWidth || 256) + 'px');
 }
 
 // Sichtbarkeit der rechten Tool-Rail (ausserhalb von Fokus/Mini):
@@ -583,6 +616,19 @@ function wireInputs() {
       if (e.key === 'Enter' && rn.value.trim()) { e.preventDefault(); doRename(rn.value.trim()); }
     });
   }
+  const rh = document.getElementById('sidebar-resize-handle');
+  if (rh) rh.addEventListener('mousedown', onSidebarResizeStart);
+  const et = document.getElementById('edit-task-text');
+  if (et) {
+    et.focus(); et.select();
+    const em = document.getElementById('edit-task-meta');
+    const onEditKey = (e) => {
+      if (e.key === 'Enter') { e.preventDefault(); commitTaskEdit(); }
+      else if (e.key === 'Escape') { e.stopPropagation(); state.editingId = null; render(); }
+    };
+    et.addEventListener('keydown', onEditKey);
+    if (em) em.addEventListener('keydown', onEditKey);
+  }
 }
 let refocusNewTask = false;
 
@@ -625,6 +671,39 @@ async function toggleTask(id) {
   render();
 }
 
+// Inline-Bearbeitung speichern: Text ist Pflicht, Meta optional (leer = null).
+async function commitTaskEdit() {
+  const id = state.editingId;
+  const ti = document.getElementById('edit-task-text');
+  if (!id || !ti) { state.editingId = null; return; }
+  const text = ti.value.trim();
+  if (!text) return pushToast('Task text cannot be empty');
+  const mi = document.getElementById('edit-task-meta');
+  const meta = mi && mi.value.trim() ? mi.value.trim() : null;
+  const res = await api().edit_task(id, { text: text, meta: meta });
+  state.editingId = null;
+  if (res && res.error) { render(); return pushToast(res.message || 'Error'); }
+  for (const l of state.lists) {
+    const t = l.open.find((x) => x.id === id) || l.done.find((x) => x.id === id);
+    if (t) { t.text = res.text; t.meta = res.meta; break; }
+  }
+  render();
+  pushToast('Task updated');
+}
+
+async function deleteTask(id) {
+  const res = await api().delete_task(id);
+  if (res && res.error) return pushToast(res.message || 'Error');
+  for (const l of state.lists) {
+    l.open = l.open.filter((t) => t.id !== id);
+    l.done = l.done.filter((t) => t.id !== id);
+  }
+  if (state.editingId === id) state.editingId = null;
+  if (state.selectedId === id) state.selectedId = null;
+  render();
+  pushToast('Task deleted');
+}
+
 async function doRename(name) {
   const list = activeList();
   const res = await api().rename_list(list.id, name);
@@ -636,16 +715,9 @@ async function doRename(name) {
 }
 
 async function doDelete() {
-  const list = activeList();
-  const res = await api().delete_list(list.id);
-  if (res && res.error) return pushToast(res.message || 'Error');
-  state.lists = state.lists.filter((l) => l.id !== list.id);
-  if (!state.lists.find((l) => l.id === state.activeId)) {
-    state.activeId = state.lists.length ? state.lists[0].id : null;
-  }
+  if (!state.selectedId) return;
   state.modal = null;
-  render();
-  pushToast('List deleted');
+  await deleteTask(state.selectedId);
 }
 
 async function setOnline(flag) {
@@ -682,17 +754,19 @@ async function doExport() {
   pushToast('Exported list', res.filename);
 }
 
+// Kopiert die AUSGEWAEHLTE Aufgabe. Das eigentliche Kopieren passiert im
+// Backend (gehaertete Clipboard-Formate, kein Win+V-Verlauf, kein
+// Cloud-Clipboard, Auto-Clear nach 60 s), siehe Bauplan Gate G23.
 async function doCopy() {
-  const list = activeList();
-  if (!list) return;
-  const res = await api().copy_list(list.id);
+  if (!state.selectedId) return pushToast('Select a task first');
+  const res = await api().copy_task(state.selectedId);
   if (res && res.error) return pushToast(res.message || 'Error');
-  try { await navigator.clipboard.writeText(res.text); } catch (e) { /* ignore */ }
-  pushToast('Copied to clipboard', list.open.length + ' tasks');
+  pushToast('Task copied', 'clipboard clears in ' + (res.clears_in || 60) + 's');
 }
 
 async function doMini(flag) {
   const res = await api().set_mini(flag);
+  if (res && res.error) { pushToast(res.message || 'Mini window failed'); return; }
   state.mini = res && typeof res.mini === 'boolean' ? res.mini : flag;
   if (state.mini) {
     // Im Mini-Modus alles Überlagernde schließen, damit nur die Liste bleibt.
@@ -700,6 +774,42 @@ async function doMini(flag) {
     state.colorOpen = false; state.adding = false;
   }
   render();
+}
+
+// --- Sidebar Resize -----------------------------------------------------------
+let _resizing = false;
+let _resizeStartX = 0;
+let _resizeStartW = 0;
+
+function onSidebarResizeStart(e) {
+  if (!sidebarVisible()) return;
+  e.preventDefault();
+  _resizing = true;
+  _resizeStartX = e.clientX;
+  _resizeStartW = state.sidebarWidth || 256;
+  root.setAttribute('data-resizing', '');
+  document.body.style.cursor = 'col-resize';
+  document.body.style.userSelect = 'none';
+  document.addEventListener('mousemove', onSidebarResizeMove);
+  document.addEventListener('mouseup', onSidebarResizeEnd);
+}
+
+function onSidebarResizeMove(e) {
+  if (!_resizing) return;
+  const w = Math.max(180, Math.min(520, _resizeStartW + (e.clientX - _resizeStartX)));
+  state.sidebarWidth = w;
+  root.style.setProperty('--sidebar-width', w + 'px');
+}
+
+function onSidebarResizeEnd() {
+  if (!_resizing) return;
+  _resizing = false;
+  root.removeAttribute('data-resizing');
+  document.body.style.cursor = '';
+  document.body.style.userSelect = '';
+  document.removeEventListener('mousemove', onSidebarResizeMove);
+  document.removeEventListener('mouseup', onSidebarResizeEnd);
+  api().set_setting('sidebarWidth', String(Math.round(state.sidebarWidth)));
 }
 
 // --- Tool-Rail: Auto-Hide / Pin -------------------------------------------
@@ -792,6 +902,13 @@ function closeMenusIfOutside(e, a) {
 }
 
 async function onClick(e) {
+  // Laeuft eine Inline-Bearbeitung und der Klick geht daneben: speichern
+  // (bei leerem Text stattdessen abbrechen), erst dann normal weitermachen.
+  if (state.editingId && !e.target.closest('.task.editing')) {
+    const ti = document.getElementById('edit-task-text');
+    if (ti && ti.value.trim()) await commitTaskEdit();
+    else { state.editingId = null; render(); }
+  }
   const a = e.target.closest('[data-act]');
   const needRender = closeMenusIfOutside(e, a);
   if (!a) { if (needRender) render(); return; }
@@ -799,20 +916,37 @@ async function onClick(e) {
   const id = a.dataset.id;
 
   switch (act) {
-    case 'toggle-sidebar':
+    case 'toggle-sidebar': {
+      // Nur das Attribut umschalten (applyChrome), damit die CSS-Transition
+      // der bestehenden Sidebar laeuft. Kamen wir aus dem Focus-Modus, ist
+      // ein voller Rebuild noetig (anderes Layout).
+      const wasFocus = state.focus;
       state.focus = false;
       state.settings.sidebar = sidebarVisible() ? 'closed' : 'open';
       api().set_setting('sidebar', state.settings.sidebar);
-      render(); break;
+      if (wasFocus) render(); else applyChrome();
+      break;
+    }
     case 'open-notif': state.menu = state.menu === 'notif' ? null : 'notif'; render(); break;
     case 'open-profile': state.menu = state.menu === 'profile' ? null : 'profile'; render(); break;
     case 'sign-out': state.menu = null; await api().sign_out(); render(); pushToast('Signed out'); break;
-    case 'select-list': state.activeId = id; state.doneOpen = false; render(); break;
+    case 'select-list': state.activeId = id; state.doneOpen = false; state.editingId = null; state.selectedId = null; render(); break;
+    case 'select-task':
+      // Klick auf die Karte: Auswahl umschalten (waehrend einer Inline-
+      // Bearbeitung nicht, dort gehoeren Klicks den Eingabefeldern).
+      if (state.editingId === id) break;
+      state.selectedId = state.selectedId === id ? null : id;
+      render(); break;
     case 'new-list-show': state.adding = true; render(); break;
     case 'settings': state.menu = null; state.modal = 'settings'; render(); break;
     case 'toggle-task': await toggleTask(id); break;
+    case 'del-task': await deleteTask(id); break;
     case 'toggle-done': state.doneOpen = !state.doneOpen; render(); break;
     case 'focus-newtask': { const i = document.getElementById('new-task-input'); if (i) i.focus(); break; }
+    case 'dock-toggle':
+      state.addingTask = !state.addingTask;
+      if (state.addingTask) refocusNewTask = true;
+      render(); break;
     case 'net': await setOnline(!state.online); break;
     case 'tb-mini': await doMini(!state.mini); break;
     case 'tb-focus': state.focus = !state.focus; state.menu = null; render(); break;
@@ -823,8 +957,12 @@ async function onClick(e) {
     case 'tb-lock': await doLock(); break;
     case 'tb-emergency': state.modal = 'emergency'; render(); break;
     case 'tb-copy': await doCopy(); break;
-    case 'tb-rename': state.modal = 'rename'; render(); break;
-    case 'tb-delete': state.modal = 'delete'; render(); break;
+    case 'tb-rename':
+      // Kontextuell: ausgewaehlte Aufgabe -> Inline-Bearbeitung; sonst Liste umbenennen.
+      if (state.selectedId) { state.editingId = state.selectedId; render(); }
+      else { state.modal = 'rename'; render(); }
+      break;
+    case 'tb-delete': if (state.selectedId) await deleteTask(state.selectedId); break;
     case 'tb-status': state.modal = 'status'; render(); break;
     case 'exit-focus': state.focus = false; render(); break;
     case 'set-accent': await setAccent(a.dataset.color); break;
@@ -848,21 +986,33 @@ function onKeyGlobal(e) {
   if (e.key === 'Escape') {
     if (state.mini) { doMini(false); return; }
     state.menu = null; state.modal = null; state.colorOpen = false;
-    state.focus = false; state.adding = false; render(); return;
+    state.focus = false; state.adding = false; state.addingTask = false;
+    state.editingId = null; state.selectedId = null; render(); return;
   }
   if (typing) return;
   if (state.locked) return;
   const k = e.key.toLowerCase();
-  if (meta && k === 'b') { e.preventDefault(); state.focus = false; state.settings.sidebar = sidebarVisible() ? 'closed' : 'open'; api().set_setting('sidebar', state.settings.sidebar); render(); }
+  if (meta && k === 'b') { e.preventDefault(); const wasFocus = state.focus; state.focus = false; state.settings.sidebar = sidebarVisible() ? 'closed' : 'open'; api().set_setting('sidebar', state.settings.sidebar); if (wasFocus) render(); else applyChrome(); }
   else if (meta && k === 'j') { e.preventDefault(); setSetting('dark', !state.settings.dark); }
   else if (meta && k === 'l') { e.preventDefault(); doLock(); }
   else if (meta && k === 'e') { e.preventDefault(); doExport(); }
-  else if (meta && k === 'c') { e.preventDefault(); doCopy(); }
+  // Strg+C ist bewusst KEIN App-Shortcut mehr (Phase 6.5): kopiert wird nur
+  // noch gezielt die ausgewaehlte Aufgabe ueber den Rail-Button (Gate G23).
   else if (meta && e.shiftKey && (e.key === '!' || k === '1')) { e.preventDefault(); state.modal = 'emergency'; render(); }
   else if (!meta && e.key === '?') { state.modal = 'shortcuts'; render(); }
   else if (!meta && k === 'f') { state.focus = !state.focus; render(); }
   else if (!meta && k === 'g') { setOnline(!state.online); }
   else if (!meta && k === 'n') { state.adding = true; render(); }
+}
+
+// Doppelklick auf eine Aufgaben-Karte startet die Inline-Bearbeitung
+// (nicht auf Check/Loeschen/Griff, die haben eigene Funktionen).
+function onDblClick(e) {
+  const row = e.target.closest('.task');
+  if (!row || row.classList.contains('editing')) return;
+  if (e.target.closest('.check, .t-del, .t-grip')) return;
+  state.editingId = row.dataset.taskId;
+  render();
 }
 
 // ===========================================================================
@@ -934,12 +1084,16 @@ async function boot() {
     Object.assign(state, st);
     // Pin-Zustand der Tool-Rail aus den Settings rekonstruieren (als String abgelegt).
     state.railPinned = state.settings.railPinned === 'true' || state.settings.railPinned === true;
+    // Sidebar-Breite wiederherstellen (als String gespeichert).
+    const sw = parseInt(state.settings.sidebarWidth || '256', 10);
+    state.sidebarWidth = (sw >= 180 && sw <= 520) ? sw : 256;
     if (state.lists.length && !state.activeId) state.activeId = state.lists[0].id;
   } catch (err) {
     root.innerHTML = '<pre style="padding:24px">boot error: ' + err + '</pre>';
     return;
   }
   document.addEventListener('click', onClick);
+  document.addEventListener('dblclick', onDblClick);
   document.addEventListener('keydown', onKeyGlobal);
   document.addEventListener('mousemove', onMouseMove);
   document.addEventListener('dragstart', onDragStart);

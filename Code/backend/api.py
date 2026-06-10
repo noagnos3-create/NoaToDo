@@ -10,8 +10,10 @@ Phasen 7-11 ausgefüllt.
 """
 from __future__ import annotations
 
+import ctypes
 import functools
 import os
+import threading
 from typing import Any, Callable
 
 from . import db as db_module
@@ -61,8 +63,9 @@ class Api:
         # werden von der Introspektion übersprungen.
         self._window = None  # von main.py gesetzt, für Backend->Frontend-Events
         self._mini = False        # kompakter Mini-Fenster-Modus aktiv?
-        self._restore_geom = None  # gemerkte Fenstergeometrie vor dem Mini-Modus
         self._on_setting_change = None  # optionaler Callback(key, value) für main.py
+        self._on_frame_restored = None  # Callback() nach Rückkehr aus dem Mini-Modus
+        self._clip_timer = None   # Timer für das Auto-Leeren der Zwischenablage
 
     # =====================================================================
     # Gesamtzustand
@@ -172,11 +175,29 @@ class Api:
         return {"filename": f"{safe}.{ext}", "content": "\n".join(lines)}
 
     @bridge
-    def copy_list(self, list_id: str) -> dict[str, Any]:
-        result = self.export_list(list_id, "txt")
-        if "error" in result:
-            return result
-        return {"text": result["content"]}
+    def copy_task(self, task_id: str) -> dict[str, Any]:
+        """Kopiert genau EINE Aufgabe gehärtet in die Zwischenablage (Gate G23).
+
+        Das Kopieren passiert komplett im Backend: der Text wird mit Formaten
+        abgelegt, die ihn von der Win+V-History und dem Cloud-Clipboard
+        ausschliessen, und nach ``CLIPBOARD_CLEAR_SECONDS`` automatisch wieder
+        gelöscht, sofern die Zwischenablage noch unseren Inhalt trägt. Eine
+        ganze Liste kopiert man bewusst nicht mehr, dafür gibt es den Export.
+        """
+        task = self.db.get_task(task_id)
+        if task is None:
+            return {"error": "not_found", "message": "Aufgabe nicht gefunden."}
+        text = task["text"] + (f" ({task['meta']})" if task.get("meta") else "")
+        if not _set_clipboard_secure(text):
+            return {"error": "clipboard", "message": "Zwischenablage nicht verfügbar."}
+        if self._clip_timer is not None:
+            self._clip_timer.cancel()
+        self._clip_timer = threading.Timer(
+            CLIPBOARD_CLEAR_SECONDS, _clear_clipboard_if_matches, args=(text,)
+        )
+        self._clip_timer.daemon = True
+        self._clip_timer.start()
+        return {"ok": True, "clears_in": CLIPBOARD_CLEAR_SECONDS}
 
     # =====================================================================
     # Einstellungen
@@ -199,6 +220,16 @@ class Api:
         und oben rechts am Bildschirm angeheftet, sodass nur die gerade offene
         Liste sichtbar bleibt. Beim Verlassen wird die vorherige Größe/Position
         wiederhergestellt.
+
+        WICHTIG (Bugfix): Diese Methode läuft im PyWebView-API-Worker-Thread, NICHT
+        im WinForms-UI-Thread. Frühere Versionen riefen win.resize/win.move/
+        win.on_top und manuelle SetWindowLong/SetWindowPos-Aufrufe direkt aus
+        diesem Worker-Thread auf. Das sind threadübergreifende Zugriffe auf das
+        Fenster (TopMost und Rahmen-Stilbits sind handle-relevant); sie konnten die
+        Windows-Nachrichtenschleife verklemmen und das rahmenlose, immer im
+        Vordergrund liegende Mini-Fenster komplett einfrieren (Bildschirm hängt).
+        Deshalb marshallen wir die gesamte Fenster-Mutation über form.Invoke auf
+        den UI-Thread (siehe _apply_mini_window).
         """
         win = self._window
         if win is None:
@@ -206,26 +237,68 @@ class Api:
         flag = bool(flag)
         if flag == self._mini:
             return {"mini": self._mini}
-        if flag:
-            # Aktuelle Geometrie merken (defensiv, falls Attribute fehlen).
-            self._restore_geom = {
-                "w": int(getattr(win, "width", 1200) or 1200),
-                "h": int(getattr(win, "height", 800) or 800),
-                "x": getattr(win, "x", None),
-                "y": getattr(win, "y", None),
-            }
-            screen_w, _screen_h = _primary_screen_size()
-            mini_w, mini_h, margin = 360, 600, 16
-            win.resize(mini_w, mini_h)
-            win.move(max(0, screen_w - mini_w - margin), margin)
-            self._mini = True
-        else:
-            geom = self._restore_geom or {"w": 1200, "h": 800, "x": None, "y": None}
-            win.resize(int(geom["w"]), int(geom["h"]))
-            if geom.get("x") is not None and geom.get("y") is not None:
-                win.move(int(geom["x"]), int(geom["y"]))
-            self._mini = False
+        if not self._apply_mini_window(win, flag):
+            return {"error": "window", "message": "Fensterumschaltung fehlgeschlagen."}
+        self._mini = flag
+        # Beim Verlassen den nativen Rahmen wieder an das Theme anpassen
+        # (Titelleisten-Farbe), falls main.py einen Callback gesetzt hat.
+        if not flag and self._on_frame_restored:
+            try:
+                self._on_frame_restored()
+            except Exception:
+                pass
         return {"mini": self._mini}
+
+    def _apply_mini_window(self, win, flag: bool) -> bool:
+        """Führt die Fenster-Mutation für den Mini-Modus auf dem UI-Thread aus.
+
+        Nutzt die native WinForms-Form (``win.native``) und schaltet Rahmen,
+        Größe, Position und Vordergrund-Eigenschaft ausschließlich über
+        ``form.Invoke`` um. So gibt es keine threadübergreifenden Fensterzugriffe
+        mehr. Liefert True bei Erfolg, False wenn keine native Form verfügbar ist.
+        """
+        form = getattr(win, "native", None)
+        if form is None:
+            return False
+        try:
+            FormBorderStyle, FormWindowState, Size, Point, Screen, Action = _winforms_types()
+        except Exception:
+            return False
+
+        def work():
+            if flag:
+                # Aus dem Maximiert-Zustand zuerst auf Normal, sonst greift die
+                # neue Größe nicht.
+                if form.WindowState != FormWindowState.Normal:
+                    form.WindowState = FormWindowState.Normal
+                # Rahmenlos über die verwaltete Eigenschaft (kein manuelles
+                # SetWindowLong nötig): das Mini-Panel bringt eine eigene
+                # Kopfzeile mit.
+                form.FormBorderStyle = getattr(FormBorderStyle, "None")
+                mini_w, mini_h, margin = 360, 600, 16
+                wa = Screen.PrimaryScreen.WorkingArea
+                form.Size = Size(mini_w, mini_h)
+                form.Location = Point(
+                    max(wa.X, wa.X + wa.Width - mini_w - margin), wa.Y + margin
+                )
+                # Bleibt im Vordergrund, sonst verschwindet das kleine
+                # Lesefenster hinter der nächsten App (UX-Nacharbeit 6.5).
+                form.TopMost = True
+            else:
+                # Beim Verlassen immer wieder maximiert öffnen (Nutzerwunsch).
+                form.TopMost = False
+                # Rahmen (Titelleiste + Resize-Rahmen) wiederherstellen.
+                form.FormBorderStyle = FormBorderStyle.Sizable
+                form.WindowState = FormWindowState.Maximized
+
+        try:
+            if getattr(form, "InvokeRequired", False):
+                form.Invoke(Action(work))
+            else:
+                work()
+            return True
+        except Exception:
+            return False
 
     # =====================================================================
     # Status / Diagnose
@@ -291,18 +364,147 @@ class Api:
         return {"locked": True}
 
 
-def _primary_screen_size() -> tuple[int, int]:
-    """Liefert die Größe des primären Bildschirms (best effort, Fallback 1920x1080)."""
-    try:
-        import webview
+# ---------------------------------------------------------------------------
+# Sichere Zwischenablage (Phase 6.5 / Gate G23)
+#
+# Windows hält Clipboard-Inhalte standardmässig in der Win+V-History fest und
+# synchronisiert sie je nach Einstellung ins Cloud-Clipboard (Microsoft-Konto,
+# andere Geräte). Für eine Tresor-App ist beides inakzeptabel. Die folgenden
+# Helfer legen Text deshalb direkt per Win32-API ab, zusammen mit den
+# Ausschluss-Formaten, und können den Inhalt gezielt wieder löschen.
+# ---------------------------------------------------------------------------
+_CF_UNICODETEXT = 13
+_GMEM_MOVEABLE = 0x0002
+_CLIP_EXCLUSION_FORMATS = (
+    # Vorhandensein/Wert 0 dieser registrierten Formate signalisiert Windows:
+    # nicht in die History aufnehmen, nicht in die Cloud laden, nicht von
+    # Clipboard-Monitoren verarbeiten lassen.
+    "ExcludeClipboardContentFromMonitorProcessing",
+    "CanIncludeInClipboardHistory",
+    "CanUploadToCloudClipboard",
+)
+CLIPBOARD_CLEAR_SECONDS = 60
 
-        screens = webview.screens
-        if screens:
-            scr = screens[0]
-            return int(scr.width), int(scr.height)
+
+def _clip_apis():
+    """user32/kernel32 mit 64-bit-sicheren Signaturen (Handles sind Pointer)."""
+    user32 = ctypes.windll.user32
+    kernel32 = ctypes.windll.kernel32
+    kernel32.GlobalAlloc.restype = ctypes.c_void_p
+    kernel32.GlobalAlloc.argtypes = (ctypes.c_uint, ctypes.c_size_t)
+    kernel32.GlobalLock.restype = ctypes.c_void_p
+    kernel32.GlobalLock.argtypes = (ctypes.c_void_p,)
+    kernel32.GlobalUnlock.argtypes = (ctypes.c_void_p,)
+    user32.OpenClipboard.argtypes = (ctypes.c_void_p,)
+    user32.SetClipboardData.restype = ctypes.c_void_p
+    user32.SetClipboardData.argtypes = (ctypes.c_uint, ctypes.c_void_p)
+    user32.GetClipboardData.restype = ctypes.c_void_p
+    user32.GetClipboardData.argtypes = (ctypes.c_uint,)
+    user32.RegisterClipboardFormatW.argtypes = (ctypes.c_wchar_p,)
+    return user32, kernel32
+
+
+def _global_handle(kernel32, data: bytes):
+    """Bytes in einen GMEM_MOVEABLE-Block kopieren (Eigentum geht ans Clipboard)."""
+    handle = kernel32.GlobalAlloc(_GMEM_MOVEABLE, len(data))
+    if not handle:
+        return None
+    ptr = kernel32.GlobalLock(handle)
+    if not ptr:
+        return None
+    ctypes.memmove(ptr, data, len(data))
+    kernel32.GlobalUnlock(handle)
+    return handle
+
+
+def _set_clipboard_secure(text: str) -> bool:
+    """Text als CF_UNICODETEXT ablegen, von History/Cloud-Sync ausgeschlossen."""
+    try:
+        user32, kernel32 = _clip_apis()
+        if not user32.OpenClipboard(None):
+            return False
+        try:
+            user32.EmptyClipboard()
+            payload = text.encode("utf-16-le") + b"\x00\x00"
+            handle = _global_handle(kernel32, payload)
+            if handle is None or not user32.SetClipboardData(_CF_UNICODETEXT, handle):
+                return False
+            zero = (0).to_bytes(4, "little")
+            for name in _CLIP_EXCLUSION_FORMATS:
+                fmt = user32.RegisterClipboardFormatW(name)
+                if fmt:
+                    hzero = _global_handle(kernel32, zero)
+                    if hzero is not None:
+                        user32.SetClipboardData(fmt, hzero)
+            return True
+        finally:
+            user32.CloseClipboard()
+    except Exception:
+        return False
+
+
+def _read_clipboard_text() -> str | None:
+    """Aktuellen CF_UNICODETEXT-Inhalt lesen (None, wenn keiner/nicht lesbar)."""
+    try:
+        user32, kernel32 = _clip_apis()
+        if not user32.OpenClipboard(None):
+            return None
+        try:
+            handle = user32.GetClipboardData(_CF_UNICODETEXT)
+            if not handle:
+                return None
+            ptr = kernel32.GlobalLock(handle)
+            if not ptr:
+                return None
+            try:
+                return ctypes.wstring_at(ptr)
+            finally:
+                kernel32.GlobalUnlock(handle)
+        finally:
+            user32.CloseClipboard()
+    except Exception:
+        return None
+
+
+def _clear_clipboard_if_matches(expected: str) -> None:
+    """Zwischenablage leeren, aber nur wenn sie noch unseren Text enthält.
+
+    Läuft als Timer-Callback ``CLIPBOARD_CLEAR_SECONDS`` nach dem Kopieren.
+    Hat der Nutzer inzwischen selbst etwas anderes kopiert, bleibt das
+    unangetastet.
+    """
+    try:
+        if _read_clipboard_text() != expected:
+            return
+        user32, _kernel32 = _clip_apis()
+        if user32.OpenClipboard(None):
+            try:
+                user32.EmptyClipboard()
+            finally:
+                user32.CloseClipboard()
     except Exception:
         pass
-    return 1920, 1080
+
+
+def _winforms_types():
+    """Lädt die für den Mini-Modus benötigten WinForms-/Drawing-Typen.
+
+    Wird erst zur Laufzeit (nach ``webview.start``) aufgerufen, wenn pythonnet und
+    die WinForms-Assembly bereits geladen sind. Importe deshalb bewusst lazy, nicht
+    auf Modulebene (api.py wird in main.py vor ``webview.start`` importiert).
+    """
+    import clr
+
+    try:
+        clr.AddReference("System.Windows.Forms")
+        clr.AddReference("System.Drawing")
+    except Exception:
+        pass
+    from System import Action
+    from System.Drawing import Point, Size
+    from System.Windows.Forms import FormBorderStyle, FormWindowState, Screen
+
+    return FormBorderStyle, FormWindowState, Size, Point, Screen, Action
 
 
 def _webview2_version() -> str:

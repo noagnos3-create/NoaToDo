@@ -142,13 +142,14 @@ Das ist die **vollständige Methodenliste**, die `backend/api.py` bereitstellt u
 | `add_list(name)` | `str` | `{ id, name, … }` | Neue lokale Liste |
 | `rename_list(id, name)` | `str,str` | `{ ok:true }` | Liste umbenennen |
 | `delete_list(id)` | `str` | `{ ok:true }` | Lokale Liste + Aufgaben löschen (synced kommen beim nächsten Sync zurück) |
+| `undo_delete_list(id)` | `str` | `{ ok:true }` | Letzte Listen-Löschung rückgängig machen (Undo-Toast; ab Phase 7, siehe Phase 6.5) |
 | `add_task(list_id, text, meta?)` | `str,str,str?` | `{ …task }` | Neue lokale Aufgabe |
 | `toggle_task(id)` | `str` | `{ id, done:bool }` | Erledigt-Status umschalten |
 | `edit_task(id, fields)` | `str,obj` | `{ …task }` | Text/Meta/Fälligkeit ändern |
 | `delete_task(id)` | `str` | `{ ok:true }` | Aufgabe löschen |
 | `reorder(list_id, ordered_ids)` | `str,[str]` | `{ ok:true }` | Drag-&-Drop-Reihenfolge speichern |
 | `export_list(id, format)` | `str,'md'\|'txt'\|'json'` | `{ filename, content }` | Liste exportieren |
-| `copy_list(id)` | `str` | `{ text }` | Liste als Text fürs Clipboard |
+| `copy_task(id)` | `str` | `{ ok, clears_in }` | EINE ausgewählte Aufgabe gehärtet ins Clipboard (Backend-seitig, keine Win+V-History, kein Cloud-Clipboard, Auto-Clear nach 60 s; ersetzt das frühere `copy_list`, ganze Listen kopiert man bewusst nicht mehr, dafür gibt es den Export) |
 | `set_setting(key, value)` | `str,*` | `{ ok:true }` | Eine Einstellung speichern |
 | `get_status()` | (keine) | `{ db, encryption, graph, last_sync, runtime }` | Daten für das „App status"-Modal |
 | `sign_in()` | (keine) | `{ ok, account }` | MSAL-Login starten |
@@ -277,8 +278,10 @@ Karte, Standard). Buttons mit Tooltip + Hotkey, in Gruppen durch Trenner:
 5. **Lock / Unlock** (🔒, `⌘L`).
 6. **Emergency** (⚠, `⌘⇧!`, rot), öffnet das Panik-Modal.
    (Trenner)
-7. **Copy list** (⧉, `⌘C`).
-8. **Rename list** (✎), öffnet Umbenennen-Modal.
+7. **Copy task** (⧉): kopiert die per Klick **ausgewählte** Aufgabe (gehärtet,
+   siehe G23); ohne Auswahl nur ein Hinweis-Toast. Kein Tastenkürzel.
+8. **Rename list / Edit task** (✎), kontextuell: Ist eine Aufgabe ausgewählt,
+   öffnet der Stift deren Inline-Bearbeitung; sonst das Umbenennen-Modal der Liste.
 9. **Delete list** (🗑), öffnet Löschen-Modal.
    (Trenner)
 10. **App status** (📈), öffnet Diagnose-Modal.
@@ -316,7 +319,6 @@ Karte, Standard). Buttons mit Tooltip + Hotkey, in Gruppen durch Trenner:
 | App sperren | `⌘/Strg + L` |
 | Notfall-Sperre | `⌘/Strg + ⇧ + !` |
 | Liste exportieren | `⌘/Strg + E` |
-| Liste kopieren | `⌘/Strg + C` |
 | Theme umschalten | `⌘/Strg + J` |
 | Online/Offline | `G` |
 | Tastenkürzel-Hilfe | `?` |
@@ -385,6 +387,16 @@ Gefahr real ist (App geschlossen / Laptop verloren / Backup / Cloud-Ordner).
   und das Salt, **nie** die Passphrase oder die Schlüssel selbst.
 - `aes_key`/`chacha_key` existieren nur **im Arbeitsspeicher**, solange die App entsperrt
   ist. Beim Sperren/Panic werden sie verworfen.
+
+> **Präzisierung (verbindlich, Nachtrag 2026-06-10):** Die Gates **G15** und **G18**
+> (B.9 Nachtrag) ersetzen zwei Details dieses Abschnitts: (1) Es wird **kein**
+> Argon2-Hash der Passphrase gespeichert; die Prüfung beim Entsperren läuft über den
+> Poly1305-Tag der ChaCha20-Entschlüsselung. (2) Die beiden Schlüssel entstehen nicht
+> als "Teilstücke des KDF-Outputs", sondern per HKDF-SHA256 mit getrennten
+> `info`-Labels aus einem Argon2id-Master-Secret. (3) Zusätzlich zur Passphrase geht
+> ein DPAPI-gebundener Pepper aus dem Windows Credential Manager in die Ableitung ein.
+> Gespeichert auf der Platte werden nur: Salt, Argon2-Parameter, Nonce (im
+> `tasks.db.enc`-Header, siehe G16).
 
 **Punkt 4, Microsoft-Tokens getrennt davon: keyring.**
 Die Zugangs-Tokens für Microsoft liegen nicht in der DB, sondern im **Windows Credential
@@ -485,14 +497,45 @@ Zurückkommen aus der Windows-Anmeldung garantiert gesperrt.
 > | **G12** | **3/11** | **WebView-Navigation abriegeln.** Navigations-/New-Window-Events in PyWebView abfangen und jede **externe** Navigation (`window.location`/`window.open` zu externem `http`) verweigern. Die App ist rein lokal und navigiert nie woandershin. |
 >
 > **Zwei Kleinigkeiten (Hinweis, kein Gate):**
-> - **Export/Clipboard:** `export_list` schreibt **unverschlüsselte** Dateien, `copy_list`
->   legt Klartext ins Clipboard (andere Apps lesen mit). By design, aber bewusst sein.
+> - **Export/Clipboard:** `export_list` schreibt **unverschlüsselte** Dateien (by
+>   design, der Nutzer exportiert bewusst Klartext). Das Kopieren ist seit dem
+>   Nachtrag gehärtet und auf eine einzelne Aufgabe begrenzt, siehe G23.
 > - **`main.py` `emit()`:** `json.dumps(payload)` muss `ensure_ascii=True` (Default)
 >   behalten, sonst können U+2028/U+2029 in Sync-/Notif-Daten den `evaluate_js`-Aufruf
 >   brechen. Notif-Payloads mit Task-Titeln hängen zusätzlich an **G1** (textContent).
 >
 > Diese Gates werden weiter unten in den Phasen 8, 9 und 11 **nochmals
 > einzeln** wiederholt. Das ist Absicht, sie dürfen nicht übersehen werden.
+
+> ## 🔒 NACHTRAG: Gates G13 bis G25 (Code-Audit + Testlauf vom 2026-06-10)
+>
+> Ein vollständiges Code-Audit (Code-Review aller Module plus 23 automatisierte
+> Checks gegen die echte Bridge-API auf einer Wegwerf-DB) hat weitere
+> Pflichtpunkte ergeben. **Alle folgenden Gates sind verbindlich und vom Nutzer
+> bestätigt. KEINER dieser Punkte ist optional, jeder MUSS in der genannten
+> Phase umgesetzt werden.** Sie gelten zusätzlich zu G1 bis G12 und werden in
+> den Phasen 7, 9 und 11 nochmals einzeln wiederholt.
+>
+> | Gate | Phase | Punkt |
+> |---|---|---|
+> | **🔴 G13** | **11** | **Serverseitige Lock-Durchsetzung.** Die Sperre existiert heute nur als Frontend-Overlay: Im Audit wurde nachgewiesen, dass nach `lock()` Aufrufe wie `add_task()` und `get_state()` weiterhin funktionieren und alle Daten liefern (ein einziger JS-Aufruf umgeht den Lock-Screen). Pflicht: Ein zentraler Check im `bridge`-Decorator prüft `self.locked`; ist die App gesperrt, gibt **jede** Methode ausser `unlock(passphrase)` sofort `{"error": "locked"}` zurück, ohne die DB zu berühren. `get_state()` liefert im gesperrten Zustand nur `{"locked": true}` ohne Listen/Settings. |
+> | **G14** | **3 (sofort vorsehen) / 11 (hart)** | **Keine WebView2-Datenspuren auf der Platte.** WebView2 legt einen User-Data-Ordner an (Cache, localStorage, GPU-Cache); dort können gerenderte Task-Texte an beiden Verschlüsselungsschichten vorbei landen. Pflicht: `webview.start(..., private_mode=True)` **explizit** setzen (nicht auf den Default verlassen) und verifizieren, dass die Runtime wirklich InPrivate läuft. Legt die Runtime trotzdem einen User-Data-Ordner an: Pfad explizit nach `data/webview2/` legen und beim Sperren/Panic/Beenden löschen. Das Frontend darf localStorage/sessionStorage/IndexedDB **nie** für Aufgabendaten verwenden. |
+> | **G15** | **11** | **Schlüsselableitung mit Domain-Separation, KEIN gespeicherter Verifikations-Hash.** Argon2id erzeugt aus Passphrase + Salt **ein** 32-Byte-Master-Secret; daraus per HKDF-SHA256 mit getrennten `info`-Labels (`b"noatodo/aes-v1"`, `b"noatodo/chacha-v1"`) `aes_key` und `chacha_key` ableiten. Es wird **kein** Argon2-Hash der Passphrase gespeichert: Die Prüfung beim Entsperren ist der Erfolg oder Misserfolg der ChaCha20-Poly1305-Entschlüsselung (der Poly1305-Tag verifiziert die Passphrase implizit; falsche Passphrase = AEAD-Exception = Meldung "Passphrase falsch"). So liegt kein zusätzliches Orakel-Material für Offline-Angreifer auf der Platte. Ersetzt die ältere Formulierung in B.7 ("Argon2-Hash zum Prüfen speichern", "Teilstücke des KDF-Outputs"). |
+> | **G16** | **11** | **Dateiformat von `tasks.db.enc` + atomares Schreiben.** Header: Magic `NOA1` (4 Byte), Formatversion (1 Byte), Argon2id-Parameter `memory_cost`/`time_cost`/`parallelism` (je u32 little-endian), Salt (16 Byte), Nonce (12 Byte); danach der ChaCha20-Poly1305-Ciphertext. Bei **jedem** Verschlüsseln eine frische Nonce aus `os.urandom(12)`; eine wiederverwendete Nonce bricht die AEAD-Sicherheit vollständig. Schreiben **immer** atomar: erst `tasks.db.enc.tmp` schreiben, `flush()` + `os.fsync()`, bestehende Datei nach `tasks.db.enc.bak` rotieren (genau eine Generation behalten), dann `os.replace()`. Ein Absturz mitten im Sperren darf nie die einzige Kopie der Daten zerstören. |
+> | **G17** | **11** | **Write-back-Politik für die In-Memory-DB** (Ergänzung zu G6). Nach jeder mutierenden Bridge-Operation wird die In-Memory-DB debounced persistiert (z.B. 3 s nach der letzten Änderung; zusätzlich **sofort** bei Lock/Panic/Quit), als neues `tasks.db.enc` nach dem Verfahren aus G16. Ein Crash kostet damit höchstens die letzten Sekunden, nie den Tagesstand. |
+> | **G18** | **11** | **DPAPI-Pepper gegen Offline-Brute-Force (Pflicht).** Beim Einrichten der Passphrase wird zusätzlich ein zufälliger 32-Byte-Pepper erzeugt und über `keyring` im Windows Credential Manager (DPAPI, ans Windows-Konto gebunden) abgelegt. Der Pepper fliesst zusätzlich zur Passphrase in die Ableitung ein (Argon2id-`secret`-Parameter). Wirkung: Wer nur die Datei `tasks.db.enc` erbeutet (Backup, Cloud-Ordner, ausgebaute SSD), kann offline **gar nicht** raten, ihm fehlt der Pepper aus dem Windows-Konto. Pflichtbestandteil des Einrichtungs-Flows: ein Recovery-Export des Peppers (Datei oder anzeigbarer Code), den der Nutzer getrennt sichern muss; ohne Windows-Profil und ohne Recovery-Export wäre die DB sonst unwiederbringlich verloren. |
+> | **G19** | **11 (Umsetzung darf vorgezogen werden)** | **Single-Instance-Schutz.** Beim Start einen benannten Windows-Mutex belegen (`ctypes.windll.kernel32.CreateMutexW(None, False, "Local\\NoaToDoSingleton")`, danach `GetLastError() == ERROR_ALREADY_EXISTS (183)` prüfen). Läuft schon eine Instanz: Hinweis zeigen und den zweiten Prozess sofort beenden. Zwei Instanzen würden sich `tasks.db.enc` bzw. die Arbeitskopie gegenseitig überschreiben (Korruption/Datenverlust). |
+> | **G20** | **7** | **Regel-4-Validierung auch für LOKALE Eingaben + Typ-/Key-Prüfung an der Bridge.** Audit-Befunde: ein 1-MB-Tasktext und Steuerzeichen wie U+0000 werden heute anstandslos gespeichert; `reorder(list_id, "string")` iteriert den String zeichenweise und liefert `{"ok": true}`; `set_setting` akzeptiert beliebige Keys. Pflicht in `api.py`: (a) `add_task`/`edit_task`: Text max. 4096 Zeichen, `meta` max. 256; `add_list`/`rename_list`: Name max. 256; Überlänge abschneiden; Steuerzeichen U+0000-U+001F (ausser `\n` und `\t`) vor dem Schreiben strippen. (b) `reorder` lehnt ab, wenn `ordered_ids` keine Liste von Strings ist. (c) `set_setting` akzeptiert nur Keys aus einer Whitelist (`accent`, `dark`, `toolbar`, `density`, `sidebar`, `railPinned`, `sidebarWidth` plus künftig dort dokumentierte), sonst `{"error": "invalid"}`. |
+> | **G21** | **7** | **Export-Härtung.** Audit-Befunde: eine Liste namens `CON` exportiert als `CON.md` (reservierter Windows-Gerätename), und Zeilenumbrüche im Task-Text brechen die Markdown-Struktur des Exports (eingeschleuste falsche `- [x]`-Zeilen/Überschriften). Pflicht in `export_list`: (a) Dateiname: reservierte Namen (CON, PRN, AUX, NUL, COM1-COM9, LPT1-LPT9; case-insensitive, auch mit Endung) mit `_`-Präfix entschärfen; führende/abschliessende Punkte und Leerzeichen entfernen; bleibt nichts übrig, Fallback `list`. (b) Inhalt: in md/txt jede Aufgabe einzeilig ausgeben, `\r` und `\n` in Text/Meta durch ein Leerzeichen ersetzen. (c) Echten Save-Dialog umsetzen (`window.create_file_dialog(webview.SAVE_DIALOG, save_filename=...)`) und die Datei wirklich schreiben. Stand heute schreibt der Export **keine** Datei, das Frontend zeigt nur einen Toast. |
+> | **G22** | **SOFORT, spätestens mit 7** | **Ehrlicher `get_status()`.** Bis Phase 11 fertig ist, **muss** `get_status()` den realen Zustand melden: Schicht 1 "SQLCipher mit Entwicklungs-Schlüssel (UNSICHER)", Schicht 2 "nicht implementiert", `active: false`; das Status-Modal zeigt das in Warnfarben statt grün. Eine Tresor-App darf nie eine Verschlüsselung anzeigen, die nicht existiert (aktuell meldet der Status "AES-256 + ChaCha20 · active", während der AES-Key öffentlich im Repo steht; im Audit nachgewiesen). Ab Phase 11 zeigt der Status echte Werte (Argon2-Parameter, Pepper vorhanden ja/nein, Zeitpunkt des letzten Wraps). |
+> | **G23** | **✅ umgesetzt 2026-06-10** | **Clipboard-Hygiene + Einzel-Task-Kopie.** Windows speichert das Clipboard in der Zwischenablage-History (Win+V) und synchronisiert es ggf. ins Microsoft-Cloud-Clipboard, App-Inhalte würden so den Rechner verlassen. Umgesetzt: (a) Kopiert wird nur noch **eine ausgewählte Aufgabe** (`copy_task`), nie eine ganze Liste; für Listen gibt es den Export. (b) Das Kopieren passiert komplett im **Backend** (`api.py`, Win32 per ctypes, nicht `navigator.clipboard`) und setzt zusätzlich zu `CF_UNICODETEXT` die Formate `ExcludeClipboardContentFromMonitorProcessing`, `CanIncludeInClipboardHistory` (=0) und `CanUploadToCloudClipboard` (=0). (c) Auto-Clear: 60 s nach dem Kopieren wird das Clipboard geleert, sofern es noch unseren Inhalt trägt. (d) Der `Strg+C`-App-Shortcut wurde ersatzlos entfernt. Bei künftigen Copy-Funktionen MUSS derselbe Backend-Pfad verwendet werden. |
+> | **G26** | **✅ umgesetzt 2026-06-10 (UI-Schalter folgt)** | **Screenshot-Schutz.** Das App-Fenster wird per `SetWindowDisplayAffinity(hwnd, WDA_EXCLUDEFROMCAPTURE)` (Fallback `WDA_MONITOR`) aus jeder Bildschirmaufnahme herausgenommen: Screenshots, Snipping Tool, OBS und Bildschirmfreigaben zeigen das Fenster schwarz (`main.py`, beim Fensterstart). Grenzen ehrlich benennen: schützt nicht gegen eine Kamera, die den Bildschirm abfotografiert. Der Schutz ist standardmässig **aktiv**; ein Umschalter in den Settings kann später ergänzt werden, der Default bleibt AN. Bei jeder Fenster-Neuerstellung (z.B. künftige Zweitfenster) MUSS der Schutz erneut gesetzt werden. |
+> | **G24** | **9 (VOR dem ersten Sync)** | **Seed-Daten-Kollision auflösen.** Die Seeds markieren Listen als `synced=1`/`source='graph'`, tragen aber lokale UUIDs statt echter Graph-IDs. Beim ersten echten Sync entstünden Duplikate und "Geisterlisten", die nie Updates bekommen. Pflicht: Beim ersten erfolgreichen `sign_in()` eine Migration ausführen: alle Listen mit `synced=1`, deren ID mit `l` beginnt (= Seed, nicht Graph), samt Aufgaben auf `synced=0`/`source='local'` umstellen. Danach existieren keine Pseudo-Sync-Listen mehr. |
+> | **G25** | **11** | **RAM-Schlüssel-Hygiene.** `aes_key`, `chacha_key`, Master-Secret und Pepper als `bytearray` (nicht `bytes`/`str`) halten; beim Sperren/Panic/Beenden **vor** dem Verwerfen mit Nullen überschreiben. Die Passphrase unmittelbar nach der Ableitung verwerfen; Passphrase und Schlüssel dürfen **nie** in Logs, Exceptions, `get_status()` oder sonstwie ans Frontend gelangen. Im Code dokumentieren: Python gibt keine harten Garantien (der GC kann Kopien hinterlassen), das Nullen ist Best-Effort und trotzdem Pflicht. |
+>
+> **Zusätzlich vorgezogen:** G12 (externe WebView-Navigation verweigern) ist mit
+> wenigen Zeilen umsetzbar und wird **vor** Phase 7 umgesetzt, nicht erst in
+> Phase 11. Ebenso G22 (ehrlicher Status), siehe Tabelle.
 
 Der One-Way-Sync (Cloud → lokal) ist die **größte Angriffsfläche** der App: Ein
 Angreifer, der Kontrolle über das Microsoft-Konto hat (oder über eine geteilte Liste
@@ -824,18 +867,110 @@ Tastenkürzel, Focus-Modus. Optisch deckungsgleich mit `NoaToDo UI Konzept.html`
 
 ---
 
+### Phase 6.5: UX-Nacharbeiten am Prototyp (eingeschoben nach dem Audit vom 2026-06-10)
+
+**Stand-Korrektur:** Abgeschlossen ist **Phase 6** (lokal nutzbarer Prototyp).
+Phase 7 ist **offen**: `export_list` erzeugt zwar Inhalte, aber es wird noch
+keine Datei geschrieben (kein Save-Dialog), siehe Gate G21c. Das Kopieren ist
+seit dem 2026-06-10 fertig und gehärtet (`copy_task`, siehe Punkt 5 unten).
+
+**Bereits umgesetzt (2026-06-10), gehört ab jetzt zum Soll-Verhalten:**
+1. **Aufgaben inline bearbeiten:** Doppelklick auf eine Aufgaben-Karte öffnet
+   Text- und Meta-Eingabe direkt in der Karte. Enter speichert (`edit_task`),
+   Esc bricht ab, Klick daneben speichert (bei leerem Text: Abbruch). Leerer
+   Text wird abgelehnt.
+2. **Aufgaben einzeln löschen:** Papierkorb-Button erscheint beim Hover auf der
+   Karte und ruft `delete_task`.
+3. **`Strg+C` als App-Shortcut ersatzlos entfernt** (zweiter Schritt am selben
+   Tag, ersetzt die anfängliche "nur ohne Textauswahl"-Variante): Kopiert wird
+   nur noch gezielt über den Rail-Button, siehe Punkt 5. Das normale Kopieren
+   von markiertem Text in Eingabefeldern bleibt Browser-Standard.
+4. **Mini-Modus ist always-on-top** (`window.on_top = True` beim Anheften, beim
+   Verlassen wieder `False`), sonst verschwindet das kleine Lesefenster hinter
+   der nächsten App.
+5. **Aufgaben-Auswahl + gezieltes Kopieren (Gate G23):** Klick auf eine
+   Aufgaben-Karte wählt sie aus (Akzent-Rahmen, Wash, Akzent-Balken links;
+   erneuter Klick oder Esc hebt auf). Der Rail-Button "Copy task" kopiert
+   **nur** die ausgewählte Aufgabe, gehärtet im Backend (`copy_task`: keine
+   Win+V-History, kein Cloud-Clipboard, Auto-Clear nach 60 s); ohne Auswahl
+   erscheint nur der Hinweis "Select a task first". `copy_list` wurde entfernt,
+   ganze Listen verlassen die App nur noch über den Export.
+6. **Kontextueller Stift in der Rail:** Mit ausgewählter Aufgabe öffnet der
+   Stift deren Inline-Bearbeitung, ohne Auswahl wie bisher das
+   Listen-Umbenennen-Modal.
+7. **Screenshot-Schutz aktiv (Gate G26):** `SetWindowDisplayAffinity` mit
+   `WDA_EXCLUDEFROMCAPTURE` in `main.py`; das Fenster erscheint in Screenshots
+   und Bildschirmfreigaben schwarz. Default AN, Settings-Schalter kann später
+   folgen.
+
+**Noch offen (Pflicht, KEINER dieser Punkte ist optional, je in der genannten Phase):**
+- **Undo beim Listen-Löschen (Phase 7):** `delete_list` löscht heute sofort und
+  unwiderruflich. Pflicht: Toast "List deleted" mit "Undo"-Button (ca. 6 s
+  sichtbar). Umsetzung backendseitig: `delete_list` hält die gelöschte Liste
+  samt Aufgaben zunächst im RAM des Backends (oder als `deleted_at`-Soft-Delete),
+  eine neue Bridge-Methode `undo_delete_list(id)` stellt wieder her; endgültig
+  verworfen wird nach Ablauf der Frist oder beim nächsten App-Start.
+- **Fälligkeits-UI (Phase 10):** `due_at` existiert im Schema und in `edit_task`,
+  hat aber kein UI. Pflicht in Phase 10 (zusammen mit den Erinnerungen): Datum
+  setzen/ändern/entfernen im Inline-Edit, Anzeige als Mono-Tag an der Karte,
+  überfällige Aufgaben in `--danger`.
+- **Echte Benachrichtigungen (Phase 10):** Das Glocken-Menü zeigt hartkodierte
+  Fake-Einträge. Pflicht: durch echte Ereignisse ersetzen (Sync abgeschlossen,
+  Erinnerung fällig, Backup geschrieben), inklusive Leer-Zustand ("keine
+  Benachrichtigungen") und echter Zähler-Badge.
+- **Echtes Profil-Menü (Phase 8):** Das Profil-Menü zeigt den hartkodierten
+  Namen "Noa Andersen" und tote Einträge (Account, Privacy & data, Export
+  database). Pflicht: an `sign_in`/`sign_out` und die echten Kontodaten
+  anbinden; tote Einträge entweder funktional machen oder entfernen.
+- **Export-Save-Dialog (Phase 7):** siehe Gate G21c.
+
+**Abnahme:** Doppelklick-Bearbeiten, Hover-Löschen, das neue `Strg+C`-Verhalten
+und Mini-always-on-top funktionieren in der laufenden App; die offenen Punkte
+sind in den Phasen 7, 8 und 10 als Pflicht eingeplant.
+
+---
+
 ### Phase 7: Export & Kopieren (`backend/api.py` ausbauen)
 
-**Ziel:** `export_list` und `copy_list` erzeugen echte Inhalte.
+**Ziel:** Der Export schreibt echte Dateien (Save-Dialog) und das Löschen von
+Listen ist per Undo absicherbar. (Das Kopieren ist bereits fertig: `copy_task`
+aus Phase 6.5 / Gate G23, es gibt bewusst kein Listen-Kopieren mehr.)
 
 **Tun:**
 1. `export_list(id, 'md')` → Markdown (Überschrift = Listenname, `- [ ]`/`- [x]` je
    Aufgabe, Meta in Klammern). `'txt'` und `'json'` analog. Über PyWebViews
    Save-Dialog speichern.
-2. `copy_list(id)` → Klartext der Liste; das Frontend legt ihn via
-   `navigator.clipboard.writeText` ab und zeigt Toast „Copied to clipboard".
+2. **Undo beim Listen-Löschen** (UX-Pflicht aus Phase 6.5): `delete_list` hält
+   die gelöschte Liste samt Aufgaben zunächst zurück, neue Bridge-Methode
+   `undo_delete_list(id)` stellt wieder her; das Frontend zeigt den Toast
+   „List deleted" mit „Undo"-Button (ca. 6 s).
 
-**Abnahme:** Export schreibt eine korrekte `.md`-Datei; Kopieren landet im Clipboard.
+> **🔒 PFLICHT-GATES für Phase 7 (aus dem Audit 2026-06-10, Details in B.9
+> Nachtrag G13-G25; keines davon ist optional):**
+> - **G20, Validierung lokaler Eingaben:** `add_task`/`edit_task` Text ≤ 4096,
+>   `meta` ≤ 256, Listennamen ≤ 256; Steuerzeichen U+0000-U+001F (ausser `\n`/`\t`)
+>   strippen; `reorder` lehnt Nicht-Listen ab; `set_setting` nur mit Key-Whitelist
+>   (`accent`, `dark`, `toolbar`, `density`, `sidebar`, `railPinned`, `sidebarWidth`).
+> - **G21, Export-Härtung:** reservierte Windows-Dateinamen (CON, PRN, AUX, NUL,
+>   COM1-COM9, LPT1-LPT9) entschärfen; `\r`/`\n` in Task-Text/Meta beim md/txt-Export
+>   durch Leerzeichen ersetzen (keine eingeschleusten Checkbox-Zeilen); echten
+>   Save-Dialog umsetzen und die Datei wirklich schreiben.
+> - **G22, Ehrlicher Status:** `get_status()` meldet den realen
+>   Verschlüsselungszustand (Dev-Key = UNSICHER, Schicht 2 = nicht implementiert),
+>   bis Phase 11 fertig ist. Spätestens in dieser Phase umsetzen.
+> - **✅ G23 (bereits umgesetzt, 2026-06-10):** Einzel-Task-Kopie über `copy_task`
+>   im Backend, History-/Cloud-Ausschluss, Auto-Clear nach 60 s, `Strg+C` entfernt.
+>   In dieser Phase nur noch verifizieren (Win+V prüfen) und bei neuen
+>   Copy-Funktionen denselben Backend-Pfad verwenden.
+> - **G12 vorziehen:** Externe WebView-Navigation verweigern (wenige Zeilen in
+>   `main.py`), nicht erst in Phase 11.
+
+**Abnahme:** Export schreibt nach Save-Dialog eine korrekte `.md`-Datei (auch bei
+Listennamen wie `CON` oder Tasks mit Zeilenumbrüchen); die Einzel-Task-Kopie taucht
+nachweislich nicht in der Win+V-History auf und das Clipboard ist nach 60 s leer;
+gelöschte Listen lassen sich per Undo-Toast wiederherstellen;
+überlange/Steuerzeichen-Eingaben werden begrenzt bzw. bereinigt; `get_status()`
+zeigt den ehrlichen Dev-Zustand.
 
 ---
 
@@ -925,6 +1060,11 @@ Logs/Frontend/DB. **G10 erfüllt:** Fehler ans Frontend tragen keine Geheimnisse
 >   `threading.Lock` serialisieren → Korruptionsschutz.
 > - **G10 (auch hier):** Sync-Fehler ans Frontend nur als generischer Code (`sync_failed`),
 >   Details serverseitig loggen, **kein** Delta-Link/Skiptoken/Token in Toast oder Log.
+> - **G24, Seed-Migration VOR dem ersten Sync (Audit 2026-06-10):** Die Seed-Listen
+>   sind als `synced=1`/`source='graph'` markiert, tragen aber lokale UUIDs statt
+>   echter Graph-IDs; der erste Sync würde Duplikate und "Geisterlisten" erzeugen.
+>   Beim ersten erfolgreichen `sign_in()` alle Listen mit `synced=1` und ID-Präfix
+>   `l` (= Seed) samt Aufgaben auf `synced=0`/`source='local'` migrieren.
 
 **Abnahme:** Eine im Handy/MS-To-Do geänderte Aufgabe erscheint nach dem nächsten Sync
 lokal; ein zweiter Sync direkt danach überträgt (dank Delta) (fast) nichts.
@@ -1009,10 +1149,43 @@ machen, das Kernversprechen „sicherer als Microsoft To Do".
 >   Sicherheitsversprechen lautlos. **Ebenso bedenken:** sauberer Erst-Einrichtungs-Flow
 >   (Passphrase anlegen) und Migration der bestehenden Dev-DB auf den echten Schlüssel.
 
+> **🔒 PFLICHT-GATES G13 bis G19 und G25 für Phase 11 (aus dem Audit 2026-06-10,
+> vollständige Beschreibung in B.9 Nachtrag; KEINES davon ist optional):**
+> - **🔴 G13, Lock serverseitig durchsetzen:** Bei `locked=True` weist der
+>   `bridge`-Decorator **jede** Methode ausser `unlock(passphrase)` mit
+>   `{"error": "locked"}` ab; `get_state()` liefert gesperrt nur `{"locked": true}`.
+>   Heute ist die Sperre nur ein Frontend-Overlay (im Audit nachgewiesen:
+>   `add_task`/`get_state` funktionieren gesperrt weiter).
+> - **G14, WebView2 ohne Datenspuren:** `private_mode=True` explizit setzen und
+>   verifizieren; falls ein User-Data-Ordner entsteht, nach `data/webview2/` legen
+>   und bei Lock/Panic/Quit löschen; nie localStorage/IndexedDB für Aufgabendaten.
+> - **G15, KDF mit Domain-Separation, kein Verifikations-Hash:** Argon2id →
+>   ein Master-Secret → HKDF-SHA256 mit getrennten `info`-Labels → `aes_key` +
+>   `chacha_key`; Passphrase-Prüfung ausschliesslich über den Poly1305-Tag der
+>   ChaCha20-Entschlüsselung, es wird kein Argon2-Hash gespeichert.
+> - **G16, `.enc`-Dateiformat + atomares Schreiben:** Header (Magic `NOA1`,
+>   Version, Argon2-Parameter, Salt, Nonce), frische Nonce pro Verschlüsselung,
+>   Schreiben über `.tmp` + `fsync` + `os.replace`, eine `.bak`-Generation.
+> - **G17, Write-back:** In-Memory-DB nach jeder Mutation debounced (ca. 3 s)
+>   und sofort bei Lock/Panic/Quit als neues `tasks.db.enc` persistieren.
+> - **G18, DPAPI-Pepper (Pflicht):** 32-Byte-Pepper im Windows Credential Manager,
+>   fliesst als Argon2id-`secret` in die Ableitung ein; Einrichtungs-Flow enthält
+>   zwingend einen Recovery-Export des Peppers.
+> - **G19, Single-Instance-Mutex:** benannter Windows-Mutex beim Start, zweite
+>   Instanz beendet sich sofort (Korruptionsschutz). Umsetzung darf vorgezogen werden.
+> - **G25, RAM-Schlüssel-Hygiene:** Schlüssel/Master-Secret/Pepper als `bytearray`,
+>   vor dem Verwerfen nullen; Passphrase nach Ableitung sofort verwerfen; nichts
+>   davon je in Logs, Exceptions oder ans Frontend.
+
 **Abnahme:** Sperren/Entsperren funktioniert mit Passphrase; Panic sperrt sofort und
 pausiert Sync; bei aktivierter Verschlüsselung ist `tasks.db` ohne Passphrase nicht
 lesbar. **G6-G8 erfüllt:** keine entschlüsselte DB-Datei auf der Platte (In-Memory),
 Hex-Raw-Key gesetzt, starke Argon2id-Parameter + Passphrase-Stärkeprüfung aktiv.
+**G13-G19/G25 erfüllt:** Bridge-Methoden liefern gesperrt nachweislich `locked`-Fehler;
+kein WebView2-Datenrest; Entsperren scheitert bei falscher Passphrase über den
+AEAD-Tag; `tasks.db.enc` trägt den spezifizierten Header und übersteht einen
+simulierten Absturz beim Sperren (`.bak` greift); ohne den Pepper aus dem Credential
+Manager ist die Datei offline nicht angreifbar; eine zweite App-Instanz startet nicht.
 
 ---
 
@@ -1044,7 +1217,9 @@ Wenn sich eine **importierte** Aufgabe gleichzeitig in der Cloud und lokal ände
 
 ### D.3 Mögliche spätere Erweiterungen (nicht im Kern-Scope)
 
-- Unterpunkte/Checklisten je Aufgabe, Fälligkeiten-UI, Wiederholungen.
+- Unterpunkte/Checklisten je Aufgabe, Wiederholungen. (Das Fälligkeits-UI ist seit
+  dem Nachtrag vom 2026-06-10 keine Erweiterung mehr, sondern Pflicht in Phase 10,
+  siehe Phase 6.5.)
 - Volltextsuche, Filter „wichtige Aufgaben" (in der Skizze angedeutet).
 - Mehrere Akzent-/Theme-Presets, anpassbare Dichte je Liste.
 - Automatische lokale Backups von `tasks.db` (verschlüsselt) mit Rotation.
@@ -1102,12 +1277,13 @@ Icon verwenden.
 - [ ] Phase 3, `main.py` Fenster + Verdrahtung **+ 🔒 G12 (Navigation abriegeln)**
 - [ ] Phase 4, `index.html` Gerüst, Bridge im Fenster bewiesen
 - [ ] Phase 5, `style.css` (CSS 1:1 aus Konzept) + lokale Fonts
-- [ ] Phase 6, `app.js` komplette UI + Interaktionen  ← **lokal voll nutzbar**
-- [ ] Phase 7, Export & Copy
-- [ ] Phase 8, MSAL-Login (`Tasks.Read`, keyring) **+ 🔒 G5 (OAuth-Härtung), G10 (Fehler ohne Geheimnisse)**
-- [ ] Phase 9, Delta-Sync Cloud → SQLite (einseitig) **+ 🔒 G1 (textContent ZUERST), G2 (Host-Whitelist), G3 (Limits/Regel 4), G4 (Schreib-Lock), G10 (Fehler ohne Geheimnisse)**
-- [ ] Phase 10, Benachrichtigungen (winotify)
-- [ ] Phase 11, Lock / Emergency / Doppel-Kaskade AES-256 + ChaCha20 (B.7) **+ 🔒 G6 (In-Memory-DB), G7 (Hex-Raw-Key), G8 (Argon2id-Kosten + Passphrase-Stärke), 🔴 G9 (`DEV_AES_KEY` entfernen)**
+- [x] Phase 6, `app.js` komplette UI + Interaktionen  ← **lokal voll nutzbar (Stand heute)**
+- [x] Phase 6.5, UX-Nacharbeiten (Inline-Edit, Task-Löschen, Task-Auswahl, gehärtete Einzel-Task-Kopie ✅G23, Strg+C entfernt, Mini-on-top, Screenshot-Schutz ✅G26); Rest-Pflichten in 7/8/10 verplant
+- [ ] Phase 7, Export + Undo **+ 🔒 G20 (lokale Eingabe-Validierung), G21 (Export-Härtung + Save-Dialog), G22 (ehrlicher Status), G12 vorziehen, Undo beim Listen-Löschen** (G23 schon erledigt)
+- [ ] Phase 8, MSAL-Login (`Tasks.Read`, keyring) **+ 🔒 G5 (OAuth-Härtung), G10 (Fehler ohne Geheimnisse)** + echtes Profil-Menü
+- [ ] Phase 9, Delta-Sync Cloud → SQLite (einseitig) **+ 🔒 G1 (textContent ZUERST), G2 (Host-Whitelist), G3 (Limits/Regel 4), G4 (Schreib-Lock), G10 (Fehler ohne Geheimnisse), G24 (Seed-Migration)**
+- [ ] Phase 10, Benachrichtigungen (winotify) + Fälligkeits-UI + echtes Glocken-Menü
+- [ ] Phase 11, Lock / Emergency / Doppel-Kaskade AES-256 + ChaCha20 (B.7) **+ 🔒 G6 (In-Memory-DB), G7 (Hex-Raw-Key), G8 (Argon2id-Kosten + Passphrase-Stärke), 🔴 G9 (`DEV_AES_KEY` entfernen), 🔴 G13 (Lock serverseitig), G14 (WebView2-Spuren), G15 (HKDF/kein Hash), G16 (.enc-Format), G17 (Write-back), G18 (DPAPI-Pepper), G19 (Single-Instance), G25 (RAM-Hygiene)**
 
 ### 🔒 Sicherheits-Gates auf einen Blick (Details in B.9)
 
@@ -1126,8 +1302,23 @@ Icon verwenden.
 | 🔴 G9 | 11 | **`DEV_AES_KEY` & jeden statischen Schlüssel-Fallback entfernen** (sonst null Verschlüsselung) |
 | 🔒 G10 | 8/9 | Fehlermeldungen ans Frontend ohne Tokens/Delta-Links/Pfade |
 | 🔒 G11 | 0 / laufend | Abhängigkeiten versions-pinnen (+ Hash-Checking) |
-| 🔒 G12 | 3/11 | Externe WebView-Navigation verweigern |
+| 🔒 G12 | vor 7 (vorgezogen) | Externe WebView-Navigation verweigern |
+| 🔴 G13 | 11 | **Lock serverseitig durchsetzen** (gesperrt = jede Methode ausser `unlock` liefert `locked`-Fehler) |
+| 🔒 G14 | 3/11 | WebView2 ohne Datenspuren (`private_mode` verifizieren, User-Data-Ordner kontrollieren/löschen) |
+| 🔒 G15 | 11 | Argon2id-Master-Secret + HKDF-Domain-Separation; kein Verifikations-Hash, Prüfung via Poly1305-Tag |
+| 🔒 G16 | 11 | `tasks.db.enc`-Header (Magic/Version/Params/Salt/Nonce), frische Nonce, atomares Schreiben + `.bak` |
+| 🔒 G17 | 11 | Debounced Write-back der In-Memory-DB (Crash kostet höchstens Sekunden) |
+| 🔒 G18 | 11 | DPAPI-Pepper im Credential Manager als Zweitfaktor gegen Offline-Brute-Force + Recovery-Export |
+| 🔒 G19 | 11 (vorziehbar) | Single-Instance-Mutex (zweite Instanz beendet sich) |
+| 🔒 G20 | 7 | Regel-4-Validierung auch lokal + `reorder`-Typprüfung + `set_setting`-Key-Whitelist |
+| 🔒 G21 | 7 | Export-Härtung: reservierte Windows-Namen, Newline-Ersetzung, echter Save-Dialog |
+| 🔒 G22 | sofort/7 | `get_status()` meldet den ehrlichen Verschlüsselungszustand (kein falsches "active") |
+| ✅ G23 | erledigt (2026-06-10) | Einzel-Task-Kopie im Backend: keine Win+V-History, kein Cloud-Clipboard, Auto-Clear 60 s, `Strg+C` entfernt |
+| 🔒 G24 | 9 | Seed-Listen vor dem ersten Sync auf `local` migrieren (keine Pseudo-Graph-IDs) |
+| 🔒 G25 | 11 | RAM-Schlüssel-Hygiene: `bytearray` + Nullen, Passphrase sofort verwerfen, nie loggen |
+| ✅ G26 | erledigt (2026-06-10) | Screenshot-Schutz: `WDA_EXCLUDEFROMCAPTURE`, Fenster in Aufnahmen schwarz; Default AN, Settings-Schalter kann folgen |
 
-**Hinweise (kein Gate):** Export schreibt unverschlüsselte Dateien & `copy_list` nutzt
-Klartext-Clipboard (by design); `main.py` `emit()` muss `json.dumps(..., ensure_ascii=True)`
-behalten (U+2028/U+2029-Schutz im `evaluate_js`-Kanal).
+**Hinweise (kein Gate):** Export schreibt unverschlüsselte Dateien (by design, der
+Nutzer exportiert bewusst Klartext); `main.py` `emit()` muss
+`json.dumps(..., ensure_ascii=True)` behalten (U+2028/U+2029-Schutz im
+`evaluate_js`-Kanal). Das Clipboard-Thema ist seit dem Nachtrag ein Gate (G23).

@@ -8,23 +8,29 @@ The user does not like dashes (Gedankenstriche). Do NOT use the em-dash (Unicode
 
 ## Project status
 
-Locally-usable milestone reached (Phases 1-7 of the Bauplan). Implemented: `db.py`, `api.py`, `main.py`, `frontend/index.html`, `frontend/style.css`, `frontend/app.js`, export/copy. **Still empty 1-line stubs:** `backend/auth.py`, `backend/graph_sync.py`, `backend/notify.py`, `backend/security.py`, i.e. MSAL login, Graph sync, notifications, and the lock/panic + dual-layer-encryption work (Phases 8-11) are **not yet built**.
+Locally-usable milestone reached (Phases 1 to 6 of the Bauplan, plus the Phase 6.5 UX/security follow-ups: inline task edit via double-click, per-task delete button, click-to-select tasks, hardened single-task copy via `copy_task` (gate G23: backend-side Win32 clipboard, excluded from Win+V history and cloud clipboard, auto-clear after 60 s), Ctrl+C app shortcut removed entirely, contextual rail pencil (selected task: inline edit; otherwise: rename list), mini mode always-on-top, screenshot protection via `SetWindowDisplayAffinity`/`WDA_EXCLUDEFROMCAPTURE` (gate G26, window appears black in screenshots and screen sharing)). Implemented: `db.py`, `api.py`, `main.py`, `frontend/index.html`, `frontend/style.css`, `frontend/app.js`.
 
-Consequently the running app today is single-layer only: `db.connect()` opens SQLCipher with a fixed `DEV_AES_KEY` (`db.py`). The ChaCha20 outer wrapper, Argon2id key derivation, passphrase unlock, and lock triggers described under "Critical constraints" / "Lock policy" are the **target design**, not the current behavior. `api.lock/unlock/panic/sign_in/sign_out/sync_now` are placeholders. Treat those sections as the spec to build toward.
+**Phase 7 is OPEN:** `export_list` generates content, but no file is ever written (no save dialog); see gates G20-G22 in the Bauplan. There is intentionally no whole-list copy anymore (`copy_list` was removed; export covers that). **Still empty 1-line stubs:** `backend/auth.py`, `backend/graph_sync.py`, `backend/notify.py`, `backend/security.py`, i.e. MSAL login, Graph sync, notifications, and the lock/panic + dual-layer-encryption work (Phases 8-11) are **not yet built**.
+
+Consequently the running app today is single-layer only: `db.connect()` opens SQLCipher with a fixed `DEV_AES_KEY` (`db.py`). The working DB file on disk is `data/tasks.db` (plain SQLCipher, no ChaCha20 wrapper yet). The ChaCha20 outer wrapper, Argon2id key derivation, passphrase unlock, and lock triggers described under "Critical constraints" / "Lock policy" are the **target design**, not the current behavior. `api.lock/unlock/panic/sign_in/sign_out/sync_now` are placeholders; the lock is currently frontend-only and NOT enforced by the backend (gate G13). Treat those sections as the spec to build toward.
+
+**Security gates:** the Bauplan defines mandatory gates G1-G12 plus the 2026-06-10 audit addendum G13-G25 (section "NACHTRAG: Gates G13 bis G25" in B.9). None of them are optional. When implementing any phase, read its gate list in the Bauplan first; the quick overview table is at the end of the Bauplan.
 
 ## Running the app
 
 ```powershell
-# From Code/ directory, after setting up a venv and installing requirements:
-python main.py
+# From Code/ directory (venv must be active or use the venv python directly):
+.\venv\Scripts\python.exe main.py
 
 # Enable WebView2 DevTools (main.py reads this env var):
-$env:NOATODO_DEBUG = "1"; python main.py
+$env:NOATODO_DEBUG = "1"; .\venv\Scripts\python.exe main.py
 ```
 
 No build step, the frontend is vanilla HTML/CSS/JS loaded directly by PyWebView.
 
 **No test suite exists yet**, there is no `tests/` dir and pytest is not a dependency. There is currently no lint/typecheck config. Verify changes by running the app.
+
+**First run:** if `data/tasks.db` does not exist, `db.seed_if_empty()` inserts demo lists and tasks (Reading List, Ideas, Homework, Programming, Travel, Life Goals) plus default settings. Delete `data/tasks.db` to reset to demo state.
 
 ## Architecture
 
@@ -40,27 +46,40 @@ PyWebView window
 └── backend/
     ├── api.py         # js_api class, the bridge (see Bridge API below)
     ├── db.py          # SQLCipher CRUD
-    ├── graph_sync.py  # one-way MS Graph → SQLite sync
-    ├── auth.py        # MSAL PKCE login, tokens via keyring
-    ├── notify.py      # winotify Windows toasts
-    └── security.py    # lock/unlock/panic, key derivation
-data/tasks.db.enc      # ChaCha20-Poly1305(SQLCipher-AES-256 blob), permanent on-disk artifact
+    ├── graph_sync.py  # one-way MS Graph -> SQLite sync (stub)
+    ├── auth.py        # MSAL PKCE login, tokens via keyring (stub)
+    ├── notify.py      # winotify Windows toasts (stub)
+    └── security.py    # lock/unlock/panic, key derivation (stub)
+data/tasks.db          # current working DB (SQLCipher-AES-256, no outer wrapper yet)
+data/tasks.db.enc      # Phase 11 target: ChaCha20-Poly1305(SQLCipher blob)
 main.py                # entry point
 requirements.txt
+tools/
+    make_icon.py       # one-off build tool: generates frontend/icon.ico from logo
 ```
+
+## Implementation details
+
+**`@bridge` decorator (`api.py`):** wraps every public `Api` method. Catches `KeyError` as `"not_found"` and any other exception as `"internal"`. All bridge methods return a JSON-serializable dict or `{"error": code, "message": ...}` on failure.
+
+**PyWebView introspection rule:** PyWebView recursively scans all public attributes of the `js_api` object to build the JS bridge. Any attribute that is not a plain method (e.g. the `Window` object stored in `api._window`) must have a `_` prefix; otherwise PyWebView descends into it and may call `evaluate_js` before the window is ready, causing "Main window failed to start". All private state in `Api` uses `_` prefix for this reason.
+
+**WinForms thread safety:** `set_mini` runs in PyWebView's API worker thread. All native window mutations (size, position, `TopMost`, `FormBorderStyle`) must be dispatched to the WinForms UI thread via `form.Invoke(Action(work))`. Direct calls from the worker thread cause the message loop to deadlock.
+
+**`db.edit_task` SQL:** builds a dynamic SET clause from a whitelisted `allowed` set (`{"text", "meta", "due_at", "done"}`). The f-string in the query is safe because only those four column names can appear. This is an intentional tradeoff and not a SQL injection risk.
 
 ## Critical constraints
 
-**Dual-layer encryption (mandatory, both layers always present):**
+**Dual-layer encryption (mandatory, both layers always present in Phase 11+):**
 - Layer 1, SQLCipher (AES-256): the package is **`sqlcipher3-wheels`** (imported as `import sqlcipher3`), not `sqlite3`, `sqlcipher3-binary` has no Windows wheels, `sqlcipher3-wheels` provides them with an identical API. Immediately after `connect()`, set `PRAGMA key = ?` with the derived `aes_key`, then `PRAGMA foreign_keys = ON`.
-- Layer 2, ChaCha20-Poly1305 (outer wrapper, `cryptography` package): the permanent file on disk is `data/tasks.db.enc` = ChaCha20-Poly1305(SQLCipher blob). On unlock: unwrap → write SQLCipher working copy to `%TEMP%` (restricted permissions) → open with `aes_key`. On lock/quit/panic: re-wrap to `tasks.db.enc` → securely delete the working copy → discard keys from RAM.
+- Layer 2, ChaCha20-Poly1305 (outer wrapper, `cryptography` package): the permanent file on disk is `data/tasks.db.enc` = ChaCha20-Poly1305(SQLCipher blob). On unlock: unwrap -> write SQLCipher working copy to `%TEMP%` (restricted permissions) -> open with `aes_key`. On lock/quit/panic: re-wrap to `tasks.db.enc` -> securely delete the working copy -> discard keys from RAM.
 - Both keys (`aes_key`, `chacha_key`) live only in RAM while unlocked; never written to disk.
 
-**Passphrase / key derivation:** User passphrase → Argon2id KDF with stored random salt → derive both `aes_key` and `chacha_key` as separate slices of KDF output. Store only the Argon2 hash (for unlock verification) and the salt. Never store the passphrase or derived keys.
+**Passphrase / key derivation:** User passphrase -> Argon2id KDF with stored random salt -> derive both `aes_key` and `chacha_key` as separate slices of KDF output. Store only the Argon2 hash (for unlock verification) and the salt. Never store the passphrase or derived keys.
 
 **Microsoft tokens:** Stored in Windows Credential Manager via `keyring`, never in the DB.
 
-**Sync direction:** Strictly one-way, MS Graph → SQLite. Local tasks (`source='local'`) are never touched by sync and never uploaded. Scope is `Tasks.Read` only. Conflict default: cloud overwrites local changes to imported tasks (see `Bauplan - NoaToDo.md` §D.1).
+**Sync direction:** Strictly one-way, MS Graph -> SQLite. Local tasks (`source='local'`) are never touched by sync and never uploaded. Scope is `Tasks.Read` only. Conflict default: cloud overwrites local changes to imported tasks (see `Bauplan - NoaToDo.md` §D.1).
 
 **Frontend fonts:** JetBrains Mono and Space Grotesk must be local `.woff2` files. No external font CDN, this is a local-first app.
 
@@ -83,7 +102,7 @@ element.innerHTML = task.text;             // FORBIDDEN
       content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:;">
 ```
 
-**Parameterized SQL only:** All queries in `db.py` and `graph_sync.py` use `?` placeholders, no f-strings, no `.format()`, no string concatenation for values.
+**Parameterized SQL only:** All queries in `db.py` and `graph_sync.py` use `?` placeholders, no f-strings, no `.format()`, no string concatenation for values. (Exception: the whitelisted column name list in `edit_task`; see "Implementation details" above.)
 
 **Input validation in `graph_sync.py`:** Truncate task text > 4096 chars, list names > 256 chars; strip control characters U+0000-U+001F (except newline/tab) from all imported strings.
 
@@ -100,41 +119,41 @@ The app is always fully locked or fully unlocked. Lock triggers (passphrase requ
 
 ## Bridge API (`pywebview.api.*`)
 
-All frontend↔backend communication goes through these methods on the `Api` class in `backend/api.py`. Each returns a JSON-serializable value (or `{ "error": "code", "message": "…" }` on failure).
+All frontend<->backend communication goes through these methods on the `Api` class in `backend/api.py`. Each returns a JSON-serializable value (or `{ "error": "code", "message": "..." }` on failure). Methods marked (stub) return placeholder values and will be replaced in later phases.
 
 | Method | Args | Returns |
 |---|---|---|
 | `get_state()` | (keine) | `{ lists, settings, online, locked }` |
 | `get_lists()` | (keine) | `[{ id, name, synced, open:[task], done:[task] }]` |
-| `add_list(name)` | str | `{ id, name, … }` |
+| `add_list(name)` | str | `{ id, name, ... }` |
 | `rename_list(id, name)` | str, str | `{ ok }` |
 | `delete_list(id)` | str | `{ ok }` |
-| `add_task(list_id, text, meta?)` | str, str, str? | `{ …task }` |
+| `add_task(list_id, text, meta?)` | str, str, str? | `{ ...task }` |
 | `toggle_task(id)` | str | `{ id, done }` |
-| `edit_task(id, fields)` | str, obj | `{ …task }` |
+| `edit_task(id, fields)` | str, obj | `{ ...task }` |
 | `delete_task(id)` | str | `{ ok }` |
 | `reorder(list_id, ordered_ids)` | str, [str] | `{ ok }` |
 | `export_list(id, format)` | str, `'md'`\|`'txt'`\|`'json'` | `{ filename, content }` |
-| `copy_list(id)` | str | `{ text }` |
+| `copy_task(id)` | str | `{ ok, clears_in }` (hardened backend clipboard copy of ONE task) |
 | `set_setting(key, value)` | str, * | `{ ok }` |
 | `set_mini(flag)` | bool | `{ mini }` |
 | `get_status()` | (keine) | `{ db, encryption, graph, last_sync, runtime }` |
-| `sign_in()` | (keine) | `{ ok, account }` |
+| `sign_in()` | (keine) | (stub, Phase 8) |
 | `sign_out()` | (keine) | `{ ok }` |
-| `sync_now()` | (keine) | `{ changed, lists }` |
+| `sync_now()` | (keine) | (stub, Phase 9) |
 | `set_online(flag)` | bool | `{ online }` |
-| `lock()` | (keine) | `{ locked: true }` |
-| `unlock(passphrase)` | str | `{ ok }` |
-| `panic()` | (keine) | `{ locked: true }` |
+| `lock()` | (keine) | `{ locked: true }` (frontend-only, gate G13 not enforced) |
+| `unlock(passphrase)` | str | `{ ok }` (always succeeds, Phase 11) |
+| `panic()` | (keine) | `{ locked: true }` (frontend-only) |
 
-Backend → frontend events (via `window.evaluate_js`): `window.noa.onSyncDone(summary)`, `window.noa.onNotification(payload)`, `window.noa.onLocked()`.
+Backend -> frontend events (via `window.evaluate_js`): `window.noa.onSyncDone(summary)`, `window.noa.onNotification(payload)`, `window.noa.onLocked()`.
 
 ## SQLite schema (3 main tables + settings)
 
 `lists(id, name, synced, position, created_at, updated_at)`, `synced=1` means imported from MS To Do.  
 `tasks(id, list_id, text, meta, done, position, source, graph_etag, due_at, created_at, updated_at)`, `source` is `'local'` or `'graph'`.  
 `sync_state(list_id, delta_link, last_sync)`, one row per list, holds the Graph delta link.  
-`settings(key, value)`, key/value pairs: `accent`, `dark`, `toolbar`, `density`, `sidebar`.
+`settings(key, value)`, key/value pairs: `accent`, `dark`, `toolbar`, `density`, `sidebar`, `railPinned`, `sidebarWidth`. All values stored as strings; `dark` is cast to bool on read, `railPinned` is compared to the string `'true'`, `sidebarWidth` is parsed as int (valid range 180-520).
 
 IDs: local items use `'l'+uuid` (lists) or `'t'+uuid` (tasks); imported items use their stable Graph ID.
 
@@ -142,17 +161,29 @@ IDs: local items use `'l'+uuid` (lists) or `'t'+uuid` (tasks); imported items us
 
 `app.js` holds a single in-memory cache object:
 ```js
-state = { lists, activeId, settings, online, locked, menu, modal, focus, colorOpen, toasts }
+state = {
+  lists, activeId, settings, online, locked,
+  menu,          // 'notif' | 'profile' | null
+  modal,         // 'emergency' | 'status' | 'rename' | 'delete' | 'shortcuts' | 'settings' | null
+  focus,         // focus mode (hides sidebar + toolbar)
+  mini,          // compact mini-window mode
+  railPinned,    // right toolbar rail pinned (persisted as setting)
+  sidebarWidth,  // sidebar width in px, default 256 (persisted as setting)
+  colorOpen,     // accent color picker visible
+  adding,        // new-list inline input visible
+  addingTask,    // new-task inline input visible
+  doneOpen,      // completed section expanded
+}
 ```
-The backend is the source of truth. After each mutating action: apply the backend response to state, then re-render the affected part.
+The backend is the source of truth. After each mutating action: apply the backend response to state, then re-render the affected part. `railPinned` and `sidebarWidth` are not returned by `get_state()` directly; they are read back from `state.settings` during boot and written to settings via `set_setting()`.
 
 ## UI layout
 
-CSS Grid: `Header` (full width, 56px) over three columns: `Sidebar` (256px) | `Main` (max 720px, centered) | `Toolbar` (right rail). Controlled by `data-theme`, `data-density`, `data-toolbar`, `data-sidebar` attributes on `.app`, plus `--accent` CSS variable.
+CSS Grid: `Header` (full width, 56px) over three columns: `Sidebar` (width via `--sidebar-width`, default 256px, user-resizable by dragging the right edge) | `Main` (max 720px, centered) | `Toolbar` (right rail). Controlled by `data-theme`, `data-density`, `data-toolbar`, `data-sidebar`, `data-resizing` attributes on `.app`, plus `--accent` and `--sidebar-width` CSS variables. During sidebar resize, `data-resizing` is set on `.app` to suppress the width transition.
 
 ## Build phases (from `Planung/Bauplan - NoaToDo.md`)
 
-Phase 0 (scaffold) → Phase 1 (db.py) → Phase 2 (api.py) → Phase 3 (main.py wiring) → Phase 4 (index.html skeleton) → Phase 5 (style.css + fonts) → Phase 6 (app.js full UI) ← *locally usable milestone* → Phase 7 (export/copy) → Phase 8 (MSAL login) → Phase 9 (Graph sync) → Phase 10 (notifications) → Phase 11 (lock/panic/encryption).
+Phase 0 (scaffold) -> Phase 1 (db.py) -> Phase 2 (api.py) -> Phase 3 (main.py wiring) -> Phase 4 (index.html skeleton) -> Phase 5 (style.css + fonts) -> Phase 6 (app.js full UI) <- *locally usable milestone* -> Phase 7 (export/copy) -> Phase 8 (MSAL login) -> Phase 9 (Graph sync) -> Phase 10 (notifications) -> Phase 11 (lock/panic/encryption).
 
 Complete acceptance criteria for each phase are in `Planung/Bauplan - NoaToDo.md`.
 
@@ -167,7 +198,6 @@ Complete acceptance criteria for each phase are in `Planung/Bauplan - NoaToDo.md
 | Lock app | `Ctrl+L` |
 | Panic lock | `Ctrl+Shift+!` |
 | Export list | `Ctrl+E` |
-| Copy list | `Ctrl+C` |
 | Toggle theme | `Ctrl+J` |
 | Online/offline | `G` |
 | Shortcut help | `?` |
