@@ -66,6 +66,9 @@ let state = {
   lists: [], activeId: null, settings: {}, online: true, locked: false,
   menu: null,        // 'notif' | 'profile'
   modal: null,       // 'emergency' | 'status' | 'rename' | 'delete' | 'shortcuts' | 'settings'
+  ctxList: null,     // Rechtsklick-Kontextmenue einer Liste: { id, x, y } | null
+  renamingId: null,  // Liste, die gerade inline (Pille in der Sidebar) umbenannt wird
+  confirmDeleteId: null, // Liste, fuer die die Inline-Loeschbestaetigung in der Sidebar offen ist
   focus: false,
   mini: false,       // kompakter Mini-Fenster-Modus (oben rechts angeheftet)
   railPinned: false, // Tool-Rail fixiert (per Chevron-Griff), bleibt sichtbar
@@ -95,16 +98,49 @@ const activeList = () => state.lists.find((l) => l.id === state.activeId) || sta
 // Render-Funktionen (1:1 zu den Konzept-Komponenten)
 // ===========================================================================
 function renderHeader() {
-  return `<button class="sidebar-toggle" data-act="toggle-sidebar" title="Listen ein-/ausblenden">${Icons.Plus}</button>`;
+  return `<button class="sidebar-toggle" data-act="toggle-sidebar" title="Toggle sidebar">${Icons.Plus}</button>`;
 }
 
 function sidebarVisible() {
   return (state.settings.sidebar !== 'closed') && !state.focus;
 }
 
+// Inline-Pille zum Umbenennen einer Liste (statt grossem Modal). Erscheint an
+// der Stelle des Listeneintrags, gleiche Optik wie die "New task"-Pille: kleines
+// Label oben, Eingabefeld, X zum Abbrechen. Enter speichert, Esc/X bricht ab.
+function renderRenamePill(l) {
+  const I = Icons;
+  return `
+    <div class="list-inline" data-keep data-id="${esc(l.id)}">
+      <span class="list-inline-label tag">New name</span>
+      <div class="list-pill">
+        <input id="rename-list-input" value="${esc(l.name)}" placeholder="List name…" />
+        <button class="pill-x" data-act="cancel-rename-list" title="Cancel">${I.Close}</button>
+      </div>
+    </div>`;
+}
+
+// Inline-Bestaetigung zum Loeschen (lokal, kein grosses Fenster). Zeigt den
+// Namen, einen roten Lösch-Knopf und ein X zum Abbrechen.
+function renderDeletePill(l) {
+  const I = Icons;
+  const n = l.open.length + l.done.length;
+  return `
+    <div class="list-inline" data-keep data-id="${esc(l.id)}">
+      <span class="list-inline-label tag danger-tag">Delete${n ? ' · ' + n : ''}?</span>
+      <div class="list-pill confirm">
+        <span class="confirm-name" title="${esc(l.name)}">${esc(l.name)}</span>
+        <button class="confirm-del" data-act="do-delete-list" title="Delete list">${I.Trash}</button>
+        <button class="pill-x" data-act="cancel-delete-list" title="Cancel">${I.Close}</button>
+      </div>
+    </div>`;
+}
+
 function renderSidebar() {
   const I = Icons;
   const items = state.lists.map((l) => {
+    if (state.renamingId === l.id) return renderRenamePill(l);
+    if (state.confirmDeleteId === l.id) return renderDeletePill(l);
     const count = l.open.length;
     const cls = 'list-item' + (l.id === state.activeId ? ' active' : '') + (count === 0 ? ' zero' : '');
     return `
@@ -215,22 +251,19 @@ function renderMain() {
 function renderListDock(list) {
   const I = Icons;
   const adding = state.addingTask;
-  const dotStyle = list.synced ? 'background:var(--secure)' : 'background:var(--accent)';
   const inputPill = adding ? `
         <div class="dock-input" data-keep>
           <input id="new-task-input" placeholder="New task…" />
-          <button class="dock-close" data-act="dock-toggle" title="Schließen">${I.Close}</button>
+          <button class="dock-close" data-act="dock-toggle" title="Close">${I.Close}</button>
         </div>` : '';
   return `
     <div class="list-dock">
       <div class="dock-pill" title="${esc(list.name)}">
-        <span class="dock-dot" style="${dotStyle}"></span>
         <span class="dock-name">${esc(list.name)}</span>
-        <span class="dock-count">${list.open.length}</span>
       </div>
       <div class="dock-add-wrap">
         <button class="dock-add${adding ? ' active' : ''}" data-act="dock-toggle"
-          title="${adding ? 'Abbrechen' : 'Neues To-Do hinzufügen'}">${I.Plus}</button>
+          title="${adding ? 'Cancel' : 'Add task'}">${I.Plus}</button>
         ${inputPill}
       </div>
     </div>`;
@@ -269,7 +302,7 @@ function renderMini() {
 function renderFocus() {
   const I = Icons;
   const list = activeList();
-  const exit = `<button class="focus-exit" data-act="exit-focus" title="Fokus verlassen (Esc)">${I.Close}</button>`;
+  const exit = `<button class="focus-exit" data-act="exit-focus" title="Exit focus (Esc)">${I.Close}</button>`;
   if (!list) {
     return `<div class="focus-view"><div class="focus-inner">
       <div class="empty-note">// no lists yet</div>
@@ -300,7 +333,7 @@ function renderFocus() {
 function renderRailPin() {
   const I = Icons;
   const glyph = state.railPinned ? I.ChevLeft : I.ChevRight;
-  const title = state.railPinned ? 'Werkzeugleiste lösen' : 'Werkzeugleiste anheften';
+  const title = state.railPinned ? 'Unpin toolbar' : 'Pin toolbar';
   return `<button class="rail-pin${state.railPinned ? ' pinned' : ''}" data-act="rail-pin" title="${title}">${glyph}</button>`;
 }
 
@@ -318,11 +351,11 @@ function renderToolbar() {
         ${btn(I.Mini, 'Mini window', '', 'tb-mini')}
         ${btn(I.Expand, 'Focus mode', 'F', 'tb-focus')}
         ${btn(I.Palette, 'Accent color', '', 'tb-color', { active: state.colorOpen })}
-        ${btn(I.Share, 'Export', '⌘E', 'tb-export')}
+        ${btn(I.Share, 'Export', 'Ctrl+E', 'tb-export')}
         ${btn(I.Help, 'Shortcuts', '?', 'tb-help')}
         <div class="tool-sep"></div>
-        ${btn(state.locked ? I.Lock : I.Unlock, 'Lock app', '⌘L', 'tb-lock')}
-        ${btn(I.Alert, 'Emergency', '⌘⇧!', 'tb-emergency', { danger: true })}
+        ${btn(state.locked ? I.Lock : I.Unlock, 'Lock app', 'Ctrl+L', 'tb-lock')}
+        ${btn(I.Alert, 'Emergency', 'Ctrl+Shift+!', 'tb-emergency', { danger: true })}
         <div class="tool-sep"></div>
         ${btn(I.Copy, 'Copy task', '', 'tb-copy')}
         ${btn(I.Pencil, state.selectedId ? 'Edit task' : 'Rename list', '', 'tb-rename')}
@@ -381,6 +414,20 @@ function renderProfileMenu() {
       <button class="menu-item">${I.Shield} Privacy &amp; data</button>
       <button class="menu-item">${I.Download} Export database</button>
       <button class="menu-item" data-act="sign-out">${I.Logout} Sign out</button>
+    </div>`;
+}
+
+// Kontextmenue einer Liste (Rechtsklick in der Sidebar). Frei positioniert am
+// Cursor (position:fixed), data-keep schuetzt es vor dem Auto-Schliessen.
+function renderListCtx() {
+  if (!state.ctxList) return '';
+  const I = Icons;
+  const { x, y } = state.ctxList;
+  return `
+    <div class="menu list-ctx" data-keep
+         style="position:fixed;left:${x}px;top:${y}px;min-width:180px">
+      <button class="menu-item" data-act="ctx-rename-list">${I.Pencil} Rename list</button>
+      <button class="menu-item ctx-danger" data-act="ctx-delete-list">${I.Trash} Delete list</button>
     </div>`;
 }
 
@@ -466,10 +513,10 @@ function renderModal() {
     case 'shortcuts': {
       const sc = [
         ['New task', ['↵']], ['New list', ['N']],
-        ['Toggle sidebar', ['⌘', 'B']], ['Focus mode', ['F']],
-        ['Lock app', ['⌘', 'L']], ['Emergency lock', ['⌘', '⇧', '!']],
-        ['Export list', ['⌘', 'E']],
-        ['Toggle theme', ['⌘', 'J']], ['Online / offline', ['G']],
+        ['Toggle sidebar', ['Ctrl', 'B']], ['Focus mode', ['F']],
+        ['Lock app', ['Ctrl', 'L']], ['Emergency lock', ['Ctrl', 'Shift', '!']],
+        ['Export list', ['Ctrl', 'E']],
+        ['Toggle theme', ['Ctrl', 'J']], ['Online / offline', ['G']],
       ];
       const grid = sc.map((s) => `
         <div class="sc-row"><span>${s[0]}</span>
@@ -586,6 +633,7 @@ function render() {
     renderToolbar() +
     renderRailPin() +
     renderAccentPop() +
+    renderListCtx() +
     renderModal() +
     renderLock();
   wireInputs();
@@ -614,6 +662,15 @@ function wireInputs() {
     rn.focus(); rn.select();
     rn.addEventListener('keydown', (e) => {
       if (e.key === 'Enter' && rn.value.trim()) { e.preventDefault(); doRename(rn.value.trim()); }
+    });
+  }
+  // Inline-Umbenennen-Pille in der Sidebar: Enter speichert, Esc bricht ab.
+  const rl = document.getElementById('rename-list-input');
+  if (rl && state.renamingId) {
+    rl.focus(); rl.select();
+    rl.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') { e.preventDefault(); doRenameList(state.renamingId, rl.value); }
+      else if (e.key === 'Escape') { e.preventDefault(); state.renamingId = null; render(); }
     });
   }
   const rh = document.getElementById('sidebar-resize-handle');
@@ -718,6 +775,38 @@ async function doDelete() {
   if (!state.selectedId) return;
   state.modal = null;
   await deleteTask(state.selectedId);
+}
+
+// Inline-Umbenennen committen (Pille in der Sidebar, Enter oder gueltige Eingabe).
+async function doRenameList(id, name) {
+  const list = state.lists.find((l) => l.id === id);
+  if (!list) { state.renamingId = null; render(); return; }
+  const trimmed = name.trim();
+  // Leer oder unveraendert: stillschweigend abbrechen.
+  if (!trimmed || trimmed === list.name) { state.renamingId = null; render(); return; }
+  const res = await api().rename_list(id, trimmed);
+  if (res && res.error) return pushToast(res.message || 'Error');
+  list.name = trimmed;
+  state.renamingId = null;
+  render();
+  pushToast('List renamed', trimmed);
+}
+
+async function doDeleteList() {
+  const id = state.confirmDeleteId;
+  if (!id) return;
+  const res = await api().delete_list(id);
+  if (res && res.error) return pushToast(res.message || 'Error');
+  const removed = state.lists.find((l) => l.id === id);
+  state.lists = state.lists.filter((l) => l.id !== id);
+  // Aktive Liste neu setzen, falls die geloeschte ausgewaehlt war.
+  if (state.activeId === id) {
+    state.activeId = state.lists.length ? state.lists[0].id : null;
+    state.doneOpen = false; state.editingId = null; state.selectedId = null;
+  }
+  state.confirmDeleteId = null;
+  render();
+  pushToast('List deleted', removed ? removed.name : '');
 }
 
 async function setOnline(flag) {
@@ -898,6 +987,16 @@ function closeMenusIfOutside(e, a) {
   if (state.colorOpen && !e.target.closest('.accent-pop') && act !== 'tb-color') {
     state.colorOpen = false; changed = true;
   }
+  if (state.ctxList && !e.target.closest('.list-ctx')) {
+    state.ctxList = null; changed = true;
+  }
+  // Klick ausserhalb der Inline-Pillen verwirft Umbenennen / Loeschbestaetigung.
+  if (state.renamingId && !e.target.closest('.list-inline')) {
+    state.renamingId = null; changed = true;
+  }
+  if (state.confirmDeleteId && !e.target.closest('.list-inline')) {
+    state.confirmDeleteId = null; changed = true;
+  }
   return changed;
 }
 
@@ -943,10 +1042,46 @@ async function onClick(e) {
     case 'del-task': await deleteTask(id); break;
     case 'toggle-done': state.doneOpen = !state.doneOpen; render(); break;
     case 'focus-newtask': { const i = document.getElementById('new-task-input'); if (i) i.focus(); break; }
-    case 'dock-toggle':
+    case 'dock-toggle': {
       state.addingTask = !state.addingTask;
-      if (state.addingTask) refocusNewTask = true;
-      render(); break;
+      // Nur Klasse + Eingabefeld in-place umschalten, NICHT neu rendern: so
+      // bleibt der "+"-Knopf (svg) im DOM erhalten und die "+"-zu-"x"-Drehung
+      // laeuft als CSS-Transition mit Ueberschwung in BEIDE Richtungen, genau
+      // wie der Sidebar-Schalter oben links. Ein Re-Render wuerde den Knopf neu
+      // erzeugen und damit die Animation verschlucken.
+      const addBtn = document.querySelector('.dock-add');
+      const wrap = document.querySelector('.dock-add-wrap');
+      if (!addBtn || !wrap) { if (state.addingTask) refocusNewTask = true; render(); break; }
+      addBtn.classList.toggle('active', state.addingTask);
+      addBtn.title = state.addingTask ? 'Cancel' : 'Add task';
+      const existing = document.querySelector('.dock-input');
+      if (state.addingTask) {
+        if (!existing) {
+          const pill = document.createElement('div');
+          pill.className = 'dock-input';
+          pill.setAttribute('data-keep', '');
+          const input = document.createElement('input');
+          input.id = 'new-task-input';
+          input.placeholder = 'New task…';
+          input.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') { e.preventDefault(); submitNewTask(input.value); }
+          });
+          const close = document.createElement('button');
+          close.className = 'dock-close';
+          close.setAttribute('data-act', 'dock-toggle');
+          close.title = 'Close';
+          close.innerHTML = Icons.Close;
+          pill.appendChild(input);
+          pill.appendChild(close);
+          wrap.appendChild(pill);
+        }
+        const i = document.getElementById('new-task-input');
+        if (i) i.focus();
+      } else if (existing) {
+        existing.remove();
+      }
+      break;
+    }
     case 'net': await setOnline(!state.online); break;
     case 'tb-mini': await doMini(!state.mini); break;
     case 'tb-focus': state.focus = !state.focus; state.menu = null; render(); break;
@@ -971,10 +1106,48 @@ async function onClick(e) {
     case 'modal-close': state.modal = null; render(); break;
     case 'do-rename': { const i = document.getElementById('rename-input'); if (i && i.value.trim()) await doRename(i.value.trim()); break; }
     case 'do-delete': await doDelete(); break;
+    case 'ctx-rename-list': {
+      // Inline-Pille an der Listenposition oeffnen (statt Modal).
+      const cid = state.ctxList && state.ctxList.id;
+      state.ctxList = null; state.confirmDeleteId = null;
+      state.renamingId = cid;
+      render(); break;
+    }
+    case 'ctx-delete-list': {
+      // Inline-Loeschbestaetigung an der Listenposition oeffnen.
+      const cid = state.ctxList && state.ctxList.id;
+      state.ctxList = null; state.renamingId = null;
+      state.confirmDeleteId = cid;
+      render(); break;
+    }
+    case 'cancel-rename-list': state.renamingId = null; render(); break;
+    case 'cancel-delete-list': state.confirmDeleteId = null; render(); break;
+    case 'do-delete-list': await doDeleteList(); break;
     case 'do-panic': await doPanic(); break;
     case 'lock-tap': await lockTap(); break;
     default: if (needRender) render();
   }
+}
+
+// Rechtsklick auf eine Liste in der Sidebar oeffnet das Kontextmenue
+// (Umbenennen / Loeschen). Ueberall sonst wird das native Menue unterdrueckt
+// und ein offenes Kontextmenue geschlossen.
+function onContextMenu(e) {
+  if (state.locked || state.mini) return;
+  // In Eingabefeldern das native Menue (Kopieren/Einfuegen) erhalten.
+  if (/^(INPUT|TEXTAREA)$/.test(e.target.tagName)) return;
+  const item = e.target.closest('.list-item[data-id]');
+  if (item) {
+    e.preventDefault();
+    const x = Math.min(e.clientX, window.innerWidth - 190);
+    const y = Math.min(e.clientY, window.innerHeight - 100);
+    state.ctxList = { id: item.dataset.id, x, y };
+    state.menu = null; state.colorOpen = false;
+    render();
+    return;
+  }
+  e.preventDefault();
+  if (state.ctxList) { state.ctxList = null; render(); }
 }
 
 // ===========================================================================
@@ -987,7 +1160,8 @@ function onKeyGlobal(e) {
     if (state.mini) { doMini(false); return; }
     state.menu = null; state.modal = null; state.colorOpen = false;
     state.focus = false; state.adding = false; state.addingTask = false;
-    state.editingId = null; state.selectedId = null; render(); return;
+    state.editingId = null; state.selectedId = null; state.ctxList = null;
+    state.renamingId = null; state.confirmDeleteId = null; render(); return;
   }
   if (typing) return;
   if (state.locked) return;
@@ -1093,6 +1267,7 @@ async function boot() {
     return;
   }
   document.addEventListener('click', onClick);
+  document.addEventListener('contextmenu', onContextMenu);
   document.addEventListener('dblclick', onDblClick);
   document.addEventListener('keydown', onKeyGlobal);
   document.addEventListener('mousemove', onMouseMove);

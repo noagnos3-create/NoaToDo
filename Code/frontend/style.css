@@ -557,6 +557,52 @@ input { font: inherit; }
   border: 1px solid var(--accent-line); outline: none;
 }
 
+/* Inline-Pillen in der Sidebar: Liste umbenennen / Loeschen bestaetigen.
+   Gleiche Pillen-Optik wie die "New task"-Eingabe (dock-input), aber im
+   Listenfluss statt absolut positioniert. */
+.list-inline {
+  display: flex; flex-direction: column; gap: 5px;
+  padding: 3px 0;
+  animation: rise .16s ease;
+}
+.list-inline-label {
+  padding-left: 4px; color: var(--text-faint);
+}
+.list-inline-label.danger-tag { color: var(--danger); }
+.list-pill {
+  display: flex; align-items: center; gap: 6px;
+  padding: 5px 6px 5px 12px; border-radius: 999px;
+  background: var(--surface);
+  border: 1px solid var(--accent-line); box-shadow: var(--shadow-lg);
+}
+.list-pill.confirm { border-color: color-mix(in oklab, var(--danger) 45%, var(--border)); }
+.list-pill input {
+  flex: 1; min-width: 0;
+  background: none; border: none; outline: none;
+  color: var(--text); font-size: 14px; font-weight: 500;
+}
+.list-pill input::placeholder { color: var(--text-faint); }
+.list-pill .confirm-name {
+  flex: 1; min-width: 0; font-size: 14px; font-weight: 500; color: var(--text);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.list-pill .pill-x {
+  flex: none; width: 26px; height: 26px; border-radius: 50%;
+  display: grid; place-items: center;
+  background: none; color: var(--text-faint);
+  transition: background .14s, color .14s;
+}
+.list-pill .pill-x svg { width: 15px; height: 15px; }
+.list-pill .pill-x:hover { background: var(--surface-3); color: var(--text); }
+.list-pill .confirm-del {
+  flex: none; width: 26px; height: 26px; border-radius: 50%;
+  display: grid; place-items: center;
+  background: var(--danger-wash); color: var(--danger);
+  transition: background .14s, color .14s;
+}
+.list-pill .confirm-del svg { width: 15px; height: 15px; }
+.list-pill .confirm-del:hover { background: var(--danger); color: #fff; }
+
 /* ===========================================================================
    MAIN
    =========================================================================== */
@@ -657,18 +703,21 @@ input { font: inherit; }
    =========================================================================== */
 /* Sticky statt fixed: bleibt unten am Bildschirm verankert (main fuellt die
    Fensterhoehe), wird dabei aber innerhalb der Inhaltsspalte zentriert, also
-   genau unter den Aufgaben, nicht ueber dem ganzen Viewport. So sind Name UND
-   "+" als Gruppe mittig, statt dass der breite Name allein zentriert wirkt.
-   margin-top:auto schiebt das Dock bei wenig Inhalt ganz nach unten. */
+   genau unter den Aufgaben, nicht ueber dem ganzen Viewport.
+   margin-top:auto schiebt das Dock bei wenig Inhalt ganz nach unten.
+   Grid 1fr auto 1fr: nur die Namens-Pille (mittlere auto-Spalte) sitzt echt
+   zentriert; der "+"-Knopf haengt in der rechten Spalte mit festem Abstand
+   daneben, ohne die Zentrierung der Pille zu verschieben. */
 .list-dock {
   position: sticky; bottom: 24px; z-index: 25;
-  align-self: center; margin-top: auto;
-  width: -moz-fit-content; width: fit-content; max-width: 100%;
-  display: flex; align-items: center; gap: 12px;
+  align-self: stretch; margin-top: auto;
+  display: grid; grid-template-columns: 1fr auto 1fr; align-items: center;
 }
 
-/* Eigenstaendige Namens-Pille (behaelt ihren Platz, egal ob man hinzufuegt). */
+/* Eigenstaendige Namens-Pille (behaelt ihren Platz, egal ob man hinzufuegt).
+   Mittlere Grid-Spalte, in sich zentriert. */
 .dock-pill {
+  grid-column: 2; justify-self: center;
   flex: none; display: flex; align-items: center; gap: 18px;
   padding: 22px 34px; border-radius: 999px;
   background: color-mix(in oklab, var(--surface) 84%, transparent);
@@ -676,21 +725,15 @@ input { font: inherit; }
   -webkit-backdrop-filter: blur(12px) saturate(1.25);
   backdrop-filter: blur(12px) saturate(1.25);
 }
-.dock-dot { width: 15px; height: 15px; border-radius: 5px; flex: none; }
 .dock-name {
   font-size: 31px; font-weight: 650; letter-spacing: -.01em; color: var(--text);
   max-width: 440px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
-.dock-count {
-  font-family: var(--font-mono); font-size: 16px; font-weight: 600;
-  min-width: 32px; height: 30px; padding: 0 10px; border-radius: 9px;
-  display: inline-grid; place-items: center;
-  background: var(--surface-3); color: var(--text-faint);
-}
 
 /* Der "+"-Knopf steht frei neben der Namens-Pille (eigener Kreis). Der Wrapper
-   ist nur Bezugspunkt fuer die absolut schwebende Eingabe-Pille. */
-.dock-add-wrap { position: relative; flex: none; }
+   ist nur Bezugspunkt fuer die absolut schwebende Eingabe-Pille. Er sitzt in der
+   rechten Grid-Spalte am linken Rand, mit festem Abstand zur Pille. */
+.dock-add-wrap { grid-column: 3; justify-self: start; margin-left: 12px; position: relative; flex: none; }
 .dock-add {
   width: 44px; height: 44px; border-radius: 50%;
   display: grid; place-items: center;
@@ -700,8 +743,11 @@ input { font: inherit; }
 }
 /* Hover/Klick: nur dezent heller, kein Versetzen oder Skalieren (kein Springen). */
 .dock-add:hover { box-shadow: 0 6px 16px color-mix(in oklab, var(--accent) 46%, transparent); }
-/* "+"-zu-"x"-Drehung: dreht mit leichtem Ueberschwung (federnd) zum "x". */
-.dock-add svg { width: 20px; height: 20px; transition: transform .42s cubic-bezier(.34, 1.56, .64, 1); }
+/* "+"-zu-"x"-Drehung: dreht federnd mit leichtem Ueberschwung und springt zurueck,
+   exakt wie der Sidebar-Schalter oben links (gleiche Dauer + Bezier). Der Knopf
+   wird beim Umschalten in-place behalten (siehe dock-toggle in app.js), damit die
+   Transition in beide Richtungen laeuft. */
+.dock-add svg { width: 20px; height: 20px; transition: transform .26s cubic-bezier(.34, 1.56, .64, 1); }
 .dock-add.active svg { transform: rotate(45deg); }
 
 /* Eingabe-Pille: schwebt losgeloest knapp oberhalb und leicht rechts vom "+". */
@@ -770,6 +816,7 @@ input { font: inherit; }
 .app[data-toolbar="flush"] .toolbar-rail {
   width: 66px; background: color-mix(in oklab, var(--surface) 60%, transparent);
   border-left: 1px solid var(--border);
+  justify-content: center;
 }
 .app[data-toolbar="floating"] .toolbar { align-items: center; padding-right: 14px; }
 .app[data-toolbar="floating"] .toolbar-rail {
@@ -902,6 +949,8 @@ input { font: inherit; }
 .menu-item:hover { background: var(--surface-3); color: var(--text); }
 .menu-item svg { width: 16px; height: 16px; flex-shrink: 0; }
 .menu-item .m-dot { width: 7px; height: 7px; border-radius: 50%; margin-left: auto; }
+.menu-item.ctx-danger { color: var(--danger); }
+.menu-item.ctx-danger:hover { background: var(--danger-wash); color: var(--danger); }
 .notif-item { align-items: flex-start; }
 .notif-item .n-body { display: flex; flex-direction: column; gap: 2px; }
 .notif-item .n-body small { font-family: var(--font-mono); font-size: 10.5px; color: var(--text-faint); }

@@ -64,7 +64,9 @@ class Api:
         self._window = None  # von main.py gesetzt, für Backend->Frontend-Events
         self._mini = False        # kompakter Mini-Fenster-Modus aktiv?
         self._on_setting_change = None  # optionaler Callback(key, value) für main.py
-        self._on_frame_restored = None  # Callback() nach Rückkehr aus dem Mini-Modus
+        self._on_frame_changed = None  # Callback(mini) nach jedem Mini-Modus-Wechsel
+                                       # (Handle wird neu erzeugt: Screenshot-Schutz +
+                                       # Titelleisten-Theme muessen neu gesetzt werden)
         self._clip_timer = None   # Timer für das Auto-Leeren der Zwischenablage
 
     # =====================================================================
@@ -240,11 +242,13 @@ class Api:
         if not self._apply_mini_window(win, flag):
             return {"error": "window", "message": "Fensterumschaltung fehlgeschlagen."}
         self._mini = flag
-        # Beim Verlassen den nativen Rahmen wieder an das Theme anpassen
-        # (Titelleisten-Farbe), falls main.py einen Callback gesetzt hat.
-        if not flag and self._on_frame_restored:
+        # Der FormBorderStyle-Wechsel hat das Fensterhandle neu erzeugt; dabei
+        # geht die Display-Affinity (Screenshot-Schutz, Gate G26) verloren. main.py
+        # setzt sie ueber diesen Callback bei JEDEM Wechsel neu (rein wie raus) und
+        # passt beim Verlassen zusaetzlich die Titelleisten-Farbe ans Theme an.
+        if self._on_frame_changed:
             try:
-                self._on_frame_restored()
+                self._on_frame_changed(flag)
             except Exception:
                 pass
         return {"mini": self._mini}

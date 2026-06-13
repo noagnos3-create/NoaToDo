@@ -10,6 +10,7 @@ from __future__ import annotations
 import ctypes
 import json
 import os
+import time
 
 import webview
 
@@ -26,21 +27,40 @@ _TB_TEXT_LIGHT = "#1f1b14"  # dunkler Titeltext auf heller Leiste
 _DWMWA_USE_IMMERSIVE_DARK_MODE = 20  # Windows 10 1903+
 _DWMWA_CAPTION_COLOR           = 35  # Windows 11 22000+
 _DWMWA_TEXT_COLOR              = 36  # Windows 11 22000+
+# SetWindowPos-Flags fuer Frame-Neuberechnung nach DWM-Aenderungen
+_SWP_NOSIZE        = 0x0001
+_SWP_NOMOVE        = 0x0002
+_SWP_NOZORDER      = 0x0004
+_SWP_NOOWNERZORDER = 0x0200
+_SWP_FRAMECHANGED  = 0x0020
 
-def _get_hwnd(window) -> int:
+def _get_hwnd(window, wait: bool = False) -> int:
     """HWND des PyWebView-Fensters: direkt via window.native (WinForms-Form-Handle).
 
-    PyWebView setzt window.native = BrowserForm-Instanz in BrowserForm.__init__,
-    bevor on_start aufgerufen wird. Der native Handle ist deshalb immer verfuegbar
-    und zuverlässiger als eine Fenstersuche per Titel oder PID.
+    WICHTIG (Race, Gate G26): Der an ``webview.start`` uebergebene on_start-
+    Callback laeuft in einem eigenen Thread und feuert nachweislich, BEVOR
+    PyWebView ``window.native`` (die BrowserForm) gesetzt hat. In diesem Fenster
+    ist ``window.native`` noch ``None`` und der Handle damit 0. Frueher lief der
+    Screenshot-Schutz dann lautlos ins Leere (``_apply_screenshot_protection(0)``
+    kehrt sofort zurueck), weshalb Screenshots weiterhin moeglich waren. Mit
+    ``wait=True`` wird deshalb kurz (bis ~5 s) auf den Handle gepollt.
     """
-    try:
-        # ToInt64 statt ToInt32: ein IntPtr-Handle kann auf 64-bit-Systemen
-        # oberhalb von 2^31 liegen; ToInt32 wuerfe dann eine OverflowException
-        # und Schutz/Theme blieben lautlos aus.
-        return int(window.native.Handle.ToInt64())
-    except Exception:
-        return 0
+    deadline = time.monotonic() + 5.0
+    while True:
+        try:
+            native = getattr(window, "native", None)
+            if native is not None:
+                # ToInt64 statt ToInt32: ein IntPtr-Handle kann auf 64-bit-
+                # Systemen oberhalb von 2^31 liegen; ToInt32 wuerfe dann eine
+                # OverflowException und Schutz/Theme blieben lautlos aus.
+                h = int(native.Handle.ToInt64())
+                if h:
+                    return h
+        except Exception:
+            pass
+        if not wait or time.monotonic() > deadline:
+            return 0
+        time.sleep(0.05)
 
 
 # Screenshot-Schutz (Phase 6.5 / Gate G26): WDA_EXCLUDEFROMCAPTURE blendet das
@@ -53,7 +73,15 @@ _WDA_EXCLUDEFROMCAPTURE = 0x00000011
 
 
 def _apply_screenshot_protection(hwnd: int) -> None:
-    """Nimmt das App-Fenster aus jeder Bildschirmaufnahme heraus (best effort)."""
+    """Nimmt das App-Fenster aus jeder Bildschirmaufnahme heraus (best effort).
+
+    Die Affinity wird auf dem Top-Level-Fenster gesetzt; das schliesst den
+    WebView2-Inhalt (Kindfenster ``Chrome_WidgetWin_0``) bei der Aufnahme mit
+    ein, ein separates Setzen auf den Kindfenstern ist nicht noetig (empirisch
+    geprueft: zentrale Pixel des maximierten Fensters werden schwarz aufgenommen).
+    Wichtig: Nach einer Handle-Neuerzeugung (z. B. FormBorderStyle-Wechsel im
+    Mini-Modus) faellt die Affinity auf 0 zurueck und muss neu gesetzt werden.
+    """
     if not hwnd:
         return
     try:
@@ -148,6 +176,13 @@ def _register_session_lock_hook(window, api: Api) -> None:
 
 
 def main() -> None:
+    # Per-Monitor-V2-DPI-Kontext: muss vor dem ersten Fenster gesetzt sein.
+    # Python.exe hat kein DPI-Manifest und laeuft sonst als DPI-unaware,
+    # was bewirkt, dass Titelleiste und Rahmen bei erhoehter Monitor-Skalierung
+    # kleiner erscheinen als bei anderen Windows-Apps. Scheitert dieser Aufruf
+    # (z.B. weil PyWebView ihn schon gesetzt hat), ist das kein Fehler.
+    ctypes.windll.user32.SetProcessDpiAwarenessContext(ctypes.c_void_p(-4))
+
     # Vor dem Fenster-Start: Taskbar soll das App-Icon statt python.exe zeigen.
     _set_app_user_model_id()
 
@@ -175,12 +210,22 @@ def main() -> None:
 
     def on_start():
         _register_session_lock_hook(window, api)
-        hwnd = _get_hwnd(window)
+        # wait=True: on_start kann feuern, bevor window.native gesetzt ist (Race),
+        # siehe _get_hwnd. Ohne das Warten bliebe der Screenshot-Schutz lautlos aus.
+        hwnd = _get_hwnd(window, wait=True)
         _apply_screenshot_protection(hwnd)
         _apply_window_icon(window, os.path.join(HERE, "frontend", "icon.ico"))
         raw = database.get_setting("dark")
         initial_dark = str(raw).lower() != "false" if raw is not None else True
         _apply_titlebar_theme(hwnd, initial_dark)
+        # DWM-Frame-Neuberechnung: DWM-Attribute gelten visuell erst nach
+        # SWP_FRAMECHANGED vollstaendig. Stellt sicher, dass die Titelleiste
+        # sofort in der richtigen Hoehe und Farbe gerendert wird.
+        if hwnd:
+            ctypes.windll.user32.SetWindowPos(
+                hwnd, 0, 0, 0, 0, 0,
+                _SWP_NOSIZE | _SWP_NOMOVE | _SWP_NOZORDER | _SWP_NOOWNERZORDER | _SWP_FRAMECHANGED,
+            )
 
         def _on_setting_change(key: str, value) -> None:
             if key == "dark":
@@ -188,15 +233,25 @@ def main() -> None:
 
         api._on_setting_change = _on_setting_change
 
-        def _on_frame_restored() -> None:
-            # Nach Rückkehr aus dem Mini-Modus war der native Rahmen kurz
-            # ausgeblendet (rahmenloses Lesefenster). Die Titelleisten-Farbe
-            # erneut an das aktuelle Theme anpassen.
-            raw2 = database.get_setting("dark")
-            dark = str(raw2).lower() != "false" if raw2 is not None else True
-            _apply_titlebar_theme(_get_hwnd(window), dark)
+        def _on_frame_changed(mini: bool) -> None:
+            # Der Mini-Modus wechselt FormBorderStyle und erzeugt damit das
+            # native Fensterhandle neu; dabei geht die Display-Affinity (Gate
+            # G26) verloren. Nach jedem Wechsel (rein wie raus) den Schutz neu
+            # setzen, das Handle frisch holen (die HWND-Zahl aendert sich).
+            h = _get_hwnd(window)
+            _apply_screenshot_protection(h)
+            if not mini:
+                # Rahmen ist zurueck: Titelleisten-Farbe wieder ans Theme angleichen.
+                raw2 = database.get_setting("dark")
+                dark = str(raw2).lower() != "false" if raw2 is not None else True
+                _apply_titlebar_theme(h, dark)
+                if h:
+                    ctypes.windll.user32.SetWindowPos(
+                        h, 0, 0, 0, 0, 0,
+                        _SWP_NOSIZE | _SWP_NOMOVE | _SWP_NOZORDER | _SWP_NOOWNERZORDER | _SWP_FRAMECHANGED,
+                    )
 
-        api._on_frame_restored = _on_frame_restored
+        api._on_frame_changed = _on_frame_changed
 
     icon = os.path.join(HERE, "frontend", "icon.ico")
     webview.start(on_start, debug=_debug_enabled(), icon=icon)
