@@ -639,15 +639,18 @@ input { font: inherit; }
 /* section header */
 .section { margin-top: var(--section-gap); }
 .section-head {
-  display: flex; align-items: center; gap: 10px; margin-bottom: 10px;
-  width: 100%; text-align: left;
+  display: flex; align-items: center; gap: 8px; margin-bottom: 10px;
+  text-align: left; padding: 0;
+}
+.section-head .s-pill {
+  display: inline-flex; align-items: center; gap: 8px;
+  padding: 4px 11px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--surface-2);
 }
 .section-head .s-title { font-family: var(--font-mono); font-size: 12px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--text-dim); }
 .section-head .s-count { font-family: var(--font-mono); font-size: 11px; color: var(--text-faint); }
-.section-head .line { flex: 1; height: 1px; background: var(--border); }
-.section-head .chev { color: var(--text-faint); transition: transform .2s; }
-.section-head.collapsed .chev { transform: rotate(-90deg); }
-.section-head svg { width: 15px; height: 15px; }
 
 /* task row */
 .task-list { display: flex; flex-direction: column; gap: var(--gap); }

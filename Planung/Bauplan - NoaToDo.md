@@ -272,11 +272,11 @@ Spalten **Sidebar | Main | Toolbar**.
 Karte, Standard). Buttons mit Tooltip + Hotkey, in Gruppen durch Trenner:
 1. **Focus mode** (⤢, `F`), blendet Sidebar+Toolbar aus, nur eine „Exit focus"-X bleibt.
 2. **Accent color** (🎨), öffnet Swatch-Popover mit den 6 Akzenten.
-3. **Export** (⬆, `⌘E`).
+3. **Export** (⬆, `Ctrl+E`).
 4. **Shortcuts** (?), öffnet das Tastenkürzel-Modal.
    (Trenner)
-5. **Lock / Unlock** (🔒, `⌘L`).
-6. **Emergency** (⚠, `⌘⇧!`, rot), öffnet das Panik-Modal.
+5. **Lock / Unlock** (🔒, `Ctrl+L`).
+6. **Emergency** (⚠, `Ctrl+Shift+!`, rot), öffnet das Panik-Modal.
    (Trenner)
 7. **Copy task** (⧉): kopiert die per Klick **ausgewählte** Aufgabe (gehärtet,
    siehe G23); ohne Auswahl nur ein Hinweis-Toast. Kein Tastenkürzel.
@@ -314,12 +314,12 @@ Karte, Standard). Buttons mit Tooltip + Hotkey, in Gruppen durch Trenner:
 |---|---|
 | Neue Aufgabe | `↵` (im New-task-Feld) |
 | Neue Liste | `N` |
-| Sidebar umschalten | `⌘/Strg + B` |
+| Sidebar umschalten | `Ctrl + B` |
 | Focus-Modus | `F` |
-| App sperren | `⌘/Strg + L` |
-| Notfall-Sperre | `⌘/Strg + ⇧ + !` |
-| Liste exportieren | `⌘/Strg + E` |
-| Theme umschalten | `⌘/Strg + J` |
+| App sperren | `Ctrl + L` |
+| Notfall-Sperre | `Ctrl + Shift + !` |
+| Liste exportieren | `Ctrl + E` |
+| Theme umschalten | `Ctrl + J` |
 | Online/Offline | `G` |
 | Tastenkürzel-Hilfe | `?` |
 | Alles schließen | `Esc` |
@@ -443,8 +443,8 @@ aus, sodass danach die **Passphrase neu eingegeben** werden muss:
 
 | Ereignis | Verhalten |
 |---|---|
-| Klick auf **Lock**-Button (oder `⌘/Strg+L`) | sofort sperren |
-| **Emergency/Panic** (`⌘/Strg+⇧+!`) | sofort sperren + Cache leeren + offline |
+| Klick auf **Lock**-Button (oder `Ctrl+L`) | sofort sperren |
+| **Emergency/Panic** (`Ctrl+Shift+!`) | sofort sperren + Cache leeren + offline |
 | **Windows-Sperre** (Win+L) bzw. Sitzung gesperrt | App sperrt automatisch mit → bei Rückkehr Passphrase nötig |
 | **App-Neustart** (Prozess war beendet) | startet immer im Lock-Screen |
 | **Auto-Sperre nach Inaktivität** *(empfohlen, Timeout einstellbar, Default z. B. 15 min)* | sperren |
@@ -529,7 +529,7 @@ Zurückkommen aus der Windows-Anmeldung garantiert gesperrt.
 > | **G21** | **7** | **Export-Härtung.** Audit-Befunde: eine Liste namens `CON` exportiert als `CON.md` (reservierter Windows-Gerätename), und Zeilenumbrüche im Task-Text brechen die Markdown-Struktur des Exports (eingeschleuste falsche `- [x]`-Zeilen/Überschriften). Pflicht in `export_list`: (a) Dateiname: reservierte Namen (CON, PRN, AUX, NUL, COM1-COM9, LPT1-LPT9; case-insensitive, auch mit Endung) mit `_`-Präfix entschärfen; führende/abschliessende Punkte und Leerzeichen entfernen; bleibt nichts übrig, Fallback `list`. (b) Inhalt: in md/txt jede Aufgabe einzeilig ausgeben, `\r` und `\n` in Text/Meta durch ein Leerzeichen ersetzen. (c) Echten Save-Dialog umsetzen (`window.create_file_dialog(webview.SAVE_DIALOG, save_filename=...)`) und die Datei wirklich schreiben. Stand heute schreibt der Export **keine** Datei, das Frontend zeigt nur einen Toast. |
 > | **G22** | **SOFORT, spätestens mit 7** | **Ehrlicher `get_status()`.** Bis Phase 11 fertig ist, **muss** `get_status()` den realen Zustand melden: Schicht 1 "SQLCipher mit Entwicklungs-Schlüssel (UNSICHER)", Schicht 2 "nicht implementiert", `active: false`; das Status-Modal zeigt das in Warnfarben statt grün. Eine Tresor-App darf nie eine Verschlüsselung anzeigen, die nicht existiert (aktuell meldet der Status "AES-256 + ChaCha20 · active", während der AES-Key öffentlich im Repo steht; im Audit nachgewiesen). Ab Phase 11 zeigt der Status echte Werte (Argon2-Parameter, Pepper vorhanden ja/nein, Zeitpunkt des letzten Wraps). |
 > | **G23** | **✅ umgesetzt 2026-06-10** | **Clipboard-Hygiene + Einzel-Task-Kopie.** Windows speichert das Clipboard in der Zwischenablage-History (Win+V) und synchronisiert es ggf. ins Microsoft-Cloud-Clipboard, App-Inhalte würden so den Rechner verlassen. Umgesetzt: (a) Kopiert wird nur noch **eine ausgewählte Aufgabe** (`copy_task`), nie eine ganze Liste; für Listen gibt es den Export. (b) Das Kopieren passiert komplett im **Backend** (`api.py`, Win32 per ctypes, nicht `navigator.clipboard`) und setzt zusätzlich zu `CF_UNICODETEXT` die Formate `ExcludeClipboardContentFromMonitorProcessing`, `CanIncludeInClipboardHistory` (=0) und `CanUploadToCloudClipboard` (=0). (c) Auto-Clear: 60 s nach dem Kopieren wird das Clipboard geleert, sofern es noch unseren Inhalt trägt. (d) Der `Strg+C`-App-Shortcut wurde ersatzlos entfernt. Bei künftigen Copy-Funktionen MUSS derselbe Backend-Pfad verwendet werden. |
-> | **G26** | **✅ umgesetzt 2026-06-10 (UI-Schalter folgt)** | **Screenshot-Schutz.** Das App-Fenster wird per `SetWindowDisplayAffinity(hwnd, WDA_EXCLUDEFROMCAPTURE)` (Fallback `WDA_MONITOR`) aus jeder Bildschirmaufnahme herausgenommen: Screenshots, Snipping Tool, OBS und Bildschirmfreigaben zeigen das Fenster schwarz (`main.py`, beim Fensterstart). Grenzen ehrlich benennen: schützt nicht gegen eine Kamera, die den Bildschirm abfotografiert. Der Schutz ist standardmässig **aktiv**; ein Umschalter in den Settings kann später ergänzt werden, der Default bleibt AN. Bei jeder Fenster-Neuerstellung (z.B. künftige Zweitfenster) MUSS der Schutz erneut gesetzt werden. |
+> | **G26** | **❌ verworfen 2026-06-20 (zu fehleranfaellig)** | **Screenshot-Schutz (entfernt).** Idee war, das Fenster per `SetWindowDisplayAffinity(hwnd, WDA_EXCLUDEFROMCAPTURE)` aus Bildschirmaufnahmen herauszunehmen. Mehrfach umgesetzt und wieder entfernt, weil er reale Probleme machte: auf manchen GPU-/Treiber-Konstellationen blockiert die Affinity das WebView2-Rendern komplett (Fenster bleibt weiss / reagiert nicht), und die Startup-Verdrahtung verklemmte zudem die Nachrichtenschleife. Zusatznachteile: blendet das Fenster auch in legitimer Freigabe/Aufnahme schwarz aus und nuetzt nichts gegen eine Kamera. **Entscheidung: dauerhaft entfernt, nicht wieder einbauen.** Falls je erneut gewuenscht, zwingend mit Render-Verifikation nach dem Setzen (Affinity automatisch zuruecknehmen, wenn der Inhalt nicht mehr rendert) und ausschliesslich ueber `_run_on_ui_thread`. |
 > | **G24** | **9 (VOR dem ersten Sync)** | **Seed-Daten-Kollision auflösen.** Die Seeds markieren Listen als `synced=1`/`source='graph'`, tragen aber lokale UUIDs statt echter Graph-IDs. Beim ersten echten Sync entstünden Duplikate und "Geisterlisten", die nie Updates bekommen. Pflicht: Beim ersten erfolgreichen `sign_in()` eine Migration ausführen: alle Listen mit `synced=1`, deren ID mit `l` beginnt (= Seed, nicht Graph), samt Aufgaben auf `synced=0`/`source='local'` umstellen. Danach existieren keine Pseudo-Sync-Listen mehr. |
 > | **G25** | **11** | **RAM-Schlüssel-Hygiene.** `aes_key`, `chacha_key`, Master-Secret und Pepper als `bytearray` (nicht `bytes`/`str`) halten; beim Sperren/Panic/Beenden **vor** dem Verwerfen mit Nullen überschreiben. Die Passphrase unmittelbar nach der Ableitung verwerfen; Passphrase und Schlüssel dürfen **nie** in Logs, Exceptions, `get_status()` oder sonstwie ans Frontend gelangen. Im Code dokumentieren: Python gibt keine harten Garantien (der GC kann Kopien hinterlassen), das Nullen ist Best-Effort und trotzdem Pflicht. |
 >
@@ -898,10 +898,15 @@ seit dem 2026-06-10 fertig und gehärtet (`copy_task`, siehe Punkt 5 unten).
 6. **Kontextueller Stift in der Rail:** Mit ausgewählter Aufgabe öffnet der
    Stift deren Inline-Bearbeitung, ohne Auswahl wie bisher das
    Listen-Umbenennen-Modal.
-7. **Screenshot-Schutz aktiv (Gate G26):** `SetWindowDisplayAffinity` mit
-   `WDA_EXCLUDEFROMCAPTURE` in `main.py`; das Fenster erscheint in Screenshots
-   und Bildschirmfreigaben schwarz. Default AN, Settings-Schalter kann später
-   folgen.
+7. **Screenshot-Schutz (Gate G26), 2026-06-20 dauerhaft verworfen und entfernt:**
+   Der Ansatz `SetWindowDisplayAffinity` mit `WDA_EXCLUDEFROMCAPTURE` in `main.py`
+   sollte das Fenster in Screenshots und Bildschirmfreigaben schwarz erscheinen
+   lassen. **Problem (real aufgetreten):** auf manchen GPU-/Treiber-Konstellationen
+   verhindert genau diese Affinity, dass der WebView2-Inhalt rendert, das Fenster
+   bleibt weiss bzw. reagiert nicht. Mehrfach ein- und wieder ausgebaut. **Endgueltige
+   Entscheidung: entfernt und nicht wieder einbauen.** Falls je erneut gewuenscht,
+   nur mit Render-Verifikation nach dem Setzen (Affinity automatisch zuruecknehmen,
+   wenn der Inhalt nicht mehr rendert) und ausschliesslich ueber `_run_on_ui_thread`.
 
 **Noch offen (Pflicht, KEINER dieser Punkte ist optional, je in der genannten Phase):**
 - **Undo beim Listen-Löschen (Phase 7):** `delete_list` löscht heute sofort und
@@ -1099,7 +1104,7 @@ machen, das Kernversprechen „sicherer als Microsoft To Do".
 1. **App-Sperre nach der Sperr-Politik aus B.8:** `lock()` setzt `locked=True`, verwirft
    die Schlüssel, packt die DB wieder zu (Schicht 2) und zeigt den LockScreen über allem.
    `unlock(passphrase)` prüft den Argon2-Hash, leitet die Schlüssel ab und öffnet die DB.
-   Sperre auslösen bei: Lock-Button/`⌘L`, Panic, **App-Start** (immer gesperrt starten),
+   Sperre auslösen bei: Lock-Button/`Ctrl+L`, Panic, **App-Start** (immer gesperrt starten),
    **Auto-Sperre nach Inaktivität** (einstellbarer Timeout, Default ~15 min) und
    **Windows-Sitzungssperre**. Letztere via `WTSRegisterSessionNotification` +
    `WM_WTSSESSION_CHANGE` → bei `WTS_SESSION_LOCK` `lock()` aufrufen (Registrierung beim
@@ -1116,7 +1121,8 @@ machen, das Kernversprechen „sicherer als Microsoft To Do".
      gar nicht öffnen. Damit stimmen Status-Anzeige und Lock-Text
      („LOCAL VAULT · ENCRYPTED") real, nicht nur optisch.
    - `panic()` zusätzlich: Schlüssel + Klartext-Cache sofort verwerfen, Arbeitskopie
-     löschen, offline schalten.
+     löschen, **den festen WebView2-Profilordner `%LOCALAPPDATA%\NoaToDo\webview` leeren
+     (siehe G14)**, offline schalten.
 4. `get_status()` liefert echte Werte (DB-Größe, Verschlüsselungs-Status, Token-Status,
    letzter Sync, WebView2-Version).
 
@@ -1156,9 +1162,37 @@ machen, das Kernversprechen „sicherer als Microsoft To Do".
 >   `{"error": "locked"}` ab; `get_state()` liefert gesperrt nur `{"locked": true}`.
 >   Heute ist die Sperre nur ein Frontend-Overlay (im Audit nachgewiesen:
 >   `add_task`/`get_state` funktionieren gesperrt weiter).
-> - **G14, WebView2 ohne Datenspuren:** `private_mode=True` explizit setzen und
->   verifizieren; falls ein User-Data-Ordner entsteht, nach `data/webview2/` legen
->   und bei Lock/Panic/Quit löschen; nie localStorage/IndexedDB für Aufgabendaten.
+> - **G14, WebView2 ohne Datenspuren (fester Profilordner umgesetzt 2026-06-20, sicheres Wischen offen für Phase 11):**
+>   **Erledigt (vorgezogen mit G19):** Der Privatmodus ist abgeschaltet. `main.py` startet
+>   PyWebView jetzt mit `private_mode=False` + `storage_path=PROFILE_DIR`
+>   (`%LOCALAPPDATA%\NoaToDo\webview`), also genau einem festen, benutzerprivaten
+>   Profilordner. Das frühere Verhalten (`private_mode=True`, pro Start ein neues
+>   `%TEMP%\tmp...\EBWebView`, das bei hartem Beenden liegen blieb und sich anhäufte, real
+>   bis 55 Altlasten, mit verwaisten `msedgewebview2.exe` zeitweise Starthänger über eine
+>   Minute) entfällt damit. `_cleanup_stale_webview_profiles()` wischt die alten Temp-Profile
+>   beim Start einmalig weg (nur `tmp*`-Ordner mit `EBWebView`-Signatur, gesperrte werden
+>   übersprungen). Der frühere Sperrkonflikt auf dem geteilten Profil (zweite/verwaiste
+>   Instanz, weißes Fenster, „reagiert nicht") ist abgefangen, weil der feste Ordner nur
+>   **zusammen mit G19** (Single-Instance-Mutex, ebenfalls 2026-06-20 vorgezogen) eingeführt
+>   wurde.
+>   **Noch offen für Phase 11:** (a) `panic()`/`lock()`/sauberer Quit müssen `PROFILE_DIR`
+>   **sicher wischen** (Forensik-Härtung gegen Crash-Dumps, siehe Entwarnung unten); (b) das
+>   Wischen muss mit dem Single-Instance-Mutex und dem Lock-Lebenszyklus abgestimmt sein
+>   (nicht wischen, während WebView2 den Ordner noch offen hält); (c) **Edge-Case festgestellt
+>   2026-06-20:** wird der Prozess hart abgeschossen (Task-Manager), überleben die
+>   `msedgewebview2.exe`-Kinder und halten `PROFILE_DIR` gesperrt; der nächste Start scheitert
+>   dann an `CreateCoreWebView2Controller` mit `0x800700AA` (ERROR_BUSY, Fenster bliebe weiß).
+>   Im Normalbetrieb (Fenster sauber schließen) lösen die Kinder die Sperre selbst; für den
+>   Crash-/Kill-Fall sollte Phase 11 verwaiste `msedgewebview2.exe` mit `PROFILE_DIR` als
+>   Arbeitsverzeichnis vor dem Start beenden (nicht pauschal alle, andere Apps nutzen WebView2).
+>   **Wichtige Entwarnung zur Vertraulichkeit (gilt für den festen Ordner genauso):**
+>   Aufgabentexte erreichen **keine** persistierbare WebView2-Fläche. Das Frontend nutzt
+>   kein localStorage/sessionStorage/IndexedDB, keine Cookies, kein fetch/XHR; alle Daten
+>   kommen ausschliesslich über die In-Memory-Bridge `pywebview.api.*` ins DOM. Im Profil
+>   liegt nur **nicht-sensibler** UI-Cache (eigene HTML/CSS/JS/Fonts, GPU-/Netz-Status), nie
+>   Aufgabeninhalte. Einziger Randfall: ein WebView2-Crash könnte einen Dump mit DOM-Fragmenten
+>   schreiben, genau dagegen ist das Wischen Pflicht. Weiterhin gilt: nie
+>   localStorage/IndexedDB für Aufgabendaten.
 > - **G15, KDF mit Domain-Separation, kein Verifikations-Hash:** Argon2id →
 >   ein Master-Secret → HKDF-SHA256 mit getrennten `info`-Labels → `aes_key` +
 >   `chacha_key`; Passphrase-Prüfung ausschliesslich über den Poly1305-Tag der
@@ -1171,8 +1205,10 @@ machen, das Kernversprechen „sicherer als Microsoft To Do".
 > - **G18, DPAPI-Pepper (Pflicht):** 32-Byte-Pepper im Windows Credential Manager,
 >   fliesst als Argon2id-`secret` in die Ableitung ein; Einrichtungs-Flow enthält
 >   zwingend einen Recovery-Export des Peppers.
-> - **G19, Single-Instance-Mutex:** benannter Windows-Mutex beim Start, zweite
->   Instanz beendet sich sofort (Korruptionsschutz). Umsetzung darf vorgezogen werden.
+> - **G19, Single-Instance-Mutex (umgesetzt 2026-06-20, vorgezogen):** benannter
+>   Windows-Mutex `Local\NoaToDoSingleton` beim Start (`_acquire_single_instance` in
+>   `main.py`), zweite Instanz zeigt einen Hinweis und beendet sich sofort
+>   (Korruptionsschutz, Voraussetzung für den festen WebView2-Profilordner aus G14).
 > - **G25, RAM-Schlüssel-Hygiene:** Schlüssel/Master-Secret/Pepper als `bytearray`,
 >   vor dem Verwerfen nullen; Passphrase nach Ableitung sofort verwerfen; nichts
 >   davon je in Logs, Exceptions oder ans Frontend.
@@ -1186,6 +1222,137 @@ kein WebView2-Datenrest; Entsperren scheitert bei falscher Passphrase über den
 AEAD-Tag; `tasks.db.enc` trägt den spezifizierten Header und übersteht einen
 simulierten Absturz beim Sperren (`.bak` greift); ohne den Pepper aus dem Credential
 Manager ist die Datei offline nicht angreifbar; eine zweite App-Instanz startet nicht.
+
+---
+
+## NACHTRAG (2026-06-13): UX-Pflichten und -Erweiterungen aus dem UX/UI-Audit
+
+Nach dem lokal nutzbaren Meilenstein (Phase 6 + 6.5) wurde ein vollständiges
+UX/UI-Audit erstellt (`Planung/UX-UI Verbesserungen.md`, Stand 2026-06-12). Dieser
+Nachtrag überführt **alle Audit-Punkte, die noch zu bauende Features betreffen**, in
+den Bauplan, damit sie nicht verloren gehen. Reine Sofort-Korrekturen (Mac-Symbole,
+UI-Sprache) wurden am 2026-06-13 direkt im Code erledigt (siehe Entscheidung unten).
+Die verbleibenden **Gegenwarts-Mängel** (z.B. unehrliche Status-/Toast-Texte, fehlende
+Tastaturnavigation, A11y, Voll-Re-Render) sind nicht Teil dieses Nachtrags; sie stehen
+im Audit (Prioritäten P1 bis P3) und werden separat abgearbeitet. Querverweise in der
+Form „(UX x.y)" zeigen auf den jeweiligen Abschnitt im Audit.
+
+**Sprach- und Plattform-Entscheidung (verbindlich, 2026-06-13):**
+- **UI-Sprache: durchgehend Englisch.** Die frühere Überlegung „Deutsch" wurde
+  verworfen. Alle sichtbaren UI-Strings sind englisch; die zuvor gemischten deutschen
+  Tooltips wurden am 2026-06-13 angeglichen (`frontend/app.js`, `index.html` jetzt
+  `lang="en"`). Code-Kommentare bleiben Deutsch (Entwickler-Sprache), das ist keine UI.
+- **Zielplattform: ausschließlich Windows.** In UI und Plan kommen **keine**
+  Mac-Tastensymbole (⌘, ⇧) mehr vor; Tastenkürzel werden als `Ctrl`/`Shift` dargestellt.
+  B.4, B.5 und B.8 wurden entsprechend bereinigt.
+
+**Was bereits im Plan steht (nur Querverweis, hier nicht erneut spezifiziert):**
+Fälligkeits-UI (UX 7.1) -> Phase 6.5 + Phase 10; echtes Profil-Menü (UX 1.3) ->
+Phase 6.5 + Phase 8; echte Benachrichtigungen/Glocke (UX 1.3) -> Phase 6.5 + Phase 10;
+Export-Save-Dialog + ehrliches Feedback (UX 1.5) -> Phase 7 / Gate G21c; Undo beim
+Listen-Löschen (UX 1.2, 3.3) -> Phase 6.5 + Phase 7; ehrlicher `get_status()` und
+Status-Modal (UX 1.4, 8.4) -> Gate G22 + Phase 11; Auto-Lock-Timeout (UX 7.6) -> B.8;
+serverseitige Lock-Durchsetzung -> Gate G13 (Screenshot-Schutz / G26 wurde verworfen,
+siehe oben). Diese Punkte sind verbindlich an den genannten Stellen, hier nur zur
+Vollständigkeit gelistet.
+
+### N1. Phase 8/9: Lade-/Fortschritts-Zustände als Pflicht-Muster (UX 6.2)
+Heute laufen alle Bridge-Aufrufe ohne sichtbares Feedback; lokal ist das schnell genug.
+Ab Phase 8 (Login) und Phase 9 (Sync) gibt es erstmals **spürbar langsame** Aufrufe
+(Netzwerk, Token-Refresh, Delta-Abruf). Pflicht: ein einheitliches Pending-Muster, das
+**vor** dem ersten langsamen Call existiert, nicht danach nachgerüstet wird.
+- Die auslösende Aktion deaktiviert ihren Button und zeigt einen Inline-Spinner (kein
+  modaler Blocker des ganzen Fensters).
+- Doppel-Auslösung verhindern (kein zweiter `sign_in`/`sync_now`, solange einer läuft).
+- Fehlerfall: generische Meldung (Gate G10), klare Retry-Möglichkeit.
+- Der dauerhafte Status (läuft/fertig/Fehler) gehört in die Statuspille aus N2, nicht
+  nur in einen flüchtigen Toast.
+
+### N2. Phase 9: Persistente Online-/Sync-Statusanzeige (UX 4.2, 8.3)
+Der Online/Offline-Zustand ist heute fast unsichtbar (nur Globus-Icon in der oft
+versteckten Rail plus kurzer Toast). Das Konzept sah die `airplane-pill` als
+persistenten Banner vor; ihr CSS liegt ungenutzt im Stylesheet. Pflicht ab Phase 9:
+- Eine **persistente Statuspille** im Hauptbereich (oder am Dock), sichtbar sobald
+  `online=false` („offline, sync paused") und nach erfolgtem Sync („last sync 14:02").
+- Diese Pille ist der feste Ort für den Sync-Status (Erfolg, Zeitpunkt, Fehler),
+  ergänzend zum Toast aus Phase 9 Punkt 6.
+- Damit entschärft sich auch UX 3.12 (versehentliches `G`/Offline ohne sichtbare Folge).
+
+### N3. Phase 9: Konflikt-Benachrichtigung sichtbar machen (UX 8.3, Entscheidung D.1)
+Die Konfliktregel (Default A: Cloud überschreibt lokale Änderungen an importierten
+Aufgaben, siehe D.1) läuft heute stumm. Pflicht: Wenn ein Sync lokale Änderungen an
+importierten Aufgaben überschreibt, erzeugt das einen **Benachrichtigungs-Eintrag** im
+Glocken-Menü („cloud overwrote N local edits") und fließt in den Sync-Summary
+(`on_sync_done`). So bleibt die bewusst gewählte Cloud-Hoheit für den Nutzer
+nachvollziehbar statt unsichtbar.
+
+### N4. Phase 11: Echter Lock-Screen mit Passphrase (UX 8.1) [Sec]
+B.4 und Phase 11 nennen die Passphrase-Eingabe, aber nicht die UX-Details. Der heutige
+„4x tippen"-Platzhalter (`renderLock`, `lockTap`) wird ersetzt durch ein echtes
+Eingabefeld mit folgenden **Pflicht-Eigenschaften**:
+- Passwort-Feld mit Show/Hide-Umschalter.
+- Fehlerzustand bei falscher Passphrase: Shake + Meldung „wrong passphrase", **ohne**
+  preiszugeben, ob ein Tresor existiert (neutrale Meldung).
+- Warnung bei aktiver Feststelltaste (Caps Lock).
+- **Fortschritts-/Spinner-Zustand beim Entsperren:** Argon2id mit den Kosten aus
+  Gate G8 (Memory ≥ 256 bis 512 MB) braucht spürbar Zeit; das ist gewollt, also braucht
+  es eine „unlocking…"-Anzeige, sonst wirkt die App eingefroren.
+- **Rate-Limit-Anzeige** nach mehreren Fehlversuchen („try again in 30 s"); bremst
+  Offline-Rateversuche zusätzlich zur teuren KDF.
+- Hängt an Gate G13 (gesperrt = Backend liefert `locked`), G15 (Prüfung über den
+  Poly1305-Tag) und G18 (DPAPI-Pepper): ohne Pepper bzw. richtige Passphrase scheitert
+  die ChaCha20-Entschlüsselung, die Fehlermeldung kommt aus dem AEAD-Tag.
+
+### N5. Phase 11: Panik-Flow, Hotkey ohne Rückfrage (UX 8.2) [Sec]
+Heute zeigt sowohl der Hotkey als auch der Rail-Button dasselbe Emergency-Modal.
+Zielverhalten (B.8: Panik = sofort sperren):
+- **Hotkey `Ctrl+Shift+!` sperrt sofort und ohne Rückfrage** (kein Modal); im Notfall
+  zählt Geschwindigkeit.
+- Das Bestätigungs-Modal erscheint **nur** beim bewussten Maus-Klick auf den
+  Rail-Button (Schutz vor Fehlklick).
+- Schon jetzt so umsetzen, damit sich kein falsches Muskelgedächtnis einschleift.
+
+### N6. Phase 11: Entsperr-/Boot-Fehlerbildschirm (UX 6.3) [Sec]
+`boot()` rendert bei Fehlern heute ein nacktes `<pre>boot error</pre>`. Ab Phase 11 sind
+„falsche Passphrase" und „beschädigte/fehlende `tasks.db.enc`" reale Szenarien. Pflicht:
+ein gestalteter Fehlerzustand mit Handlungsoption (Retry, Pfadangabe, Hinweis auf die
+`.bak`-Generation aus Gate G16 bzw. den Pepper-Recovery-Export aus Gate G18). Der Nutzer
+darf bei einem AEAD-Fehler nie ratlos vor einem leeren Fenster stehen.
+
+### N7. Neue Fähigkeiten mit Bridge-Erweiterung (einplanen, z.B. Phase 7 oder Folge-Iteration)
+Echte Funktionslücken einer Mehrlisten-App, je mit kleiner Backend-Ergänzung. Kein
+Sicherheitsthema, daher zeitlich flexibel, aber fest eingeplant:
+- **Aufgaben zwischen Listen verschieben (UX 3.7):** neue Bridge-Methode
+  `move_task(id, target_list_id)` (oder `edit_task` um `list_id` erweitern); Auslösung
+  per Drag auf einen Sidebar-Eintrag und per „Move to…" im Kontextmenü. Validierung wie
+  bei `add_task` (Gate G20), Zielposition ans Ende der Ziel-Liste.
+- **Listen umsortieren (UX 3.9):** das Schema hat `lists.position`, aber kein UI. Neue
+  Methode `reorder_lists(ordered_ids)` analog zu `reorder` (gleiche Typprüfung, Gate
+  G20), Drag & Drop in der Sidebar.
+- **„Clear completed" (UX 3.8):** Sammel-Löschen aller erledigten Aufgaben einer Liste,
+  mit Bestätigung bzw. Undo (analog zum Listen-Undo aus Phase 7). Eigene Methode (z.B.
+  `clear_completed(list_id)`), die serverseitig löscht.
+
+### N8. Roadmap-Erweiterungen (ergänzt D.3)
+Bewusst kein Kern-Scope, aber als Produktrichtung festgehalten:
+- **Aufgaben-Detailansicht (UX 7.4):** ausklappbare Detailzeile (Beschreibung,
+  Erstellt-Datum, Quelle local/graph). Gibt auch dem Graph-Import (Phase 9) einen Ort,
+  importierte Felder zu zeigen.
+- **„Today/Overdue"-Sammelansicht (UX 7.5):** virtuelle Liste über alle Listen hinweg,
+  sobald Fälligkeiten existieren (setzt das `due_at`-UI aus Phase 10 voraus).
+- **Volltextsuche/Filter (UX 7.2):** ein `Ctrl+F`-Overlay mit Fuzzy-Filter über alle
+  Listen; für eine tastaturorientierte App der größte einzelne Produktivitätsgewinn.
+  Hebt den bisherigen D.3-Einzeiler zu einem konkreten Vorschlag.
+- **Mini-Modus, Listenwechsel (UX 7.7, 3.14):** ein Dropdown im `mini-bar`-Titel zum
+  Wechseln der Liste, ohne den Mini-Modus zu verlassen.
+- **Meta-Feld benennen/strukturieren (UX 7.3):** das Freitext-`meta` entweder klar als
+  Notiz („note") labeln oder in strukturierte Tags überführen (Entscheidung steht aus).
+
+### N9. Einstellungen, Vorbereitung künftiger Phasen (UX 7.6)
+Ergänzend zu den schon geplanten Settings (Auto-Lock-Timeout B.8): **Startverhalten**
+(maximiert vs. letzte Fenstergröße) als Einstellung vorsehen.
+Die bestehende Settings-Struktur (Zeile + Segment, B.6) trägt das ohne Umbau; jeder neue
+Key muss in die `set_setting`-Whitelist aus Gate G20 aufgenommen werden.
 
 ---
 
@@ -1278,12 +1445,13 @@ Icon verwenden.
 - [ ] Phase 4, `index.html` Gerüst, Bridge im Fenster bewiesen
 - [ ] Phase 5, `style.css` (CSS 1:1 aus Konzept) + lokale Fonts
 - [x] Phase 6, `app.js` komplette UI + Interaktionen  ← **lokal voll nutzbar (Stand heute)**
-- [x] Phase 6.5, UX-Nacharbeiten (Inline-Edit, Task-Löschen, Task-Auswahl, gehärtete Einzel-Task-Kopie ✅G23, Strg+C entfernt, Mini-on-top, Screenshot-Schutz ✅G26); Rest-Pflichten in 7/8/10 verplant
+- [x] Phase 6.5, UX-Nacharbeiten (Inline-Edit, Task-Löschen, Task-Auswahl, gehärtete Einzel-Task-Kopie ✅G23, Strg+C entfernt, Mini-on-top, Screenshot-Schutz ❌G26 verworfen); Rest-Pflichten in 7/8/10 verplant
 - [ ] Phase 7, Export + Undo **+ 🔒 G20 (lokale Eingabe-Validierung), G21 (Export-Härtung + Save-Dialog), G22 (ehrlicher Status), G12 vorziehen, Undo beim Listen-Löschen** (G23 schon erledigt)
 - [ ] Phase 8, MSAL-Login (`Tasks.Read`, keyring) **+ 🔒 G5 (OAuth-Härtung), G10 (Fehler ohne Geheimnisse)** + echtes Profil-Menü
 - [ ] Phase 9, Delta-Sync Cloud → SQLite (einseitig) **+ 🔒 G1 (textContent ZUERST), G2 (Host-Whitelist), G3 (Limits/Regel 4), G4 (Schreib-Lock), G10 (Fehler ohne Geheimnisse), G24 (Seed-Migration)**
 - [ ] Phase 10, Benachrichtigungen (winotify) + Fälligkeits-UI + echtes Glocken-Menü
-- [ ] Phase 11, Lock / Emergency / Doppel-Kaskade AES-256 + ChaCha20 (B.7) **+ 🔒 G6 (In-Memory-DB), G7 (Hex-Raw-Key), G8 (Argon2id-Kosten + Passphrase-Stärke), 🔴 G9 (`DEV_AES_KEY` entfernen), 🔴 G13 (Lock serverseitig), G14 (WebView2-Spuren), G15 (HKDF/kein Hash), G16 (.enc-Format), G17 (Write-back), G18 (DPAPI-Pepper), G19 (Single-Instance), G25 (RAM-Hygiene)**
+- [ ] Phase 11, Lock / Emergency / Doppel-Kaskade AES-256 + ChaCha20 (B.7) **+ 🔒 G6 (In-Memory-DB), G7 (Hex-Raw-Key), G8 (Argon2id-Kosten + Passphrase-Stärke), 🔴 G9 (`DEV_AES_KEY` entfernen), 🔴 G13 (Lock serverseitig), G14-Rest (PROFILE_DIR sicher wischen bei lock/panic/quit; fester Ordner + Altlasten-Wisch ✅ 2026-06-20), G15 (HKDF/kein Hash), G16 (.enc-Format), G17 (Write-back), G18 (DPAPI-Pepper), G25 (RAM-Hygiene)** (G19 Single-Instance ✅ 2026-06-20 vorgezogen)
+- [ ] UX-Nachtrag 2026-06-13 (Abschnitt vor TEIL D): N1 Lade-Zustände (Phase 8/9), N2 Sync-Statuspille (9), N3 Konflikt-Notif (9), N4 Lock-Screen-Passphrase-UX (11), N5 Panik-Hotkey ohne Rückfrage (11), N6 Entsperr-Fehlerbildschirm (11), N7 move_task/reorder_lists/clear_completed, N8 Roadmap (D.3), N9 Startverhalten-Setting
 
 ### 🔒 Sicherheits-Gates auf einen Blick (Details in B.9)
 
@@ -1304,19 +1472,19 @@ Icon verwenden.
 | 🔒 G11 | 0 / laufend | Abhängigkeiten versions-pinnen (+ Hash-Checking) |
 | 🔒 G12 | vor 7 (vorgezogen) | Externe WebView-Navigation verweigern |
 | 🔴 G13 | 11 | **Lock serverseitig durchsetzen** (gesperrt = jede Methode ausser `unlock` liefert `locked`-Fehler) |
-| 🔒 G14 | 3/11 | WebView2 ohne Datenspuren (`private_mode` verifizieren, User-Data-Ordner kontrollieren/löschen) |
+| 🔒 G14 | teils erledigt (2026-06-20), Rest 11 | WebView2 ohne Datenspuren: fester Profilordner statt Privatmodus ✅, Altlasten-Wisch beim Start ✅; sicheres Wischen bei lock/panic/quit offen (Phase 11) |
 | 🔒 G15 | 11 | Argon2id-Master-Secret + HKDF-Domain-Separation; kein Verifikations-Hash, Prüfung via Poly1305-Tag |
 | 🔒 G16 | 11 | `tasks.db.enc`-Header (Magic/Version/Params/Salt/Nonce), frische Nonce, atomares Schreiben + `.bak` |
 | 🔒 G17 | 11 | Debounced Write-back der In-Memory-DB (Crash kostet höchstens Sekunden) |
 | 🔒 G18 | 11 | DPAPI-Pepper im Credential Manager als Zweitfaktor gegen Offline-Brute-Force + Recovery-Export |
-| 🔒 G19 | 11 (vorziehbar) | Single-Instance-Mutex (zweite Instanz beendet sich) |
+| ✅ G19 | erledigt (2026-06-20, vorgezogen) | Single-Instance-Mutex `Local\NoaToDoSingleton` (zweite Instanz zeigt Hinweis und beendet sich) |
 | 🔒 G20 | 7 | Regel-4-Validierung auch lokal + `reorder`-Typprüfung + `set_setting`-Key-Whitelist |
 | 🔒 G21 | 7 | Export-Härtung: reservierte Windows-Namen, Newline-Ersetzung, echter Save-Dialog |
 | 🔒 G22 | sofort/7 | `get_status()` meldet den ehrlichen Verschlüsselungszustand (kein falsches "active") |
 | ✅ G23 | erledigt (2026-06-10) | Einzel-Task-Kopie im Backend: keine Win+V-History, kein Cloud-Clipboard, Auto-Clear 60 s, `Strg+C` entfernt |
 | 🔒 G24 | 9 | Seed-Listen vor dem ersten Sync auf `local` migrieren (keine Pseudo-Graph-IDs) |
 | 🔒 G25 | 11 | RAM-Schlüssel-Hygiene: `bytearray` + Nullen, Passphrase sofort verwerfen, nie loggen |
-| ✅ G26 | erledigt (2026-06-10) | Screenshot-Schutz: `WDA_EXCLUDEFROMCAPTURE`, Fenster in Aufnahmen schwarz; Default AN, Settings-Schalter kann folgen |
+| ❌ G26 | verworfen + entfernt (2026-06-20) | Screenshot-Schutz `WDA_EXCLUDEFROMCAPTURE` blendete Aufnahmen schwarz aus, verhindert aber auf manchen GPUs das Rendern (Fenster weiss / reagiert nicht). Mehrfach ein-/ausgebaut, endgueltig entfernt. Nicht wieder einbauen ohne Render-Verifikation + Affinity-Rollback |
 
 **Hinweise (kein Gate):** Export schreibt unverschlüsselte Dateien (by design, der
 Nutzer exportiert bewusst Klartext); `main.py` `emit()` muss

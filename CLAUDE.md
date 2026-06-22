@@ -8,7 +8,13 @@ The user does not like dashes (Gedankenstriche). Do NOT use the em-dash (Unicode
 
 ## Project status
 
-Locally-usable milestone reached (Phases 1 to 6 of the Bauplan, plus the Phase 6.5 UX/security follow-ups: inline task edit via double-click, per-task delete button, click-to-select tasks, hardened single-task copy via `copy_task` (gate G23: backend-side Win32 clipboard, excluded from Win+V history and cloud clipboard, auto-clear after 60 s), Ctrl+C app shortcut removed entirely, contextual rail pencil (selected task: inline edit; otherwise: rename list), mini mode always-on-top, screenshot protection via `SetWindowDisplayAffinity`/`WDA_EXCLUDEFROMCAPTURE` (gate G26, window appears black in screenshots and screen sharing)). Implemented: `db.py`, `api.py`, `main.py`, `frontend/index.html`, `frontend/style.css`, `frontend/app.js`.
+Locally-usable milestone reached (Phases 1 to 6 of the Bauplan, plus the Phase 6.5 UX/security follow-ups: inline task edit via double-click, per-task delete button, click-to-select tasks, hardened single-task copy via `copy_task` (gate G23: backend-side Win32 clipboard, excluded from Win+V history and cloud clipboard, auto-clear after 60 s), Ctrl+C app shortcut removed entirely, contextual rail pencil (selected task: inline edit; otherwise: rename list), mini mode always-on-top). Implemented: `db.py`, `api.py`, `main.py`, `frontend/index.html`, `frontend/style.css`, `frontend/app.js`.
+
+Screenshot protection (former gate G26, `SetWindowDisplayAffinity` / `WDA_EXCLUDEFROMCAPTURE`) is **removed and should stay removed**. It caused recurring problems: on some GPU/driver combos the affinity flag blocks WebView2 from rendering at all (window stays white / "not responding"), and its startup wiring previously deadlocked the message loop. It also blacks out the window in legitimate screen sharing/recording and does nothing against a phone camera. Do not reintroduce it.
+
+Screenshot protection (gate G26, `SetWindowDisplayAffinity` / `WDA_EXCLUDEFROMCAPTURE`) takes the window out of every screen capture (screenshots, Snipping Tool, screen sharing, recording, Desktop Duplication); it renders black there while staying fully visible to the user. It is **on by default at every app start** and can be turned off for the current session via a Settings toggle; that off-state is **session-only and not persisted** (lives in `Api._screenshot_protect` in RAM, not in the `settings` table), so a restart re-enables it. The single `SetWindowDisplayAffinity` call has zero ongoing cost; it is applied by `main.py` (`_apply_screenshot_protection`) and **must always run on the WinForms UI thread via `_run_on_ui_thread`** (set at startup in `_startup_window_setup`, re-set on every mini-mode toggle in `_frame_setup` because the handle is recreated, and live-toggled through `api._on_screenshot_change`). It was once removed (2026-06-20) because its old wiring did a blocking `_get_hwnd(window, wait=True)` plus a cross-thread native call on the on_start worker thread and deadlocked WebView2 init (white / "not responding" window). Never reintroduce a worker-thread native call or a blocking handle-poll. Limits: does not stop a phone camera, and the window is black in legitimate screen sharing too (that is what the toggle is for); needs Windows 10 2004+ (`WDA_MONITOR` fallback on older).
+
+**WebView2 profile + single instance (gates G14 partial, G19 done, pulled forward 2026-06-20):** `main.py` no longer runs WebView2 in private mode. It starts PyWebView with `private_mode=False, storage_path=PROFILE_DIR` where `PROFILE_DIR = %LOCALAPPDATA%\NoaToDo\webview`, a single fixed, user-private profile folder. This replaced the old per-start temp profile under `%TEMP%\tmp...\EBWebView` that piled up on hard exit (real: dozens of leftovers, start hangs over a minute). `_cleanup_stale_webview_profiles()` removes those old temp profiles once at startup (only `tmp*` dirs carrying an `EBWebView` signature; locked ones are skipped). A named single-instance mutex (`_acquire_single_instance`, `Local\NoaToDoSingleton`, gate G19) makes a second instance show a message box and exit; the fixed folder is only safe together with this mutex (two instances would lock/corrupt the shared profile). The profile holds only non-sensitive UI cache (own HTML/CSS/JS/fonts, GPU state), never task content. **Still open for Phase 11 (gate G14 rest):** securely wipe `PROFILE_DIR` on `lock()`/`panic()`/clean quit, and clear orphaned `msedgewebview2.exe` that survive a hard kill and lock the folder (next start would otherwise fail with `0x800700AA` ERROR_BUSY). Do NOT reintroduce `private_mode=True`.
 
 **Phase 7 is OPEN:** `export_list` generates content, but no file is ever written (no save dialog); see gates G20-G22 in the Bauplan. There is intentionally no whole-list copy anymore (`copy_list` was removed; export covers that). **Still empty 1-line stubs:** `backend/auth.py`, `backend/graph_sync.py`, `backend/notify.py`, `backend/security.py`, i.e. MSAL login, Graph sync, notifications, and the lock/panic + dual-layer-encryption work (Phases 8-11) are **not yet built**.
 
@@ -66,6 +72,8 @@ tools/
 
 **WinForms thread safety:** `set_mini` runs in PyWebView's API worker thread. All native window mutations (size, position, `TopMost`, `FormBorderStyle`) must be dispatched to the WinForms UI thread via `form.Invoke(Action(work))`. Direct calls from the worker thread cause the message loop to deadlock.
 
+The same applies to `on_start` and the `_on_setting_change` / `_on_frame_changed` callbacks in `main.py`: they also run on a worker thread. Setting `window.native.Icon` (in `_apply_window_icon`) directly from there deadlocked against the UI thread while it was still initializing the WebView2 control (`edgechromium.py:__init__`), so the window never appeared (intermittently white, "not responding", or nothing, depending on timing; root cause found 2026-06-13 via thread stack dump). Fix: all startup window operations (icon, DWM titlebar theme, `SetWindowPos`) are dispatched through `_run_on_ui_thread(window, work)`, which uses `window.native.BeginInvoke(Action(work))` (async, non-blocking) after the window handle exists. Never call WinForms members on `window.native` directly from a worker thread; route them through `_run_on_ui_thread`.
+
 **`db.edit_task` SQL:** builds a dynamic SET clause from a whitelisted `allowed` set (`{"text", "meta", "due_at", "done"}`). The f-string in the query is safe because only those four column names can appear. This is an intentional tradeoff and not a SQL injection risk.
 
 ## Critical constraints
@@ -89,12 +97,12 @@ tools/
 
 Task text, list names, and meta fields from MS Graph are **untrusted input**. These rules apply everywhere they touch code:
 
-**No `innerHTML` for user data (anti-XSS):** The frontend runs with full `pywebview.api.*` access, an XSS is effectively RCE against the backend. Always:
+**Escape every foreign value before it reaches `innerHTML` (anti-XSS):** The frontend runs with full `pywebview.api.*` access, an XSS is effectively RCE against the backend. `app.js` renders by building HTML strings from template literals and assigning them to `root.innerHTML` (full re-render via `render()`); it does NOT use `textContent`/`createTextNode` per node. The mandatory rule is therefore: any (potentially) foreign value interpolated into one of those template strings (task text, list name, meta, ids) MUST be wrapped in the `esc()` helper near the top of `app.js`, which escapes `& < > " '`.
 ```js
-element.textContent = task.text;           // correct
-element.appendChild(document.createTextNode(task.text));  // correct
-element.innerHTML = task.text;             // FORBIDDEN
+`<span class="t-text">${esc(t.text)}</span>`   // correct: foreign data wrapped in esc()
+`<span class="t-text">${t.text}</span>`         // FORBIDDEN: unescaped interpolation
 ```
+A bare `element.textContent = task.text` is also fine where a single node is set directly, but the prevailing pattern in this codebase is template literal + `esc()`. Never interpolate a value you did not escape. The CSP (below) is defense in depth, not a substitute for `esc()`.
 
 **Content Security Policy:** `index.html` must have in `<head>`:
 ```html
@@ -163,19 +171,26 @@ IDs: local items use `'l'+uuid` (lists) or `'t'+uuid` (tasks); imported items us
 ```js
 state = {
   lists, activeId, settings, online, locked,
-  menu,          // 'notif' | 'profile' | null
-  modal,         // 'emergency' | 'status' | 'rename' | 'delete' | 'shortcuts' | 'settings' | null
-  focus,         // focus mode (hides sidebar + toolbar)
-  mini,          // compact mini-window mode
-  railPinned,    // right toolbar rail pinned (persisted as setting)
-  sidebarWidth,  // sidebar width in px, default 256 (persisted as setting)
-  colorOpen,     // accent color picker visible
-  adding,        // new-list inline input visible
-  addingTask,    // new-task inline input visible
-  doneOpen,      // completed section expanded
+  menu,            // 'notif' | 'profile' | null
+  modal,           // 'emergency' | 'status' | 'rename' | 'delete' | 'shortcuts' | 'settings' | null
+  ctxList,         // right-click list context menu: { id, x, y } | null
+  renamingId,      // list being renamed inline (sidebar pill) | null
+  confirmDeleteId, // list whose inline delete confirmation pill is open | null
+  focus,           // focus mode (hides sidebar + toolbar)
+  mini,            // compact mini-window mode
+  railPinned,      // right toolbar rail pinned (persisted as setting)
+  sidebarWidth,    // sidebar width in px, default 256 (persisted as setting)
+  colorOpen,       // accent color picker visible
+  adding,          // new-list inline input visible
+  addingTask,      // new-task inline input visible (bottom dock)
+  doneOpen,        // completed section expanded
+  editingId,       // task being edited inline (double-click) | null
+  selectedId,      // task selected by click (target for rail copy/edit) | null
 }
 ```
 The backend is the source of truth. After each mutating action: apply the backend response to state, then re-render the affected part. `railPinned` and `sidebarWidth` are not returned by `get_state()` directly; they are read back from `state.settings` during boot and written to settings via `set_setting()`.
+
+**Rendering and event dispatch:** `render()` rebuilds the whole UI as an HTML string and assigns it to `root.innerHTML`; there is no per-node diffing. Interaction is handled by event delegation, not per-element listeners: clickable elements carry a `data-act="..."` attribute (often with `data-id`), and a central handler dispatches on `data-act`. Add new interactions by emitting a `data-act` in the template and adding a `case` to that dispatcher, not by attaching listeners after render (they would be lost on the next `render()`).
 
 ## UI layout
 

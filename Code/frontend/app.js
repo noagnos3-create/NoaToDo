@@ -73,7 +73,6 @@ let state = {
   mini: false,       // kompakter Mini-Fenster-Modus (oben rechts angeheftet)
   railPinned: false, // Tool-Rail fixiert (per Chevron-Griff), bleibt sichtbar
   sidebarWidth: 256, // Sidebar-Breite in px, per Drag veraenderbar
-  colorOpen: false,
   adding: false,     // Inline-"New list"-Eingabe sichtbar
   addingTask: false, // Inline-"New task"-Eingabe im unteren Dock sichtbar
   doneOpen: false,   // "Completed"-Sektion eingeklappt?
@@ -210,10 +209,10 @@ function renderMain() {
   const doneSection = list.done.length > 0 ? `
     <div class="section">
       <button class="section-head${state.doneOpen ? '' : ' collapsed'}" data-act="toggle-done">
-        <span class="chev">${I.Chevron}</span>
-        <span class="s-title">Completed</span>
-        <span class="s-count">${list.done.length}</span>
-        <span class="line"></span>
+        <span class="s-pill">
+          <span class="s-title">Completed</span>
+          <span class="s-count">${list.done.length}</span>
+        </span>
       </button>
       <div class="collapse-wrap${state.doneOpen ? '' : ' closed'}">
         <div>
@@ -229,9 +228,9 @@ function renderMain() {
       <div class="main-inner">
         <div class="section">
           <div class="section-head">
-            <span class="s-title">Open tasks</span>
-            <span class="s-count">${list.open.length}</span>
-            <span class="line"></span>
+            <span class="s-pill">
+              <span class="s-title">Open tasks</span>
+            </span>
           </div>
           ${openSection}
         </div>
@@ -350,7 +349,6 @@ function renderToolbar() {
       <div class="toolbar-rail">
         ${btn(I.Mini, 'Mini window', '', 'tb-mini')}
         ${btn(I.Expand, 'Focus mode', 'F', 'tb-focus')}
-        ${btn(I.Palette, 'Accent color', '', 'tb-color', { active: state.colorOpen })}
         ${btn(I.Share, 'Export', 'Ctrl+E', 'tb-export')}
         ${btn(I.Help, 'Shortcuts', '?', 'tb-help')}
         <div class="tool-sep"></div>
@@ -364,21 +362,6 @@ function renderToolbar() {
         ${btn(I.Diag, 'App status', '', 'tb-status')}
         ${btn(I.Globe, state.online ? 'Go offline' : 'Go online', 'G', 'net', { active: state.online })}
       </div>
-    </div>`;
-}
-
-function renderAccentPop() {
-  if (!state.colorOpen) return '';
-  const right = state.settings.toolbar === 'floating' ? 84 : 72;
-  const sw = ACCENTS.map((c) =>
-    `<button class="swatch${c === state.settings.accent ? ' sel' : ''}" data-act="set-accent" data-color="${c}" style="background:${c}"></button>`
-  ).join('');
-  return `
-    <div class="accent-pop" style="position:fixed;top:118px;right:${right}px;z-index:32;
-      background:var(--surface);border:1px solid var(--border);border-radius:14px;
-      box-shadow:var(--shadow-lg);padding:12px;animation:rise .16s ease">
-      <div class="tag" style="color:var(--text-faint);padding:2px 4px 8px">Accent</div>
-      <div class="swatches">${sw}</div>
     </div>`;
 }
 
@@ -632,7 +615,6 @@ function render() {
     renderMain() +
     renderToolbar() +
     renderRailPin() +
-    renderAccentPop() +
     renderListCtx() +
     renderModal() +
     renderLock();
@@ -699,7 +681,9 @@ async function submitNewTask(text) {
   const res = await api().add_task(list.id, text);
   if (res && res.error) return pushToast(res.message || 'Error');
   list.open.push(res);
-  refocusNewTask = true;
+  // Pille nach dem Absenden wieder schliessen: zum Hinzufuegen einer weiteren
+  // Aufgabe muss erneut auf das Plus gedrueckt werden.
+  state.addingTask = false;
   render();
 }
 
@@ -715,13 +699,56 @@ async function commitNewList(name) {
   pushToast('List created', name);
 }
 
+// ===========================================================================
+// Ton beim Abhaken: "Datenstrom", heller digitaler Aufstieg (Web Audio API).
+// Kein Audio-File noetig, daher CSP-kompatibel (default-src 'self').
+// AudioContext wird erst beim ersten Abhaken erzeugt (der Klick zaehlt als
+// User-Geste, die Browser fuer Audio voraussetzen) und danach wiederverwendet.
+// ===========================================================================
+let _audioCtx = null;
+function _ac() {
+  if (!_audioCtx) {
+    const AC = window.AudioContext || window.webkitAudioContext;
+    if (!AC) return null;
+    _audioCtx = new AC();
+  }
+  if (_audioCtx.state === 'suspended') _audioCtx.resume();
+  return _audioCtx;
+}
+
+// Ein kurzer Digital-Blip mit weicher Huellkurve (Attack + exp. Abfall).
+function _blip(ctx, freq, at, dur, gain) {
+  const t0 = ctx.currentTime + at;
+  const osc = ctx.createOscillator();
+  const g = ctx.createGain();
+  osc.type = 'square';
+  osc.frequency.setValueAtTime(freq, t0);
+  g.gain.setValueAtTime(0.0001, t0);
+  g.gain.exponentialRampToValueAtTime(gain, t0 + 0.006);
+  g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+  osc.connect(g).connect(ctx.destination);
+  osc.start(t0);
+  osc.stop(t0 + dur + 0.03);
+}
+
+// "Datenstrom": vier helle Blips, schnell aufsteigend wie herabfallender Code.
+function playDoneSound() {
+  const ctx = _ac();
+  if (!ctx) return;
+  [1046, 1318, 1568, 2093].forEach((hz, i) => _blip(ctx, hz, i * 0.045, 0.05, 0.10));
+}
+
 async function toggleTask(id) {
   const res = await api().toggle_task(id);
   if (res && res.error) return pushToast(res.message || 'Error');
   // Aufgabe lokal zwischen open/done verschieben (wie im Konzept).
   for (const l of state.lists) {
     let i = l.open.findIndex((x) => x.id === id);
-    if (i >= 0) { const [t] = l.open.splice(i, 1); t.done = true; l.done.unshift(t); break; }
+    if (i >= 0) {
+      const [t] = l.open.splice(i, 1); t.done = true; l.done.unshift(t);
+      playDoneSound();  // Ton nur beim Abhaken (offen -> erledigt)
+      break;
+    }
     i = l.done.findIndex((x) => x.id === id);
     if (i >= 0) { const [t] = l.done.splice(i, 1); t.done = false; l.open.push(t); break; }
   }
@@ -860,7 +887,7 @@ async function doMini(flag) {
   if (state.mini) {
     // Im Mini-Modus alles Überlagernde schließen, damit nur die Liste bleibt.
     state.focus = false; state.menu = null; state.modal = null;
-    state.colorOpen = false; state.adding = false;
+    state.adding = false;
   }
   render();
 }
@@ -984,9 +1011,6 @@ function closeMenusIfOutside(e, a) {
   if (state.menu && !e.target.closest('[data-keep]') && act !== 'open-notif' && act !== 'open-profile') {
     state.menu = null; changed = true;
   }
-  if (state.colorOpen && !e.target.closest('.accent-pop') && act !== 'tb-color') {
-    state.colorOpen = false; changed = true;
-  }
   if (state.ctxList && !e.target.closest('.list-ctx')) {
     state.ctxList = null; changed = true;
   }
@@ -1086,7 +1110,6 @@ async function onClick(e) {
     case 'tb-mini': await doMini(!state.mini); break;
     case 'tb-focus': state.focus = !state.focus; state.menu = null; render(); break;
     case 'rail-pin': toggleRailPin(); break;
-    case 'tb-color': state.colorOpen = !state.colorOpen; state.menu = null; render(); break;
     case 'tb-export': await doExport(); break;
     case 'tb-help': state.modal = 'shortcuts'; render(); break;
     case 'tb-lock': await doLock(); break;
@@ -1142,7 +1165,7 @@ function onContextMenu(e) {
     const x = Math.min(e.clientX, window.innerWidth - 190);
     const y = Math.min(e.clientY, window.innerHeight - 100);
     state.ctxList = { id: item.dataset.id, x, y };
-    state.menu = null; state.colorOpen = false;
+    state.menu = null;
     render();
     return;
   }
@@ -1158,7 +1181,7 @@ function onKeyGlobal(e) {
   const meta = e.metaKey || e.ctrlKey;
   if (e.key === 'Escape') {
     if (state.mini) { doMini(false); return; }
-    state.menu = null; state.modal = null; state.colorOpen = false;
+    state.menu = null; state.modal = null;
     state.focus = false; state.adding = false; state.addingTask = false;
     state.editingId = null; state.selectedId = null; state.ctxList = null;
     state.renamingId = null; state.confirmDeleteId = null; render(); return;

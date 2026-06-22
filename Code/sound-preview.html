@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<title>NoaToDo, Ton-Auswahl</title>
+<style>
+  :root {
+    --bg: #14141a;
+    --card: #1d1d26;
+    --line: #2c2c38;
+    --text: #e7e7ee;
+    --muted: #9a9aab;
+    --accent: #7c5cff;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; padding: 40px 20px;
+    background: var(--bg); color: var(--text);
+    font-family: "Space Grotesk", "Segoe UI", system-ui, sans-serif;
+    display: flex; flex-direction: column; align-items: center;
+  }
+  h1 { font-size: 22px; font-weight: 600; margin: 0 0 4px; }
+  p.sub { color: var(--muted); margin: 0 0 28px; font-size: 14px; text-align: center; }
+  .grid {
+    display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+    gap: 14px; width: 100%; max-width: 760px;
+  }
+  .card {
+    background: var(--card); border: 1px solid var(--line);
+    border-radius: 14px; padding: 18px;
+    display: flex; flex-direction: column; gap: 10px;
+  }
+  .num {
+    font-family: "JetBrains Mono", monospace; font-size: 12px;
+    color: var(--accent); letter-spacing: 1px;
+  }
+  .name { font-size: 16px; font-weight: 600; }
+  .desc { color: var(--muted); font-size: 13px; line-height: 1.4; flex: 1; }
+  button.play {
+    margin-top: 6px; border: none; cursor: pointer;
+    background: var(--accent); color: white;
+    border-radius: 10px; padding: 10px 14px;
+    font-size: 14px; font-weight: 600;
+    transition: transform .08s ease, filter .15s ease;
+  }
+  button.play:hover { filter: brightness(1.12); }
+  button.play:active { transform: scale(0.97); }
+  .hint {
+    margin-top: 30px; color: var(--muted); font-size: 13px;
+    text-align: center; max-width: 560px; line-height: 1.5;
+  }
+  code { color: var(--accent); font-family: "JetBrains Mono", monospace; }
+</style>
+</head>
+<body>
+  <h1>Welcher Ton beim Abhaken?</h1>
+  <p class="sub">Richtung Microsoft To Do, aber heller und digital (Matrix-Vibe). Hoer rein und sag mir die Nummer.</p>
+  <div class="grid" id="grid"></div>
+  <p class="hint">
+    Wenn du magst, mehrfach klicken (manche Toene wirken hintereinander netter).<br>
+    Sag mir einfach: <code>"Ich will Nummer X"</code>, dann baue ich genau den ins Abhaken ein.
+  </p>
+
+<script>
+'use strict';
+
+// Web Audio: ein gemeinsamer Context, erst bei erstem Klick erzeugt
+// (Browser erlauben Audio nur nach einer User-Geste).
+let ctx = null;
+function ac() {
+  if (!ctx) ctx = new (window.AudioContext || window.webkitAudioContext)();
+  if (ctx.state === 'suspended') ctx.resume();
+  return ctx;
+}
+
+// Ein einzelner Ton mit weicher Huellkurve (Attack + exponentieller Abfall).
+// detune: zweite, leicht verstimmte Stimme fuer digitalen Schimmer (in Cent).
+function tone(ctx, { type = 'sine', freq, at = 0, dur = 0.15, gain = 0.22, glideTo = null, detune = 0 }) {
+  const t0 = ctx.currentTime + at;
+  const g = ctx.createGain();
+  g.gain.setValueAtTime(0.0001, t0);
+  g.gain.exponentialRampToValueAtTime(gain, t0 + 0.006);
+  g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+  g.connect(ctx.destination);
+
+  const voices = detune ? [0, detune] : [0];
+  for (const d of voices) {
+    const osc = ctx.createOscillator();
+    osc.type = type;
+    osc.detune.setValueAtTime(d, t0);
+    osc.frequency.setValueAtTime(freq, t0);
+    if (glideTo) osc.frequency.exponentialRampToValueAtTime(glideTo, t0 + dur);
+    osc.connect(g);
+    osc.start(t0);
+    osc.stop(t0 + dur + 0.03);
+  }
+}
+
+// Die Ton-Varianten. Jede Funktion bekommt den AudioContext.
+// Fokus: hell, digital, leicht kryptisch (Matrix), in Anlehnung an MS To Do.
+const SOUNDS = [
+  {
+    name: 'Hell-Chime',
+    desc: 'Wie MS To Do, aber heller: zwei klare aufsteigende Toene mit feinem Glitzer-Oberton.',
+    play(c) {
+      tone(c, { type: 'triangle', freq: 1318, at: 0.00, dur: 0.11, gain: 0.20 });
+      tone(c, { type: 'triangle', freq: 1976, at: 0.07, dur: 0.20, gain: 0.20 });
+      tone(c, { type: 'sine',     freq: 2637, at: 0.07, dur: 0.16, gain: 0.05 });
+    },
+  },
+  {
+    name: 'Datenstrom',
+    desc: 'Schnelle, helle Digital-Blips, die aufsteigen. Kaskade wie herabfallender Code.',
+    play(c) {
+      const f = [1046, 1318, 1568, 2093];
+      f.forEach((hz, i) => tone(c, { type: 'square', freq: hz, at: i * 0.045, dur: 0.05, gain: 0.10 }));
+    },
+  },
+  {
+    name: 'Glitch-Ding',
+    desc: 'Heller digitaler Ding mit leicht verstimmtem Schimmer. Elektronisch und kryptisch.',
+    play(c) {
+      tone(c, { type: 'triangle', freq: 1760, at: 0, dur: 0.22, gain: 0.18, detune: 14 });
+      tone(c, { type: 'square',   freq: 3520, at: 0, dur: 0.04, gain: 0.05 });
+    },
+  },
+  {
+    name: 'Code-Tick',
+    desc: 'Zwei knackige, hohe Digital-Ticks. Sehr kurz, crisp, Terminal-Vibe.',
+    play(c) {
+      tone(c, { type: 'square', freq: 2093, at: 0.00, dur: 0.045, gain: 0.10 });
+      tone(c, { type: 'square', freq: 2637, at: 0.06, dur: 0.07,  gain: 0.10 });
+    },
+  },
+  {
+    name: 'Neon-Sweep',
+    desc: 'Heller elektrischer Aufwaerts-Sweep mit Glitzer-Schweif. Modern und glatt.',
+    play(c) {
+      tone(c, { type: 'triangle', freq: 1200, at: 0, dur: 0.13, gain: 0.20, glideTo: 2400 });
+      tone(c, { type: 'sine',     freq: 2637, at: 0.10, dur: 0.18, gain: 0.07 });
+    },
+  },
+  {
+    name: 'Matrix-Drop',
+    desc: 'Helle Digital-Toene fallen herab und loesen sich in einen klaren Ton auf.',
+    play(c) {
+      tone(c, { type: 'square',   freq: 2637, at: 0.00, dur: 0.05, gain: 0.08 });
+      tone(c, { type: 'square',   freq: 2093, at: 0.05, dur: 0.05, gain: 0.08 });
+      tone(c, { type: 'square',   freq: 1568, at: 0.10, dur: 0.05, gain: 0.08 });
+      tone(c, { type: 'triangle', freq: 1976, at: 0.16, dur: 0.26, gain: 0.18, detune: 10 });
+    },
+  },
+];
+
+const grid = document.getElementById('grid');
+SOUNDS.forEach((s, i) => {
+  const card = document.createElement('div');
+  card.className = 'card';
+  card.innerHTML =
+    '<div class="num">NR. ' + (i + 1) + '</div>' +
+    '<div class="name"></div>' +
+    '<div class="desc"></div>' +
+    '<button class="play">Anhoeren</button>';
+  card.querySelector('.name').textContent = s.name;
+  card.querySelector('.desc').textContent = s.desc;
+  card.querySelector('.play').addEventListener('click', () => s.play(ac()));
+  grid.appendChild(card);
+});
+</script>
+</body>
+</html>

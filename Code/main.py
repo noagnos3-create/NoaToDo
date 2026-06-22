@@ -10,6 +10,8 @@ from __future__ import annotations
 import ctypes
 import json
 import os
+import shutil
+import tempfile
 import time
 
 import webview
@@ -19,6 +21,19 @@ from backend.api import Api
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 INDEX = os.path.join(HERE, "frontend", "index.html")
+
+# Fester WebView2-Profilordner (Gate G14). Ersetzt den frueheren Privatmodus, der
+# pro Start ein neues Temp-Profil anlegte und sich anhaeufte. Liegt unter
+# %LOCALAPPDATA%\NoaToDo\webview, also benutzerprivat. Enthaelt nur nicht-sensiblen
+# UI-Cache (eigene HTML/CSS/JS/Fonts, GPU-Status), nie Aufgabeninhalte: das
+# Frontend nutzt kein localStorage/IndexedDB/Cookies/fetch, alle Daten kommen ueber
+# die In-Memory-Bridge ins DOM. Das sichere Wischen bei Lock/Panic kommt in Phase 11
+# (siehe Bauplan Gate G14).
+_LOCALAPPDATA = os.environ.get("LOCALAPPDATA") or os.path.join(os.path.expanduser("~"), "AppData", "Local")
+PROFILE_DIR = os.path.join(_LOCALAPPDATA, "NoaToDo", "webview")
+
+# Haelt den Single-Instance-Mutex fuer die gesamte Prozesslebensdauer offen.
+_single_instance_handle = None
 
 _TB_DARK  = "#1f1b14"   # entspricht --surface (dark) aus style.css
 _TB_LIGHT = "#faf6ee"   # entspricht --surface (light) aus style.css
@@ -37,13 +52,11 @@ _SWP_FRAMECHANGED  = 0x0020
 def _get_hwnd(window, wait: bool = False) -> int:
     """HWND des PyWebView-Fensters: direkt via window.native (WinForms-Form-Handle).
 
-    WICHTIG (Race, Gate G26): Der an ``webview.start`` uebergebene on_start-
-    Callback laeuft in einem eigenen Thread und feuert nachweislich, BEVOR
-    PyWebView ``window.native`` (die BrowserForm) gesetzt hat. In diesem Fenster
-    ist ``window.native`` noch ``None`` und der Handle damit 0. Frueher lief der
-    Screenshot-Schutz dann lautlos ins Leere (``_apply_screenshot_protection(0)``
-    kehrt sofort zurueck), weshalb Screenshots weiterhin moeglich waren. Mit
-    ``wait=True`` wird deshalb kurz (bis ~5 s) auf den Handle gepollt.
+    WICHTIG (Race): Der an ``webview.start`` uebergebene on_start-Callback laeuft
+    in einem eigenen Thread und kann feuern, BEVOR PyWebView ``window.native``
+    (die BrowserForm) gesetzt hat. In diesem Fenster ist ``window.native`` noch
+    ``None`` und der Handle damit 0. Mit ``wait=True`` wird deshalb kurz (bis ~5 s)
+    auf den Handle gepollt, statt 0 zurueckzugeben.
     """
     deadline = time.monotonic() + 5.0
     while True:
@@ -61,37 +74,6 @@ def _get_hwnd(window, wait: bool = False) -> int:
         if not wait or time.monotonic() > deadline:
             return 0
         time.sleep(0.05)
-
-
-# Screenshot-Schutz (Phase 6.5 / Gate G26): WDA_EXCLUDEFROMCAPTURE blendet das
-# Fenster in Screenshots, Snipping Tool und Bildschirmfreigaben schwarz aus
-# (Windows 10 2004+). WDA_MONITOR ist der schwächere Fallback älterer Systeme.
-# Schützt nicht gegen ein abfotografierendes Handy. Ein Settings-Schalter dafür
-# kann später ergänzt werden; Default ist AN.
-_WDA_MONITOR            = 0x00000001
-_WDA_EXCLUDEFROMCAPTURE = 0x00000011
-
-
-def _apply_screenshot_protection(hwnd: int) -> None:
-    """Nimmt das App-Fenster aus jeder Bildschirmaufnahme heraus (best effort).
-
-    Die Affinity wird auf dem Top-Level-Fenster gesetzt; das schliesst den
-    WebView2-Inhalt (Kindfenster ``Chrome_WidgetWin_0``) bei der Aufnahme mit
-    ein, ein separates Setzen auf den Kindfenstern ist nicht noetig (empirisch
-    geprueft: zentrale Pixel des maximierten Fensters werden schwarz aufgenommen).
-    Wichtig: Nach einer Handle-Neuerzeugung (z. B. FormBorderStyle-Wechsel im
-    Mini-Modus) faellt die Affinity auf 0 zurueck und muss neu gesetzt werden.
-    """
-    if not hwnd:
-        return
-    try:
-        user32 = ctypes.windll.user32
-        user32.SetWindowDisplayAffinity.argtypes = (ctypes.c_void_p, ctypes.c_uint)
-        user32.SetWindowDisplayAffinity.restype = ctypes.c_bool
-        if not user32.SetWindowDisplayAffinity(hwnd, _WDA_EXCLUDEFROMCAPTURE):
-            user32.SetWindowDisplayAffinity(hwnd, _WDA_MONITOR)
-    except Exception:
-        pass
 
 
 def _apply_titlebar_theme(hwnd: int, dark: bool) -> None:
@@ -118,11 +100,104 @@ def _apply_titlebar_theme(hwnd: int, dark: bool) -> None:
         pass
 
 
+_APP_USER_MODEL_ID = "NoaGnos.NoaToDo"
+
+
 def _set_app_user_model_id() -> None:
     """Eigene AppUserModelID setzen, damit die Taskbar das App-Icon (statt das
     von python.exe) zeigt und Fenster korrekt unter NoaToDo gruppiert."""
     try:
-        ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID("NoaGnos.NoaToDo")
+        ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(_APP_USER_MODEL_ID)
+    except Exception:
+        pass
+
+
+# ctypes-Strukturen fuer den Fenster-Eigenschaftsspeicher (IPropertyStore).
+# Hierueber bekommt der Taskbar-Button sein Icon, siehe _apply_taskbar_identity.
+class _GUID(ctypes.Structure):
+    _fields_ = [
+        ("Data1", ctypes.c_uint32),
+        ("Data2", ctypes.c_uint16),
+        ("Data3", ctypes.c_uint16),
+        ("Data4", ctypes.c_ubyte * 8),
+    ]
+
+
+class _PROPERTYKEY(ctypes.Structure):
+    _fields_ = [("fmtid", _GUID), ("pid", ctypes.c_uint32)]
+
+
+class _PROPVARIANT(ctypes.Structure):
+    _fields_ = [
+        ("vt", ctypes.c_ushort),
+        ("wReserved1", ctypes.c_ushort),
+        ("wReserved2", ctypes.c_ushort),
+        ("wReserved3", ctypes.c_ushort),
+        ("p", ctypes.c_void_p),
+        ("p2", ctypes.c_void_p),
+    ]
+
+
+def _make_guid(text: str) -> _GUID:
+    g = _GUID()
+    ctypes.oledll.ole32.CLSIDFromString(ctypes.c_wchar_p(text), ctypes.byref(g))
+    return g
+
+
+def _apply_taskbar_identity(hwnd: int, app_id: str, icon_path: str) -> None:
+    """Verknuepft den Taskbar-Button mit AppID UND Icon.
+
+    Sobald ein Fenster eine explizite AppUserModelID hat (siehe
+    ``_set_app_user_model_id``), leitet Windows das *Taskbar*-Icon nicht mehr aus
+    ``Form.Icon`` ab, sondern sucht das fuer diese AppID registrierte Icon (sonst
+    nur ueber eine installierte Startmenue-Verknuepfung). NoaToDo hat keine solche
+    Verknuepfung, daher zeigt die Taskbar das generische python.exe-Icon, waehrend
+    die Titelleiste ueber ``Form.Icon`` korrekt das Logo zeigt. Hier wird dem
+    Fenster-Eigenschaftsspeicher deshalb ``System.AppUserModel.RelaunchIconResource``
+    (= ``icon.ico,0``) plus die AppID mitgegeben, damit der Taskbar-Button das Logo
+    nutzt. Laeuft bereits auf dem UI-Thread (Aufruf aus ``_startup_window_setup``).
+    """
+    if not hwnd or not os.path.isfile(icon_path):
+        return
+    # System.AppUserModel.* teilen alle dieselbe FMTID; pid 5 = ID, pid 3 = RelaunchIconResource.
+    fmtid_appusermodel = "{9F4C2855-9F79-4B39-A8D0-E1D42DE1D5F3}"
+    iid_ipropertystore = "{886D8EEB-8CF2-4446-8D02-CDBA1DBDCF99}"
+    store = ctypes.c_void_p()
+    try:
+        ctypes.oledll.shell32.SHGetPropertyStoreForWindow(
+            ctypes.c_void_p(hwnd),
+            ctypes.byref(_make_guid(iid_ipropertystore)),
+            ctypes.byref(store),
+        )
+    except Exception:
+        return
+    if not store:
+        return
+    try:
+        vtbl = ctypes.cast(store, ctypes.POINTER(ctypes.c_void_p))[0]
+        funcs = ctypes.cast(vtbl, ctypes.POINTER(ctypes.c_void_p))
+        set_value = ctypes.WINFUNCTYPE(
+            ctypes.HRESULT, ctypes.c_void_p,
+            ctypes.POINTER(_PROPERTYKEY), ctypes.POINTER(_PROPVARIANT),
+        )(funcs[6])
+        commit = ctypes.WINFUNCTYPE(ctypes.HRESULT, ctypes.c_void_p)(funcs[7])
+        release = ctypes.WINFUNCTYPE(ctypes.c_ulong, ctypes.c_void_p)(funcs[2])
+
+        fmtid = _make_guid(fmtid_appusermodel)
+        entries = [
+            (_PROPERTYKEY(fmtid, 5), app_id),
+            (_PROPERTYKEY(fmtid, 3), icon_path + ",0"),
+        ]
+        for key, value in entries:
+            pv = _PROPVARIANT()
+            try:
+                ctypes.oledll.propsys.InitPropVariantFromString(
+                    ctypes.c_wchar_p(value), ctypes.byref(pv))
+                set_value(store, ctypes.byref(key), ctypes.byref(pv))
+            finally:
+                ctypes.oledll.ole32.PropVariantClear(ctypes.byref(pv))
+        commit(store)
+        release(store)
     except Exception:
         pass
 
@@ -143,6 +218,39 @@ def _apply_window_icon(window, icon_path: str) -> None:
         window.native.Icon = Icon(icon_path)
     except Exception:
         pass
+
+
+def _run_on_ui_thread(window, work) -> None:
+    """Native Fenster-Mutationen asynchron auf dem WinForms-UI-Thread ausfuehren.
+
+    NACHGEWIESENER DEADLOCK (Stack-Dump 2026-06-13): WinForms-Aufrufe ueber
+    Thread-Grenzen (z. B. ``window.native.Icon = ...`` in ``_apply_window_icon``)
+    direkt aus dem ``on_start``-/API-Worker-Thread blockieren die Nachrichten-
+    schleife, wenn der UI-Thread gerade das WebView2-Steuerelement initialisiert
+    (``edgechromium.py:__init__``). Folge: das Fenster erscheint nie, mal weiss,
+    mal "reagiert nicht", je nach Timing. ``BeginInvoke`` stellt die Arbeit nur in
+    die UI-Warteschlange und kehrt sofort zurueck; sie laeuft, sobald der UI-Thread
+    wieder Nachrichten verarbeitet (also nach der WebView2-Init). Kein blockierender
+    Cross-Thread-Aufruf mehr, damit kein Deadlock. Wartet kurz, bis das Fenster-
+    handle existiert, sonst wirft ``BeginInvoke``.
+    """
+    deadline = time.monotonic() + 5.0
+    while True:
+        native = getattr(window, "native", None)
+        try:
+            ready = native is not None and native.IsHandleCreated
+        except Exception:
+            ready = False
+        if ready:
+            try:
+                from System import Action
+                native.BeginInvoke(Action(work))
+            except Exception:
+                pass
+            return
+        if time.monotonic() > deadline:
+            return
+        time.sleep(0.05)
 
 
 def emit(window, event: str, payload=None) -> None:
@@ -175,7 +283,70 @@ def _register_session_lock_hook(window, api: Api) -> None:
     return
 
 
+def _acquire_single_instance() -> bool:
+    """Belegt einen benannten Windows-Mutex (Gate G19, vorgezogen).
+
+    Verhindert eine zweite Instanz: zwei Prozesse wuerden sich denselben festen
+    WebView2-Profilordner (und spaeter ``tasks.db.enc`` bzw. dessen Arbeitskopie)
+    gegenseitig sperren oder ueberschreiben (weisses Fenster, "reagiert nicht",
+    spaeter Datenkorruption). Gibt True zurueck, wenn diese Instanz die erste ist.
+    """
+    global _single_instance_handle
+    kernel32 = ctypes.windll.kernel32
+    _single_instance_handle = kernel32.CreateMutexW(None, False, "Local\\NoaToDoSingleton")
+    _ERROR_ALREADY_EXISTS = 183
+    return kernel32.GetLastError() != _ERROR_ALREADY_EXISTS
+
+
+def _cleanup_stale_webview_profiles() -> None:
+    """Loescht verwaiste WebView2-Profile aus frueheren Privatmodus-Starts (Gate G14).
+
+    Bis 2026-06-20 lief die App mit ``private_mode=True``: pywebview legte pro Start
+    ein Profil unter ``%TEMP%\\tmpXXXXXXXX\\EBWebView`` an, das bei hartem Beenden
+    nicht aufgeraeumt wurde und sich anhaeufte (zeitweise Starthaenger ueber eine
+    Minute). Seit dem Wechsel auf ``PROFILE_DIR`` entstehen keine neuen mehr; dieser
+    Einmal-Wisch raeumt die Altlasten weg. Es werden nur Temp-Ordner mit der
+    typischen ``tmp*``-Benennung UND einer ``EBWebView``-Signatur angefasst; noch
+    gesperrte Ordner (laufende ``msedgewebview2.exe``) werden uebersprungen.
+    """
+    temp_root = tempfile.gettempdir()
+    try:
+        entries = os.listdir(temp_root)
+    except OSError:
+        return
+    for name in entries:
+        if not name.startswith("tmp"):
+            continue
+        candidate = os.path.join(temp_root, name)
+        if not os.path.isdir(os.path.join(candidate, "EBWebView")):
+            continue
+        try:
+            shutil.rmtree(candidate)
+        except OSError:
+            # In Benutzung oder gesperrt: ignorieren, kein harter Fehler.
+            pass
+
+
 def main() -> None:
+    # Sichtbare Startmeldung: bestaetigt im Terminal, welcher Code laeuft. Hilft,
+    # einen veralteten Start zu erkennen (fehlt die Zeile, laeuft nicht dieser Stand).
+    print("[NoaToDo] Start.", flush=True)
+
+    # Single-Instance-Schutz (Gate G19): zweite Instanz sofort beenden, sonst
+    # Profil-/DB-Kollision auf dem gemeinsamen festen Profilordner.
+    if not _acquire_single_instance():
+        ctypes.windll.user32.MessageBoxW(
+            0,
+            "NoaToDo läuft bereits. Es kann nur eine Instanz geöffnet sein.",
+            "NoaToDo",
+            0x40,  # MB_ICONINFORMATION
+        )
+        print("[NoaToDo] Bereits aktiv, zweite Instanz beendet sich.", flush=True)
+        return
+
+    # Altlasten frueherer Privatmodus-Starts einmalig wegraeumen (Gate G14).
+    _cleanup_stale_webview_profiles()
+
     # Per-Monitor-V2-DPI-Kontext: muss vor dem ersten Fenster gesetzt sein.
     # Python.exe hat kein DPI-Manifest und laeuft sonst als DPI-unaware,
     # was bewirkt, dass Titelleiste und Rahmen bei erhoehter Monitor-Skalierung
@@ -210,51 +381,81 @@ def main() -> None:
 
     def on_start():
         _register_session_lock_hook(window, api)
-        # wait=True: on_start kann feuern, bevor window.native gesetzt ist (Race),
-        # siehe _get_hwnd. Ohne das Warten bliebe der Screenshot-Schutz lautlos aus.
-        hwnd = _get_hwnd(window, wait=True)
-        _apply_screenshot_protection(hwnd)
-        _apply_window_icon(window, os.path.join(HERE, "frontend", "icon.ico"))
-        raw = database.get_setting("dark")
-        initial_dark = str(raw).lower() != "false" if raw is not None else True
-        _apply_titlebar_theme(hwnd, initial_dark)
-        # DWM-Frame-Neuberechnung: DWM-Attribute gelten visuell erst nach
-        # SWP_FRAMECHANGED vollstaendig. Stellt sicher, dass die Titelleiste
-        # sofort in der richtigen Hoehe und Farbe gerendert wird.
-        if hwnd:
-            ctypes.windll.user32.SetWindowPos(
-                hwnd, 0, 0, 0, 0, 0,
-                _SWP_NOSIZE | _SWP_NOMOVE | _SWP_NOZORDER | _SWP_NOOWNERZORDER | _SWP_FRAMECHANGED,
-            )
+
+        # Alle nativen Fenster-Operationen laufen ueber den UI-Thread (BeginInvoke),
+        # NICHT direkt aus diesem Worker-Thread: sonst Deadlock mit der WebView2-
+        # Initialisierung, siehe _run_on_ui_thread. Im UI-Thread existiert das
+        # Handle bereits, daher _get_hwnd ohne wait.
+        def _startup_window_setup():
+            hwnd = _get_hwnd(window)
+            icon_path = os.path.join(HERE, "frontend", "icon.ico")
+            _apply_window_icon(window, icon_path)
+            # Titelleiste kommt aus Form.Icon (oben), die Taskbar braucht wegen der
+            # expliziten AppUserModelID ein eigens registriertes Icon, sonst bleibt
+            # der Taskbar-Button generisch. Siehe _apply_taskbar_identity.
+            _apply_taskbar_identity(hwnd, _APP_USER_MODEL_ID, icon_path)
+            raw = database.get_setting("dark")
+            initial_dark = str(raw).lower() != "false" if raw is not None else True
+            _apply_titlebar_theme(hwnd, initial_dark)
+            # DWM-Frame-Neuberechnung: DWM-Attribute gelten visuell erst nach
+            # SWP_FRAMECHANGED vollstaendig. Stellt sicher, dass die Titelleiste
+            # sofort in der richtigen Hoehe und Farbe gerendert wird.
+            if hwnd:
+                ctypes.windll.user32.SetWindowPos(
+                    hwnd, 0, 0, 0, 0, 0,
+                    _SWP_NOSIZE | _SWP_NOMOVE | _SWP_NOZORDER | _SWP_NOOWNERZORDER | _SWP_FRAMECHANGED,
+                )
+
+        _run_on_ui_thread(window, _startup_window_setup)
 
         def _on_setting_change(key: str, value) -> None:
             if key == "dark":
-                _apply_titlebar_theme(_get_hwnd(window), str(value).lower() not in ("false", "0", ""))
+                dark = str(value).lower() not in ("false", "0", "")
+                _run_on_ui_thread(window, lambda: _apply_titlebar_theme(_get_hwnd(window), dark))
 
         api._on_setting_change = _on_setting_change
 
         def _on_frame_changed(mini: bool) -> None:
             # Der Mini-Modus wechselt FormBorderStyle und erzeugt damit das
-            # native Fensterhandle neu; dabei geht die Display-Affinity (Gate
-            # G26) verloren. Nach jedem Wechsel (rein wie raus) den Schutz neu
-            # setzen, das Handle frisch holen (die HWND-Zahl aendert sich).
-            h = _get_hwnd(window)
-            _apply_screenshot_protection(h)
-            if not mini:
-                # Rahmen ist zurueck: Titelleisten-Farbe wieder ans Theme angleichen.
-                raw2 = database.get_setting("dark")
-                dark = str(raw2).lower() != "false" if raw2 is not None else True
-                _apply_titlebar_theme(h, dark)
-                if h:
-                    ctypes.windll.user32.SetWindowPos(
-                        h, 0, 0, 0, 0, 0,
-                        _SWP_NOSIZE | _SWP_NOMOVE | _SWP_NOZORDER | _SWP_NOOWNERZORDER | _SWP_FRAMECHANGED,
-                    )
+            # native Fensterhandle neu (die HWND-Zahl aendert sich). Nach dem
+            # Verlassen muss die Titelleisten-Farbe neu ans Theme angeglichen
+            # werden. Ueber den UI-Thread, sonst Cross-Thread-Deadlock wie in
+            # on_start.
+            def _frame_setup():
+                h = _get_hwnd(window)
+                if not mini:
+                    # Rahmen ist zurueck: Titelleisten-Farbe wieder ans Theme angleichen.
+                    raw2 = database.get_setting("dark")
+                    dark = str(raw2).lower() != "false" if raw2 is not None else True
+                    _apply_titlebar_theme(h, dark)
+                    if h:
+                        ctypes.windll.user32.SetWindowPos(
+                            h, 0, 0, 0, 0, 0,
+                            _SWP_NOSIZE | _SWP_NOMOVE | _SWP_NOZORDER | _SWP_NOOWNERZORDER | _SWP_FRAMECHANGED,
+                        )
+
+            _run_on_ui_thread(window, _frame_setup)
 
         api._on_frame_changed = _on_frame_changed
 
     icon = os.path.join(HERE, "frontend", "icon.ico")
-    webview.start(on_start, debug=_debug_enabled(), icon=icon)
+    # Fester WebView2-Profilordner statt Privatmodus (Gate G14, Stand 2026-06-20).
+    # Frueher lief die App mit private_mode=True und legte pro Start ein neues
+    # Temp-Profil an, das sich anhaeufte und den Start ausbremste. Der feste Ordner
+    # (private_mode=False, storage_path=PROFILE_DIR) ist erst zusammen mit dem
+    # Single-Instance-Schutz oben (Gate G19) tragfaehig: er verhindert, dass eine
+    # zweite/verwaiste Instanz das geteilte Profil sperrt (sonst weisses Fenster,
+    # "reagiert nicht"). Was im Profil liegt, ist nur nicht-sensibler UI-Cache, nie
+    # Aufgabeninhalte (siehe Kommentar an PROFILE_DIR). Das sichere Wischen dieses
+    # Ordners bei lock()/panic()/sauberem Quit folgt in Phase 11 (Bauplan G14).
+    os.makedirs(PROFILE_DIR, exist_ok=True)
+    webview.start(
+        on_start,
+        debug=_debug_enabled(),
+        icon=icon,
+        private_mode=False,
+        storage_path=PROFILE_DIR,
+    )
 
 
 def _debug_enabled() -> bool:
