@@ -10,9 +10,7 @@ The user does not like dashes (Gedankenstriche). Do NOT use the em-dash (Unicode
 
 Locally-usable milestone reached (Phases 1 to 6 of the Bauplan, plus the Phase 6.5 UX/security follow-ups: inline task edit via double-click, per-task delete button, click-to-select tasks, hardened single-task copy via `copy_task` (gate G23: backend-side Win32 clipboard, excluded from Win+V history and cloud clipboard, auto-clear after 60 s), Ctrl+C app shortcut removed entirely, contextual rail pencil (selected task: inline edit; otherwise: rename list), mini mode always-on-top). Implemented: `db.py`, `api.py`, `main.py`, `frontend/index.html`, `frontend/style.css`, `frontend/app.js`.
 
-Screenshot protection (former gate G26, `SetWindowDisplayAffinity` / `WDA_EXCLUDEFROMCAPTURE`) is **removed and should stay removed**. It caused recurring problems: on some GPU/driver combos the affinity flag blocks WebView2 from rendering at all (window stays white / "not responding"), and its startup wiring previously deadlocked the message loop. It also blacks out the window in legitimate screen sharing/recording and does nothing against a phone camera. Do not reintroduce it.
-
-Screenshot protection (gate G26, `SetWindowDisplayAffinity` / `WDA_EXCLUDEFROMCAPTURE`) takes the window out of every screen capture (screenshots, Snipping Tool, screen sharing, recording, Desktop Duplication); it renders black there while staying fully visible to the user. It is **on by default at every app start** and can be turned off for the current session via a Settings toggle; that off-state is **session-only and not persisted** (lives in `Api._screenshot_protect` in RAM, not in the `settings` table), so a restart re-enables it. The single `SetWindowDisplayAffinity` call has zero ongoing cost; it is applied by `main.py` (`_apply_screenshot_protection`) and **must always run on the WinForms UI thread via `_run_on_ui_thread`** (set at startup in `_startup_window_setup`, re-set on every mini-mode toggle in `_frame_setup` because the handle is recreated, and live-toggled through `api._on_screenshot_change`). It was once removed (2026-06-20) because its old wiring did a blocking `_get_hwnd(window, wait=True)` plus a cross-thread native call on the on_start worker thread and deadlocked WebView2 init (white / "not responding" window). Never reintroduce a worker-thread native call or a blocking handle-poll. Limits: does not stop a phone camera, and the window is black in legitimate screen sharing too (that is what the toggle is for); needs Windows 10 2004+ (`WDA_MONITOR` fallback on older).
+Screenshot protection (gate G26, `SetWindowDisplayAffinity` / `WDA_EXCLUDEFROMCAPTURE`) is **removed from the code and should stay removed** (there is no screenshot code anywhere in `main.py` or `backend/`; commit 45820c2 took out the last attempt). It caused recurring problems: on some GPU/driver combos the affinity flag blocks WebView2 from rendering at all (window stays white / "not responding"), and its startup wiring previously deadlocked the message loop (a blocking `_get_hwnd(window, wait=True)` plus a cross-thread native call on the on_start worker thread). It also blacks out the window in legitimate screen sharing/recording and does nothing against a phone camera. Do not reintroduce it.
 
 **WebView2 profile + single instance (gates G14 partial, G19 done, pulled forward 2026-06-20):** `main.py` no longer runs WebView2 in private mode. It starts PyWebView with `private_mode=False, storage_path=PROFILE_DIR` where `PROFILE_DIR = %LOCALAPPDATA%\NoaToDo\webview`, a single fixed, user-private profile folder. This replaced the old per-start temp profile under `%TEMP%\tmp...\EBWebView` that piled up on hard exit (real: dozens of leftovers, start hangs over a minute). `_cleanup_stale_webview_profiles()` removes those old temp profiles once at startup (only `tmp*` dirs carrying an `EBWebView` signature; locked ones are skipped). A named single-instance mutex (`_acquire_single_instance`, `Local\NoaToDoSingleton`, gate G19) makes a second instance show a message box and exit; the fixed folder is only safe together with this mutex (two instances would lock/corrupt the shared profile). The profile holds only non-sensitive UI cache (own HTML/CSS/JS/fonts, GPU state), never task content. **Still open for Phase 11 (gate G14 rest):** securely wipe `PROFILE_DIR` on `lock()`/`panic()`/clean quit, and clear orphaned `msedgewebview2.exe` that survive a hard kill and lock the folder (next start would otherwise fail with `0x800700AA` ERROR_BUSY). Do NOT reintroduce `private_mode=True`.
 
@@ -42,26 +40,30 @@ No build step, the frontend is vanilla HTML/CSS/JS loaded directly by PyWebView.
 
 NoaToDo is a **local-first Windows desktop app**: a Python backend and a vanilla JS frontend run together in a single native window via **PyWebView** (uses Windows WebView2, no bundled Chromium).
 
+All application code lives under the `Code/` subdirectory (the repo root holds only `CLAUDE.md`, `Code/`, and `Planung/`). Paths below are relative to `Code/`; this is also why every command runs from `Code/`.
+
 ```
-PyWebView window
-├── frontend/         # HTML + CSS + JS, rendering only, holds no truth
+Code/                      # run everything from here
+├── main.py                # entry point
+├── requirements.txt       # loose deps; requirements.lock.txt is the pinned set
+├── frontend/              # HTML + CSS + JS, rendering only, holds no truth
 │   ├── index.html
-│   ├── style.css     # CSS extracted 1:1 from NoaToDo UI Konzept.html
-│   ├── app.js        # all UI logic, calls pywebview.api.*
-│   └── fonts/        # JetBrains Mono + Space Grotesk as local .woff2
-└── backend/
-    ├── api.py         # js_api class, the bridge (see Bridge API below)
-    ├── db.py          # SQLCipher CRUD
-    ├── graph_sync.py  # one-way MS Graph -> SQLite sync (stub)
-    ├── auth.py        # MSAL PKCE login, tokens via keyring (stub)
-    ├── notify.py      # winotify Windows toasts (stub)
-    └── security.py    # lock/unlock/panic, key derivation (stub)
-data/tasks.db          # current working DB (SQLCipher-AES-256, no outer wrapper yet)
-data/tasks.db.enc      # Phase 11 target: ChaCha20-Poly1305(SQLCipher blob)
-main.py                # entry point
-requirements.txt
-tools/
-    make_icon.py       # one-off build tool: generates frontend/icon.ico from logo
+│   ├── style.css          # CSS extracted 1:1 from Planung/weiteres/NoaToDo UI Konzept.html
+│   ├── app.js             # all UI logic, calls pywebview.api.*
+│   ├── icon.ico           # window icon (generated by tools/make_icon.py)
+│   └── fonts/             # JetBrains Mono + Space Grotesk as local .woff2
+├── backend/
+│   ├── api.py             # js_api class, the bridge (see Bridge API below)
+│   ├── db.py              # SQLCipher CRUD
+│   ├── graph_sync.py      # one-way MS Graph -> SQLite sync (stub)
+│   ├── auth.py            # MSAL PKCE login, tokens via keyring (stub)
+│   ├── notify.py          # winotify Windows toasts (stub)
+│   └── security.py        # lock/unlock/panic, key derivation (stub)
+├── data/
+│   ├── tasks.db           # current working DB (SQLCipher-AES-256, no outer wrapper yet)
+│   └── tasks.db.enc       # Phase 11 target: ChaCha20-Poly1305(SQLCipher blob)
+└── tools/
+    └── make_icon.py       # one-off build tool: generates frontend/icon.ico from logo
 ```
 
 ## Implementation details
@@ -91,7 +93,9 @@ The same applies to `on_start` and the `_on_setting_change` / `_on_frame_changed
 
 **Frontend fonts:** JetBrains Mono and Space Grotesk must be local `.woff2` files. No external font CDN, this is a local-first app.
 
-**CSS:** The complete `<style>` section from `Planung/NoaToDo UI Konzept.html` is extracted verbatim into `frontend/style.css`. Do not rebuild it from scratch. The design tokens (colors, spacing, fonts) are defined there and must not be reinvented.
+**CSS:** The complete `<style>` section from `Planung/weiteres/NoaToDo UI Konzept.html` is extracted verbatim into `frontend/style.css`. Do not rebuild it from scratch. The design tokens (colors, spacing, fonts) are defined there and must not be reinvented.
+
+**Completion sound:** Checking a task off plays a short "Datenstrom" blip (`playDoneSound` in `app.js`). It is synthesized live with the Web Audio API (square-wave oscillators, no audio file), specifically so it needs no `media-src` and stays compatible with the strict CSP (`default-src 'self'`). Do not replace it with a bundled `.mp3`/`.wav` (that would require loosening the CSP). The `AudioContext` is created lazily on the first check (browsers require a user gesture before audio) and reused. `Code/sound-preview.html` is a standalone dev scratch file for auditioning sound variants, not part of the app and not loaded by it.
 
 ## Security rules (mandatory: all untrusted input must follow these)
 
@@ -150,6 +154,7 @@ All frontend<->backend communication goes through these methods on the `Api` cla
 | `sign_out()` | (keine) | `{ ok }` |
 | `sync_now()` | (keine) | (stub, Phase 9) |
 | `set_online(flag)` | bool | `{ online }` |
+| `get_wifi_signal()` | (keine) | `{ connected, percent, level }` (level 0-3, real WLAN strength via `netsh wlan show interfaces`; cosmetic, drives the rail WiFi icon) |
 | `lock()` | (keine) | `{ locked: true }` (frontend-only, gate G13 not enforced) |
 | `unlock(passphrase)` | str | `{ ok }` (always succeeds, Phase 11) |
 | `panic()` | (keine) | `{ locked: true }` (frontend-only) |

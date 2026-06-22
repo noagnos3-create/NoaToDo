@@ -532,6 +532,7 @@ Zurückkommen aus der Windows-Anmeldung garantiert gesperrt.
 > | **G26** | **❌ verworfen 2026-06-20 (zu fehleranfaellig)** | **Screenshot-Schutz (entfernt).** Idee war, das Fenster per `SetWindowDisplayAffinity(hwnd, WDA_EXCLUDEFROMCAPTURE)` aus Bildschirmaufnahmen herauszunehmen. Mehrfach umgesetzt und wieder entfernt, weil er reale Probleme machte: auf manchen GPU-/Treiber-Konstellationen blockiert die Affinity das WebView2-Rendern komplett (Fenster bleibt weiss / reagiert nicht), und die Startup-Verdrahtung verklemmte zudem die Nachrichtenschleife. Zusatznachteile: blendet das Fenster auch in legitimer Freigabe/Aufnahme schwarz aus und nuetzt nichts gegen eine Kamera. **Entscheidung: dauerhaft entfernt, nicht wieder einbauen.** Falls je erneut gewuenscht, zwingend mit Render-Verifikation nach dem Setzen (Affinity automatisch zuruecknehmen, wenn der Inhalt nicht mehr rendert) und ausschliesslich ueber `_run_on_ui_thread`. |
 > | **G24** | **9 (VOR dem ersten Sync)** | **Seed-Daten-Kollision auflösen.** Die Seeds markieren Listen als `synced=1`/`source='graph'`, tragen aber lokale UUIDs statt echter Graph-IDs. Beim ersten echten Sync entstünden Duplikate und "Geisterlisten", die nie Updates bekommen. Pflicht: Beim ersten erfolgreichen `sign_in()` eine Migration ausführen: alle Listen mit `synced=1`, deren ID mit `l` beginnt (= Seed, nicht Graph), samt Aufgaben auf `synced=0`/`source='local'` umstellen. Danach existieren keine Pseudo-Sync-Listen mehr. |
 > | **G25** | **11** | **RAM-Schlüssel-Hygiene.** `aes_key`, `chacha_key`, Master-Secret und Pepper als `bytearray` (nicht `bytes`/`str`) halten; beim Sperren/Panic/Beenden **vor** dem Verwerfen mit Nullen überschreiben. Die Passphrase unmittelbar nach der Ableitung verwerfen; Passphrase und Schlüssel dürfen **nie** in Logs, Exceptions, `get_status()` oder sonstwie ans Frontend gelangen. Im Code dokumentieren: Python gibt keine harten Garantien (der GC kann Kopien hinterlassen), das Nullen ist Best-Effort und trotzdem Pflicht. |
+> | **G27** | **12** | **Binary-Härtung gegen Reverse-Engineering + Manipulation.** Authenticode-Signing der `.exe` (Manipulation erkennbar, SmartScreen entschärft); keinen Python-Quelltext mitliefern (vorzugsweise Nuitka statt entpackbarem PyInstaller-Bundle, mindestens Docstrings/`assert`s strippen); optional Obfuskation (PyArmor) als Bonus. **Grundsatz: das Sicherheitsmodell beruht nie auf Code-Geheimhaltung** (Kerckhoffs), sondern allein auf Passphrase + DPAPI-Pepper + Verschlüsselung; die Härtung erhöht nur die Hürde. Keine fragilen Anti-Debugging-Tricks als Schutzbasis. Volltext in Phase 12. |
 >
 > **Zusätzlich vorgezogen:** G12 (externe WebView-Navigation verweigern) ist mit
 > wenigen Zeilen umsetzbar und wird **vor** Phase 7 umgesetzt, nicht erst in
@@ -656,7 +657,7 @@ an das Sprachmodell übergeben werden.
 
 ---
 
-## TEIL C: Baufolge (Phase 0 bis 11)
+## TEIL C: Baufolge (Phase 0 bis 12)
 
 ### Phase 0: Projektgerüst & Umgebung
 
@@ -1225,6 +1226,106 @@ Manager ist die Datei offline nicht angreifbar; eine zweite App-Instanz startet 
 
 ---
 
+### Phase 12: Auslieferung, Tests und Build (`.exe`, Packaging)
+
+**Ziel:** Aus dem lauffähigen Projekt eine verteilbare `NoaToDo.exe` machen, die sich auf
+einem fremden Windows-Rechner korrekt verhält, plus eine echte Testbasis und einen
+reproduzierbaren Build. Erst **nach** Phase 11 starten: die Verschlüsselung muss real
+sein, bevor man verteilt (sonst gibt man eine „Tresor-App" mit `DEV_AES_KEY` heraus).
+
+**Tun:**
+
+1. **Testbasis (heute existiert keine, kein `tests/`, kein pytest):**
+   - `pytest` als Dev-Abhängigkeit aufnehmen, `tests/` anlegen.
+   - Unit-Tests für die sicherheitskritischen Pfade:
+     - `db.py`: CRUD, Seed, parametrisierte Queries, `edit_task`-Spalten-Whitelist.
+     - `api.py`-Bridge: Eingabe-Validierung (G20: Längenlimits, Steuerzeichen-Strip,
+       `reorder`-Typprüfung, `set_setting`-Key-Whitelist) und Export-Härtung (G21:
+       reservierte Windows-Namen, Newline-Ersetzung).
+     - Krypto-Roundtrip (Phase 11): KDF-Domain-Separation (G15), `.enc`-Wrap/Unwrap
+       inklusive Header und frischer Nonce (G16), falsche Passphrase bzw. fehlender
+       Pepper liefern einen AEAD-Fehler, `.bak`-Recovery nach simuliertem Absturz.
+     - Lock-Durchsetzung (G13): im gesperrten Zustand liefert jede Bridge-Methode ausser
+       `unlock` nachweislich `locked`.
+   - Manuelle Smoke-Test-Checkliste für die WebView-UI (kein Headless-Browser nötig):
+     Liste/Aufgabe anlegen, Inline-Edit, Mini-Modus, Sperren/Entsperren, Erststart auf
+     frischem Profil.
+
+2. **Build / Packaging (Bauprozess):**
+   - PyInstaller (erst one-folder zum Debuggen, dann one-file prüfen) baut `NoaToDo.exe`.
+   - Icon fest einbetten (`frontend/icon.ico`); das löst zugleich den noch offenen
+     Taskleisten-Icon-Punkt, der bisher bewusst auf die `.exe` mit eingebettetem Icon
+     vertagt war.
+   - WebView2-Runtime: NoaToDo bündelt **kein** Chromium und braucht die
+     Evergreen-WebView2-Runtime auf dem Zielrechner. Klären und dokumentieren, ob der
+     Evergreen-Bootstrapper mitgeliefert oder eine Fixed-Version-Runtime gebündelt wird,
+     und sicherstellen, dass eine fehlende Runtime eine **verständliche Meldung** ergibt
+     statt eines weissen Fensters oder Absturzes.
+   - Reproduzierbarer Build aus `requirements.lock.txt` mit pip-Hash-Checking (Gate G11);
+     Version und Build-Datum in die `.exe`-Ressourcen schreiben.
+
+3. **Verhalten auf einem fremden Rechner (Erststart):**
+   - Keine `tasks.db.enc` vorhanden, also Onboarding: neue Passphrase anlegen
+     (Stärkeprüfung G8), Pepper erzeugen und Recovery-Export anbieten (G18), frischen
+     Tresor anlegen. Die App startet danach gesperrt (B.8).
+   - Eine untergeschobene oder manipulierte `tasks.db.enc` scheitert am AEAD-Tag
+     (G15/G16); auf einem fremden Windows-Konto fehlt zusätzlich der DPAPI-gebundene
+     Pepper (G18). Das ist Phase-11-Mechanik, hier nur als Auslieferungs-Abnahme
+     verankert, damit „fremder Rechner: neuer, gesperrter Tresor" ein geprüftes
+     Verhalten ist.
+
+4. **Binary-Härtung gegen Reverse-Engineering (neues Gate G27, siehe unten).**
+
+> **🔒 NEUES GATE (Phase 12):**
+> - **G27, Binary-Härtung gegen Reverse-Engineering + Manipulation.** Eine als Datei
+>   verteilte App ist grundsätzlich entpack- und disassemblierbar; das Sicherheitsmodell
+>   darf deshalb **nie** auf Code-Geheimhaltung beruhen (Kerckhoffs-Prinzip: die
+>   Sicherheit steckt allein in Passphrase + DPAPI-Pepper + Verschlüsselung, nicht im
+>   Verbergen des Codes; das bestätigt die bestehende Regel „kein Client-Secret in der
+>   App", Abschnitt Phase 8). Die Härtung erhöht nur die Hürde und macht Manipulation
+>   erkennbar. Pflicht bzw. empfohlen:
+>   - **Authenticode-Code-Signing der `.exe`** (Pflicht, sobald ein Zertifikat verfügbar
+>     ist): macht Manipulation am Binary erkennbar (gebrochene Signatur = veränderte
+>     Datei) und entschärft den SmartScreen-Warnscreen beim Verteilen.
+>   - **Keinen Python-Quelltext mitliefern, vorzugsweise Nuitka** statt PyInstaller:
+>     Nuitka kompiliert nach C-Niveau und ist deutlich schwerer zu lesen als ein
+>     PyInstaller-Bundle, das nur gepackte `.pyc` enthält und mit Standard-Tools
+>     entpackbar ist. Mindestens: Docstrings und `assert`s beim Build entfernen.
+>   - **Optional Obfuskation** (z.B. PyArmor) als zusätzliche Hürde, bewusst als Bonus,
+>     nicht als Schutzgrundlage.
+>   - **Keine fragilen Anti-Debugging-/Anti-VM-Tricks** als Sicherheitsbasis: sie stören
+>     legitime Nutzung und werden trivial umgangen.
+>
+>   **Leitlinie:** Jede der unten genannten Analyse-Methoden soll mit einer Hürde
+>   umstellt werden (Signing gegen Manipulation, Nuitka/kein Quelltext gegen
+>   Dekompilieren, optional Obfuskation), aber **keine Härtung darf die Funktionsweise
+>   der App einschränken** (kein langsamerer Start, keine blockierte WebView2-Anzeige,
+>   keine Fehlfunktion in VMs oder bei Bildschirmfreigabe, kein verweigerter Lauf auf
+>   legitimen Rechnern). Im Zweifel hat die Funktion Vorrang vor der Härtung; sie erhöht
+>   nur die Hürde, sie ist nicht die Sicherheitsbasis (das bleiben Passphrase + Pepper +
+>   Verschlüsselung). Das ist die gleiche Lehre wie bei G26 (Screenshot-Schutz), der
+>   genau deshalb verworfen wurde, weil eine „Härtung" das Rendern verhinderte.
+>
+>   **Begründung, wie eine `.exe` überhaupt analysiert wird (so entstehen die Hürden):**
+>   (1) **Strings auslesen** (`strings`): zieht lesbare Textfragmente, findet sofort fest
+>   eingebackene Geheimnisse wie ein `DEV_AES_KEY`; Hürde: gar keine Geheimnisse im
+>   Binary (Kerckhoffs). (2) **PyInstaller-Bundle entpacken** (`pyinstxtractor`): zerlegt
+>   die `.exe` in die einzelnen `.pyc`. (3) **Bytecode dekompilieren** (`decompyle3`):
+>   macht aus `.pyc` fast den Originalquelltext, deshalb ist reines PyInstaller schwach;
+>   Hürde: Nuitka (Kompilat auf C-Niveau) plus Docstring-/`assert`-Strip. (4)
+>   **Disassembler/Decompiler** (Ghidra, IDA) für echtes Maschinencode-Binary: deutlich
+>   mühsamer, aber möglich; Hürde: optional Obfuskation. (5) **Dynamische Analyse**
+>   (Debugger, Speicher-Dump): liest Schlüssel/Daten zur Laufzeit aus dem RAM, ohne den
+>   Code zu verstehen; dagegen helfen nicht Code-Hürden, sondern die schnelle Sperre,
+>   Panic und das RAM-Nullen (G25).
+
+**Abnahme:** `pytest` läuft grün; `NoaToDo.exe` startet auf einem frischen Windows-Profil
+ohne installiertes Python, legt bei fehlender DB einen neuen, gesperrten Tresor an und
+meldet eine fehlende WebView2-Runtime verständlich; die `.exe` ist signiert (sofern ein
+Zertifikat vorliegt) und enthält keinen im Klartext lesbaren Python-Quelltext.
+
+---
+
 ## NACHTRAG (2026-06-13): UX-Pflichten und -Erweiterungen aus dem UX/UI-Audit
 
 Nach dem lokal nutzbaren Meilenstein (Phase 6 + 6.5) wurde ein vollständiges
@@ -1451,6 +1552,7 @@ Icon verwenden.
 - [ ] Phase 9, Delta-Sync Cloud → SQLite (einseitig) **+ 🔒 G1 (textContent ZUERST), G2 (Host-Whitelist), G3 (Limits/Regel 4), G4 (Schreib-Lock), G10 (Fehler ohne Geheimnisse), G24 (Seed-Migration)**
 - [ ] Phase 10, Benachrichtigungen (winotify) + Fälligkeits-UI + echtes Glocken-Menü
 - [ ] Phase 11, Lock / Emergency / Doppel-Kaskade AES-256 + ChaCha20 (B.7) **+ 🔒 G6 (In-Memory-DB), G7 (Hex-Raw-Key), G8 (Argon2id-Kosten + Passphrase-Stärke), 🔴 G9 (`DEV_AES_KEY` entfernen), 🔴 G13 (Lock serverseitig), G14-Rest (PROFILE_DIR sicher wischen bei lock/panic/quit; fester Ordner + Altlasten-Wisch ✅ 2026-06-20), G15 (HKDF/kein Hash), G16 (.enc-Format), G17 (Write-back), G18 (DPAPI-Pepper), G25 (RAM-Hygiene)** (G19 Single-Instance ✅ 2026-06-20 vorgezogen)
+- [ ] Phase 12, Auslieferung + Tests + Build (`NoaToDo.exe`, PyInstaller/Nuitka, WebView2-Runtime, Erststart auf fremdem Rechner) **+ 🔒 G27 (Binary-Härtung gegen Reverse-Engineering), G11 (Hash-gepinnter Build)**
 - [ ] UX-Nachtrag 2026-06-13 (Abschnitt vor TEIL D): N1 Lade-Zustände (Phase 8/9), N2 Sync-Statuspille (9), N3 Konflikt-Notif (9), N4 Lock-Screen-Passphrase-UX (11), N5 Panik-Hotkey ohne Rückfrage (11), N6 Entsperr-Fehlerbildschirm (11), N7 move_task/reorder_lists/clear_completed, N8 Roadmap (D.3), N9 Startverhalten-Setting
 
 ### 🔒 Sicherheits-Gates auf einen Blick (Details in B.9)
@@ -1485,6 +1587,7 @@ Icon verwenden.
 | 🔒 G24 | 9 | Seed-Listen vor dem ersten Sync auf `local` migrieren (keine Pseudo-Graph-IDs) |
 | 🔒 G25 | 11 | RAM-Schlüssel-Hygiene: `bytearray` + Nullen, Passphrase sofort verwerfen, nie loggen |
 | ❌ G26 | verworfen + entfernt (2026-06-20) | Screenshot-Schutz `WDA_EXCLUDEFROMCAPTURE` blendete Aufnahmen schwarz aus, verhindert aber auf manchen GPUs das Rendern (Fenster weiss / reagiert nicht). Mehrfach ein-/ausgebaut, endgueltig entfernt. Nicht wieder einbauen ohne Render-Verifikation + Affinity-Rollback |
+| 🔒 G27 | 12 | Binary-Härtung: `.exe` signieren, kein Quelltext mitliefern (Nuitka), optional Obfuskation. Sicherheit beruht nie auf Code-Geheimhaltung (Kerckhoffs), nur auf Passphrase + Pepper + Verschlüsselung |
 
 **Hinweise (kein Gate):** Export schreibt unverschlüsselte Dateien (by design, der
 Nutzer exportiert bewusst Klartext); `main.py` `emit()` muss

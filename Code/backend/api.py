@@ -346,6 +346,44 @@ class Api:
         self.online = bool(flag)
         return {"online": self.online}
 
+    @bridge
+    def get_wifi_signal(self) -> dict[str, Any]:
+        # Liest die echte WLAN-Signalstaerke ueber "netsh wlan show interfaces".
+        # Rein visuell fuer das WLAN-Symbol in der Tool-Rail. "level" 0..3 bildet
+        # die Signalstaerke auf die Boegen des Symbols ab (0 = nur Punkt, kein
+        # Signal / kein WLAN). Labelunabhaengig: gesucht wird eine Zeile mit
+        # "Signal" und einem Prozentwert (so auch auf deutschem Windows: "Signal : 53%").
+        import re
+        import subprocess
+
+        try:
+            out = subprocess.run(
+                ["netsh", "wlan", "show", "interfaces"],
+                capture_output=True,
+                timeout=4,
+                creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+            )
+            text = out.stdout.decode("utf-8", "ignore")
+        except Exception:
+            return {"connected": False, "percent": None, "level": 0}
+
+        percent = None
+        for line in text.splitlines():
+            if "Signal" in line and "%" in line:
+                m = re.search(r"(\d{1,3})\s*%", line)
+                if m:
+                    percent = max(0, min(100, int(m.group(1))))
+                    break
+        if percent is None:
+            return {"connected": False, "percent": None, "level": 0}
+        if percent <= 25:
+            level = 1
+        elif percent <= 60:
+            level = 2
+        else:
+            level = 3
+        return {"connected": True, "percent": percent, "level": level}
+
     # =====================================================================
     # Sicherheit (Stubs: Phase 11)
     # =====================================================================

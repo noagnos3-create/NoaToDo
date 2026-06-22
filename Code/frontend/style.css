@@ -400,8 +400,8 @@
 }
 
 /* ---- density ---- */
-.app[data-density="comfortable"] { --row-pad: 14px; --gap: 12px; --task-fs: 16px; --section-gap: 28px; }
-.app[data-density="compact"]     { --row-pad: 8px;  --gap: 7px;  --task-fs: 14.5px; --section-gap: 18px; }
+.app[data-density="comfortable"] { --row-pad: 14px; --gap: 12px; --task-fs: 16px; --section-gap: 28px; --header-gap: 18px; }
+.app[data-density="compact"]     { --row-pad: 8px;  --gap: 7px;  --task-fs: 14.5px; --section-gap: 18px; --header-gap: 12px; }
 
 /* ===========================================================================
    base
@@ -418,6 +418,12 @@ input { font: inherit; }
 
 .app {
   position: fixed; inset: 0;
+  /* 6px hohe Verlaengerung der nativen Titelleiste nach unten: gleiche Farbe wie
+     die per DWM gesetzte Caption (var(--surface)), damit die Leiste insgesamt
+     hoeher wirkt, ohne den frueheren unbemalten weissen Streifen. box-sizing:
+     border-box (global) haelt .app trotz Rand an inset:0; der Inhalt rueckt 6px
+     nach unten. Der native Caption-Knopf-Bereich bleibt unveraendert oben. */
+  border-top: 6px solid var(--surface);
   display: grid;
   grid-template-columns: auto 1fr auto;
   grid-template-rows: 1fr;
@@ -639,7 +645,7 @@ input { font: inherit; }
 /* section header */
 .section { margin-top: var(--section-gap); }
 .section-head {
-  display: flex; align-items: center; gap: 8px; margin-bottom: 10px;
+  display: flex; align-items: center; gap: 8px; margin-bottom: var(--header-gap, 16px);
   text-align: left; padding: 0;
 }
 .section-head .s-pill {
@@ -648,9 +654,13 @@ input { font: inherit; }
   border: 1px solid var(--border);
   border-radius: 999px;
   background: var(--surface-2);
+  transition: border-color .2s, background .2s;
 }
-.section-head .s-title { font-family: var(--font-mono); font-size: 12px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--text-dim); }
-.section-head .s-count { font-family: var(--font-mono); font-size: 11px; color: var(--text-faint); }
+.section-head .s-title { font-family: var(--font-mono); font-size: 12px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--text-dim); transition: color .2s; }
+.section-head .s-count { font-family: var(--font-mono); font-size: 11px; color: var(--text-faint); transition: color .2s; }
+.section-head.open .s-pill { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 10%, var(--surface-2)); }
+.section-head.open .s-title { color: var(--accent); }
+.section-head.open .s-count { color: var(--accent); opacity: .7; }
 
 /* task row */
 .task-list { display: flex; flex-direction: column; gap: var(--gap); }
@@ -741,11 +751,11 @@ input { font: inherit; }
   width: 44px; height: 44px; border-radius: 50%;
   display: grid; place-items: center;
   background: var(--accent); color: var(--accent-ink);
-  box-shadow: 0 4px 12px color-mix(in oklab, var(--accent) 38%, transparent);
+  box-shadow: 0 0 10px color-mix(in oklab, var(--accent) 22%, transparent);
   transition: box-shadow .2s, background .2s;
 }
 /* Hover/Klick: nur dezent heller, kein Versetzen oder Skalieren (kein Springen). */
-.dock-add:hover { box-shadow: 0 6px 16px color-mix(in oklab, var(--accent) 46%, transparent); }
+.dock-add:hover { box-shadow: 0 0 13px color-mix(in oklab, var(--accent) 30%, transparent); }
 /* "+"-zu-"x"-Drehung: dreht federnd mit leichtem Ueberschwung und springt zurueck,
    exakt wie der Sidebar-Schalter oben links (gleiche Dauer + Bezier). Der Knopf
    wird beim Umschalten in-place behalten (siehe dock-toggle in app.js), damit die
@@ -785,6 +795,50 @@ input { font: inherit; }
   to   { opacity: 1; transform: none; }
 }
 
+/* Inline-Umbenennen / Loeschbestaetigung im Dock (Rechtsklick auf den grossen
+   Namen). Tritt an die Stelle der Namens-Pille (mittlere Grid-Spalte, zentriert).
+   Gleiche Pillen-Optik wie in der Sidebar, nur auf die Dock-Groesse angehoben;
+   das kleine Label sitzt oberhalb des Namens. */
+.dock-edit {
+  grid-column: 2; justify-self: center;
+  display: flex; flex-direction: column; gap: 7px; align-items: flex-start;
+  animation: rise .16s ease;
+}
+.dock-edit-label { padding-left: 20px; color: var(--text-faint); }
+.dock-edit-label.danger-tag { color: var(--danger); }
+.dock-edit-pill {
+  display: flex; align-items: center; gap: 12px;
+  padding: 13px 16px 13px 28px; border-radius: 999px;
+  background: color-mix(in oklab, var(--surface) 84%, transparent);
+  border: 1px solid var(--accent-line); box-shadow: var(--shadow-lg);
+  -webkit-backdrop-filter: blur(12px) saturate(1.25);
+  backdrop-filter: blur(12px) saturate(1.25);
+}
+.dock-edit-pill.confirm { border-color: color-mix(in oklab, var(--danger) 45%, var(--border)); }
+.dock-edit-pill input {
+  flex: 1; min-width: 240px; max-width: 44vw;
+  background: none; border: none; outline: none;
+  color: var(--text); font-size: 24px; font-weight: 600; letter-spacing: -.01em;
+}
+.dock-edit-pill input::placeholder { color: var(--text-faint); }
+.dock-edit-pill .confirm-name {
+  flex: 1; min-width: 0; max-width: 440px;
+  font-size: 24px; font-weight: 600; color: var(--text);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.dock-edit-pill .pill-x,
+.dock-edit-pill .confirm-del {
+  flex: none; width: 38px; height: 38px; border-radius: 50%;
+  display: grid; place-items: center;
+  transition: background .14s, color .14s;
+}
+.dock-edit-pill .pill-x { background: none; color: var(--text-faint); }
+.dock-edit-pill .pill-x:hover { background: var(--surface-3); color: var(--text); }
+.dock-edit-pill .pill-x svg { width: 20px; height: 20px; }
+.dock-edit-pill .confirm-del { background: var(--danger-wash); color: var(--danger); }
+.dock-edit-pill .confirm-del:hover { background: var(--danger); color: #fff; }
+.dock-edit-pill .confirm-del svg { width: 20px; height: 20px; }
+
 /* ===========================================================================
    RIGHT TOOLBAR (vertical rail)
    =========================================================================== */
@@ -801,15 +855,23 @@ input { font: inherit; }
 
 /* Subtiler Chevron-Griff rechts: pinnt die Rail (">" auto, "<" fixiert) */
 .rail-pin {
-  position: fixed; right: 1px; top: 50%; transform: translateY(-50%);
+  position: fixed; right: 0; top: 50%; transform: translateY(-50%);
   z-index: 6; display: grid; place-items: center;
-  width: 14px; height: 50px; border-radius: 6px 0 0 6px;
+  width: 14px; height: 82px; /* 50px Pill + 16px padding oben/unten fuer groessere Hitbox */
   color: var(--text-faint); opacity: .3;
-  transition: opacity .16s, color .16s, background .16s;
+  transition: opacity .16s, color .16s;
 }
-.rail-pin:hover { opacity: 1; color: var(--text); background: var(--surface-3); }
+/* Visueller Pill bleibt 50px hoch, sitzt in der Mitte der 82px-Hitbox */
+.rail-pin::before {
+  content: ''; position: absolute; inset: 16px 0;
+  border-radius: 6px 0 0 6px;
+  transition: background .16s;
+}
+.rail-pin:hover { opacity: 1; color: var(--text); }
+.rail-pin:hover::before { background: var(--surface-3); }
 .rail-pin.pinned { opacity: .85; color: var(--accent); }
-.rail-pin svg { width: 13px; height: 13px; }
+.rail-pin svg { width: 13px; height: 13px; transition: transform .22s ease; }
+.rail-pin.pinned svg { transform: rotate(180deg); }
 
 .toolbar-rail {
   display: flex; flex-direction: column; align-items: center; gap: 4px;
@@ -851,6 +913,21 @@ input { font: inherit; }
 }
 .tool-btn .tip .k { opacity: .55; margin-left: 6px; }
 .tool-btn:hover .tip { opacity: 1; transform: translateY(-50%) translateX(0); }
+
+/* WLAN-/Flugzeug-Symbol: beim Umschalten online<->offline fliegt das neue
+   Symbol von rechts (Rail-Seite) herein und purzelt dabei einmal durch. */
+.net-ico { display: grid; place-items: center; transform-origin: center; }
+.net-ico svg { width: 21px; height: 21px; display: block; }
+.net-ico.net-anim { animation: netFlyIn .52s cubic-bezier(.34, 1.56, .64, 1); }
+@keyframes netFlyIn {
+  0%   { transform: translateX(38px) rotate(190deg) scale(.35); opacity: 0; }
+  55%  { transform: translateX(-5px) rotate(-16deg) scale(1.12); opacity: 1; }
+  78%  { transform: translateX(3px)  rotate(8deg)   scale(.96); }
+  100% { transform: translateX(0)    rotate(0)      scale(1); opacity: 1; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .net-ico.net-anim { animation: none; }
+}
 
 /* ===========================================================================
    FOKUSMODUS (nur Listenname + Liste; Verlassen per Esc oder orangem X)
@@ -974,15 +1051,180 @@ input { font: inherit; }
     var(--bg);
   display: grid; place-items: center; animation: fade .2s;
 }
-.lock-card { text-align: center; display: flex; flex-direction: column; align-items: center; gap: 18px; }
-.lock-ring { width: 88px; height: 88px; border-radius: 50%; display: grid; place-items: center; background: var(--accent-wash); border: 1px solid var(--accent-line); color: var(--accent); }
-.lock-ring svg { width: 36px; height: 36px; }
+.lock-card { text-align: center; display: flex; flex-direction: column; align-items: center; gap: 26px; }
+.lock-ring { width: 184px; height: 184px; border-radius: 50%; display: grid; place-items: center; background: var(--accent-wash); border: 1px solid var(--accent-line); color: var(--accent); box-shadow: 0 18px 48px color-mix(in oklab, var(--accent) 22%, transparent); }
+.lock-ring svg { width: 84px; height: 84px; }
 .lock-card h2 { margin: 0; font-size: 22px; font-weight: 700; }
-.lock-card p { margin: 0; font-family: var(--font-mono); font-size: 12px; color: var(--text-faint); letter-spacing: .04em; }
-.lock-btn { margin-top: 6px; padding: 12px 26px; border-radius: 11px; background: var(--accent); color: var(--accent-ink); font-weight: 600; box-shadow: 0 8px 24px color-mix(in oklab, var(--accent) 40%, transparent); }
-.lock-dots { display: flex; gap: 8px; }
-.lock-dots i { width: 10px; height: 10px; border-radius: 50%; background: var(--border-strong); }
-.lock-dots i.fill { background: var(--accent); }
+
+/* Geschlossene "Password"-Pille: gleiche Pillen-Optik wie die Eingabepillen
+   der App (dock-input), nur als anklickbarer Platzhalter. */
+.lock-pill {
+  display: inline-flex; align-items: center;
+  padding: 11px 22px; border-radius: 999px;
+  background: color-mix(in oklab, var(--surface) 88%, transparent);
+  border: 1px solid var(--accent-line); box-shadow: var(--shadow-lg);
+  color: var(--text-faint); font-size: 15px; font-weight: 500;
+  cursor: text; transition: color .14s, border-color .14s;
+}
+.lock-pill:hover { color: var(--text-dim); border-color: var(--accent); }
+
+/* Geoeffnete Eingabepille: identische Optik wie .dock-input, aber im
+   Fluss statt absolut positioniert. */
+.lock-input {
+  display: flex; align-items: center; gap: 10px;
+  padding: 9px 16px; border-radius: 999px;
+  background: color-mix(in oklab, var(--surface) 88%, transparent);
+  border: 1px solid var(--accent-line); box-shadow: var(--shadow-lg);
+  -webkit-backdrop-filter: blur(12px) saturate(1.25);
+  backdrop-filter: blur(12px) saturate(1.25);
+  animation: dock-grow .2s cubic-bezier(.34, 1.56, .64, 1);
+}
+.lock-input input {
+  width: 220px; max-width: 60vw; min-width: 0;
+  background: none; border: none; outline: none;
+  color: var(--text); font-size: 15px; font-weight: 500;
+}
+.lock-input input::placeholder { color: var(--text-faint); }
+.lock-input .dock-close {
+  flex: none; width: 24px; height: 24px; border-radius: 50%;
+  display: grid; place-items: center;
+  background: none; color: var(--text-faint);
+  transition: background .14s, color .14s;
+}
+.lock-input .dock-close svg { width: 15px; height: 15px; }
+.lock-input .dock-close:hover { background: var(--surface-3); color: var(--text); }
+
+/* ===========================================================================
+   PANIK-TRIGGER (zweistufig entsichert, wie eine Cockpit-Waffenabdeckung)
+   =========================================================================== */
+/* Rail-Knopf bleibt rot hervorgehoben, solange das Panik-Panel offen ist */
+.tool-btn.danger.on { color: #fff; background: var(--danger); }
+.tool-btn.danger.on:hover { background: color-mix(in oklab, var(--danger) 88%, #000); }
+
+/* Schwebende Pille links neben dem Panik-Knopf der Rail */
+.panic-panel {
+  position: fixed; right: 80px; top: 50%; transform: translateY(-50%);
+  z-index: 45; width: 268px;
+  background: var(--surface); overflow: hidden;
+  border: 1px solid color-mix(in oklab, var(--danger) 50%, var(--border));
+  border-radius: 16px;
+  box-shadow: var(--shadow-lg), 0 0 26px color-mix(in oklab, var(--danger) 20%, transparent);
+  animation: panic-slide .22s cubic-bezier(.2,.7,.3,1);
+}
+@keyframes panic-slide { from { opacity: 0; transform: translateY(-50%) translateX(16px) scale(.96); } }
+.panic-stripe { height: 4px; background: repeating-linear-gradient(45deg, var(--danger) 0 12px, color-mix(in oklab,var(--danger) 55%, #000) 12px 24px); }
+.panic-head { display: flex; align-items: center; gap: 9px; padding: 13px 11px 4px 15px; }
+.panic-head-icon { color: var(--danger); display: grid; place-items: center; }
+.panic-head-icon svg { width: 18px; height: 18px; }
+.panic-head-text { font-size: 14.5px; font-weight: 700; letter-spacing: -.01em; }
+.panic-x { margin-left: auto; width: 26px; height: 26px; border-radius: 7px; display: grid; place-items: center; color: var(--text-faint); transition: background .12s, color .12s; }
+.panic-x:hover { background: var(--surface-3); color: var(--text); }
+.panic-x svg { width: 15px; height: 15px; }
+.panic-note { padding: 0 15px 13px; font-size: 10.5px; color: var(--text-faint); line-height: 1.5; }
+
+/* Stufe 1: Kippschalter ("Sicherung"). Knopf gleitet von "No" auf "Yes". */
+.panic-switch {
+  position: relative; display: flex; align-items: center;
+  width: calc(100% - 30px); margin: 0 15px; height: 46px;
+  border-radius: 12px; padding: 4px;
+  background: var(--surface-3); border: 1px solid var(--border-strong);
+  cursor: pointer; overflow: hidden;
+  transition: background .2s, border-color .2s, box-shadow .2s;
+}
+.panic-switch.armed {
+  background: var(--danger-wash);
+  border-color: color-mix(in oklab, var(--danger) 55%, var(--border));
+  box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--danger) 28%, transparent),
+              0 0 18px color-mix(in oklab, var(--danger) 30%, transparent);
+}
+.panic-switch-label {
+  flex: 1; text-align: center; position: relative; z-index: 2; pointer-events: none;
+  font-family: var(--font-mono); font-size: 12px; font-weight: 700;
+  letter-spacing: .12em; text-transform: uppercase; transition: color .18s;
+}
+.panic-switch-label.off { color: var(--text); }
+.panic-switch-label.on  { color: var(--text-faint); }
+.panic-switch.armed .panic-switch-label.off { color: var(--text-faint); }
+.panic-switch.armed .panic-switch-label.on  { color: var(--danger); }
+/* Der gleitende Knopf, mit Hazard-Schraffur wie eine echte Abdeckung */
+.panic-knob {
+  position: absolute; z-index: 1; top: 4px; left: 4px; bottom: 4px;
+  width: calc(50% - 4px); border-radius: 9px;
+  background: var(--surface); border: 1px solid var(--border-strong);
+  box-shadow: 0 1px 3px rgba(0,0,0,.22);
+  background-image: repeating-linear-gradient(45deg, transparent 0 5px, color-mix(in oklab, var(--text-faint) 16%, transparent) 5px 8px);
+  transition: transform .26s cubic-bezier(.5,1.5,.4,1), border-color .2s, background-image .2s;
+}
+.panic-switch.armed .panic-knob {
+  transform: translateX(100%);
+  border-color: var(--danger);
+  background-image: repeating-linear-gradient(45deg, transparent 0 5px, color-mix(in oklab, var(--danger) 42%, transparent) 5px 8px);
+}
+
+/* Stufe 2: separate Confirm-Pille, faehrt unter dem Schalter aus */
+.panic-confirm-wrap { padding: 11px 15px 15px; animation: panic-drop .26s cubic-bezier(.2,.7,.3,1); }
+@keyframes panic-drop { from { opacity: 0; transform: translateY(-8px); } }
+.panic-confirm {
+  width: 100%; height: 44px; display: flex; align-items: center; justify-content: center; gap: 8px;
+  border-radius: 12px; background: var(--danger); color: #fff;
+  font-weight: 700; font-size: 14px; letter-spacing: .02em;
+  box-shadow: 0 6px 18px color-mix(in oklab, var(--danger) 36%, transparent);
+  animation: panic-pulse 1.7s ease-in-out infinite;
+  transition: transform .1s, background .14s;
+}
+.panic-confirm:hover { background: color-mix(in oklab, var(--danger) 88%, #000); }
+.panic-confirm:active { transform: scale(.97); }
+.panic-confirm svg { width: 16px; height: 16px; }
+@keyframes panic-pulse {
+  0%,100% { box-shadow: 0 6px 16px color-mix(in oklab, var(--danger) 28%, transparent); }
+  50%     { box-shadow: 0 6px 28px color-mix(in oklab, var(--danger) 62%, transparent); }
+}
+
+/* Vollbild-Schirme: Wipe-Fortschritt und Bestaetigung */
+.panic-screen {
+  position: fixed; inset: 0; z-index: 70; padding: 24px;
+  display: grid; place-items: center; animation: fade .2s;
+  background:
+    radial-gradient(circle at 50% 40%, color-mix(in oklab, var(--danger) 18%, var(--bg)), var(--bg) 60%),
+    linear-gradient(var(--bg-grid) 1px, transparent 1px) 0 0/100% 28px,
+    linear-gradient(90deg, var(--bg-grid) 1px, transparent 1px) 0 0/28px 100%,
+    var(--bg);
+}
+.panic-screen.done {
+  background:
+    radial-gradient(circle at 50% 40%, color-mix(in oklab, var(--secure) 15%, var(--bg)), var(--bg) 62%),
+    linear-gradient(var(--bg-grid) 1px, transparent 1px) 0 0/100% 28px,
+    linear-gradient(90deg, var(--bg-grid) 1px, transparent 1px) 0 0/28px 100%,
+    var(--bg);
+}
+.panic-screen-card { width: min(440px, 100%); text-align: center; display: flex; flex-direction: column; align-items: center; gap: 18px; }
+.panic-screen-ring {
+  width: 124px; height: 124px; border-radius: 50%; display: grid; place-items: center;
+  background: var(--danger-wash); color: var(--danger);
+  border: 1px solid color-mix(in oklab, var(--danger) 45%, var(--border));
+  box-shadow: 0 18px 48px color-mix(in oklab, var(--danger) 26%, transparent);
+  animation: panic-throb 1.1s ease-in-out infinite;
+}
+.panic-screen-ring svg { width: 56px; height: 56px; }
+.panic-screen-ring.ok {
+  background: var(--secure-wash); color: var(--secure);
+  border-color: color-mix(in oklab, var(--secure) 45%, var(--border));
+  box-shadow: 0 18px 48px color-mix(in oklab, var(--secure) 26%, transparent);
+  animation: panic-pop .3s cubic-bezier(.34,1.56,.64,1);
+}
+@keyframes panic-throb { 0%,100% { transform: scale(1); } 50% { transform: scale(1.05); } }
+@keyframes panic-pop { from { transform: scale(.7); opacity: 0; } }
+.panic-screen h2 { margin: 0; font-size: 24px; font-weight: 700; letter-spacing: -.02em; }
+.panic-screen-sub { margin: 0; max-width: 360px; color: var(--text-dim); font-size: 13.5px; line-height: 1.6; }
+.panic-bar { width: min(360px, 80vw); height: 10px; border-radius: 999px; background: var(--surface-3); border: 1px solid var(--border); overflow: hidden; margin-top: 2px; }
+.panic-bar-fill {
+  height: 100%; width: 0%; border-radius: 999px;
+  background: linear-gradient(90deg, color-mix(in oklab, var(--danger) 70%, #000), var(--danger));
+  box-shadow: 0 0 12px color-mix(in oklab, var(--danger) 60%, transparent);
+}
+.panic-wipe-row { display: flex; justify-content: space-between; align-items: center; width: min(360px, 80vw); font-size: 11px; color: var(--text-faint); }
+.panic-wipe-row .panic-pct { color: var(--danger); font-weight: 700; }
+.panic-screen-btn { flex: none; min-width: 150px; margin-top: 6px; }
 
 /* toast */
 /* bottom angehoben, damit Toasts ueber dem fest verankerten .list-dock stehen. */

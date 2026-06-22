@@ -14,6 +14,12 @@
   <link rel="stylesheet" href="style.css" />
 </head>
 <body>
+  <!-- TEMPORAERER DIAGNOSE-MARKER (wieder entfernen): liegt ausserhalb von #root,
+       wird also vom render() nicht ueberschrieben. Sichtbar = neuer Code laeuft. -->
+  <div style="position:fixed;top:0;left:0;right:0;z-index:99999;background:#d92626;color:#fff;
+              font:700 14px/1.6 monospace;text-align:center;padding:6px;letter-spacing:1px;">
+    BUILD-MARKER 20:58, wenn du das siehst, laeuft der NEUE Code
+  </div>
   <div class="app" id="root">
     <div class="boot">Unpacking vault…</div>
   </div>

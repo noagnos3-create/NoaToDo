@@ -33,7 +33,6 @@ const Icons = {
   ChevLeft: _svg(_p('M15 6l-6 6 6 6')),
   Grip: _svg(_c(9, 6, 1) + _c(15, 6, 1) + _c(9, 12, 1) + _c(15, 12, 1) + _c(9, 18, 1) + _c(15, 18, 1), { fill: 'currentColor', stroke: 'none' }),
   Plane: _svg(_p('M21 16v-2l-8-5V3.5a1.5 1.5 0 0 0-3 0V9l-8 5v2l8-2.5V19l-2 1.5V22l3.5-1 3.5 1v-1.5L13 19v-5.5l8 2.5z')),
-  Wifi: _svg(_p('M5 12.5a10 10 0 0 1 14 0M8 15.8a5.5 5.5 0 0 1 8 0') + _c(12, 19, 0.6), { fill: 'currentColor' }),
   Expand: _svg(_p('M8 3H3v5M16 3h5v5M8 21H3v-5M16 21h5v-5')),
   Mini: _svg(_p('M21 9V6a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h4') + _r(12, 13, 10, 7, 2)),
   Maximize: _svg(_p('M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7')),
@@ -57,6 +56,25 @@ const Icons = {
   Download: _svg(_p('M12 3v12M8 11l4 4 4-4') + _p('M4 19h16')),
 };
 
+// WLAN-Symbol mit Signalstaerke (wie in den Windows-Schnelleinstellungen):
+// ein Punkt plus bis zu drei konzentrische Boegen. "level" 0..3 bestimmt, wie
+// viele Boege voll gezeichnet werden; die uebrigen bleiben blass (Resthuelle),
+// damit das Symbol seine Form behaelt. 0 = nur Punkt (kein Signal).
+function wifiSvg(level) {
+  const lv = Math.max(0, Math.min(3, level | 0));
+  const arcs = [
+    'M9.2 16.1a4 4 0 0 1 5.6 0',       // innerer Bogen
+    'M6.7 13.7a7.5 7.5 0 0 1 10.6 0',  // mittlerer Bogen
+    'M4.3 11.2a11 11 0 0 1 15.4 0',    // aeusserer Bogen
+  ];
+  let inner = '<circle cx="12" cy="18.6" r="1.05" fill="currentColor" stroke="none"/>';
+  arcs.forEach((d, i) => {
+    const on = (i + 1) <= lv;
+    inner += `<path d="${d}" opacity="${on ? '1' : '0.22'}"/>`;
+  });
+  return _svg(inner, { fill: 'none' });
+}
+
 const ACCENTS = ['#d97757', '#c75d3a', '#5a9d6b', '#4a86c5', '#d4a23c', '#a66a9c'];
 
 // ===========================================================================
@@ -65,10 +83,11 @@ const ACCENTS = ['#d97757', '#c75d3a', '#5a9d6b', '#4a86c5', '#d4a23c', '#a66a9c
 let state = {
   lists: [], activeId: null, settings: {}, online: true, locked: false,
   menu: null,        // 'notif' | 'profile'
-  modal: null,       // 'emergency' | 'status' | 'rename' | 'delete' | 'shortcuts' | 'settings'
+  modal: null,       // 'status' | 'rename' | 'delete' | 'shortcuts' | 'settings'
   ctxList: null,     // Rechtsklick-Kontextmenue einer Liste: { id, x, y } | null
   renamingId: null,  // Liste, die gerade inline (Pille in der Sidebar) umbenannt wird
   confirmDeleteId: null, // Liste, fuer die die Inline-Loeschbestaetigung in der Sidebar offen ist
+  listEditDock: false, // true: Inline-Umbenennen/Loeschen wird im unteren Dock gezeigt (Rechtsklick auf den grossen Namen) statt in der Sidebar
   focus: false,
   mini: false,       // kompakter Mini-Fenster-Modus (oben rechts angeheftet)
   railPinned: false, // Tool-Rail fixiert (per Chevron-Griff), bleibt sichtbar
@@ -78,10 +97,18 @@ let state = {
   doneOpen: false,   // "Completed"-Sektion eingeklappt?
   editingId: null,   // Aufgabe, die gerade inline bearbeitet wird (Doppelklick)
   selectedId: null,  // per Klick ausgewaehlte Aufgabe (Ziel fuer Copy/Edit der Rail)
+  panic: null,       // zweistufiger Panik-Trigger: { armed:bool, stage:'panel'|'wiping'|'done' } | null
 };
 
 const root = document.getElementById('root');
 const api = () => window.pywebview.api;
+
+// WLAN-/Flugzeug-Knopf: aktuelle WLAN-Signalstaerke (0..3) und ein einmaliges
+// Flag, das beim Umschalten online<->offline die Einflug-Animation ausloest.
+// Beides bewusst ausserhalb von "state": rein praesentationsbezogen, kein
+// Bestandteil der Backend-Wahrheit.
+let wifiLevel = 3;
+let netAnim = false;
 // HTML-Escaping fuer JEDE Einsetzung von (potenziell) Fremddaten in innerHTML.
 // Maskiert & < > " ', deckt damit Text-, doppelt- UND einfach-gequotete
 // Attribut-Kontexte ab. Das fehlende ' war eine latente Luecke: sobald ein
@@ -91,7 +118,11 @@ const api = () => window.pywebview.api;
 const esc = (s) => String(s == null ? '' : s)
   .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
   .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
-const activeList = () => state.lists.find((l) => l.id === state.activeId) || state.lists[0] || null;
+// Kein Auto-Fallback auf die erste Liste: ist keine Liste ausgewaehlt
+// (state.activeId === null), bleibt die Arbeitsflaeche bewusst leer. So startet
+// die App immer als leere Flaeche und oeffnet erst eine Liste, wenn man eine
+// anklickt.
+const activeList = () => state.lists.find((l) => l.id === state.activeId) || null;
 
 // ===========================================================================
 // Render-Funktionen (1:1 zu den Konzept-Komponenten)
@@ -138,8 +169,10 @@ function renderDeletePill(l) {
 function renderSidebar() {
   const I = Icons;
   const items = state.lists.map((l) => {
-    if (state.renamingId === l.id) return renderRenamePill(l);
-    if (state.confirmDeleteId === l.id) return renderDeletePill(l);
+    // Wird gerade ueber das untere Dock umbenannt/geloescht, bleibt der
+    // Sidebar-Eintrag normal (sonst doppelte Pille mit doppelter Input-id).
+    if (!state.listEditDock && state.renamingId === l.id) return renderRenamePill(l);
+    if (!state.listEditDock && state.confirmDeleteId === l.id) return renderDeletePill(l);
     const count = l.open.length;
     const cls = 'list-item' + (l.id === state.activeId ? ' active' : '') + (count === 0 ? ' zero' : '');
     return `
@@ -198,8 +231,14 @@ function renderMain() {
   const I = Icons;
   const list = activeList();
   if (!list) {
+    // Zwei Leerzustaende: gar keine Listen vorhanden, oder schlicht keine Liste
+    // ausgewaehlt (so startet die App, leere Arbeitsflaeche). Im zweiten Fall ein
+    // dezenter Hinweis, dass man links eine Liste oeffnet.
+    const note = state.lists.length === 0
+      ? '// no lists yet, create one in the sidebar'
+      : '// open a list from the sidebar';
     return `<main class="main"><div class="main-inner">
-      <div class="empty-note">// no lists yet, create one in the sidebar</div>
+      <div class="empty-note">${note}</div>
     </div></main>`;
   }
   const openSection = list.open.length === 0
@@ -208,7 +247,7 @@ function renderMain() {
 
   const doneSection = list.done.length > 0 ? `
     <div class="section">
-      <button class="section-head${state.doneOpen ? '' : ' collapsed'}" data-act="toggle-done">
+      <button class="section-head${state.doneOpen ? ' open' : ' collapsed'}" data-act="toggle-done">
         <span class="s-pill">
           <span class="s-title">Completed</span>
           <span class="s-count">${list.done.length}</span>
@@ -249,6 +288,12 @@ function renderMain() {
 // Der kleine Punkt kodiert den Sync-Status (gruen = aus MS To Do, Akzent = lokal).
 function renderListDock(list) {
   const I = Icons;
+  // Rechtsklick auf den grossen Namen oeffnet (wie in der Sidebar) das Rename/
+  // Delete-Menue; die gewaehlte Aktion erscheint dann als Inline-Pille HIER im
+  // Dock (damit sie auch bei eingeklappter Sidebar sichtbar ist).
+  if (state.listEditDock && (state.renamingId === list.id || state.confirmDeleteId === list.id)) {
+    return renderDockEdit(list);
+  }
   const adding = state.addingTask;
   const inputPill = adding ? `
         <div class="dock-input" data-keep>
@@ -264,6 +309,37 @@ function renderListDock(list) {
         <button class="dock-add${adding ? ' active' : ''}" data-act="dock-toggle"
           title="${adding ? 'Cancel' : 'Add task'}">${I.Plus}</button>
         ${inputPill}
+      </div>
+    </div>`;
+}
+
+// Inline-Umbenennen / Loeschbestaetigung im Dock (an Stelle der Namens-Pille).
+// Gleiche Optik wie die Sidebar-Pillen, nur auf die Dock-Groesse angepasst; das
+// kleine Label sitzt oberhalb des Namens, der "+"-Knopf entfaellt solange.
+function renderDockEdit(list) {
+  const I = Icons;
+  if (state.renamingId === list.id) {
+    return `
+    <div class="list-dock">
+      <div class="dock-edit" data-keep data-id="${esc(list.id)}">
+        <span class="dock-edit-label tag">New name</span>
+        <div class="dock-edit-pill">
+          <input id="rename-dock-input" value="${esc(list.name)}" placeholder="List name…" />
+          <button class="pill-x" data-act="cancel-rename-list" title="Cancel">${I.Close}</button>
+        </div>
+      </div>
+    </div>`;
+  }
+  const n = list.open.length + list.done.length;
+  return `
+    <div class="list-dock">
+      <div class="dock-edit" data-keep data-id="${esc(list.id)}">
+        <span class="dock-edit-label tag danger-tag">Delete${n ? ' · ' + n : ''}?</span>
+        <div class="dock-edit-pill confirm">
+          <span class="confirm-name" title="${esc(list.name)}">${esc(list.name)}</span>
+          <button class="confirm-del" data-act="do-delete-list" title="Delete list">${I.Trash}</button>
+          <button class="pill-x" data-act="cancel-delete-list" title="Cancel">${I.Close}</button>
+        </div>
       </div>
     </div>`;
 }
@@ -310,8 +386,22 @@ function renderFocus() {
   const openRows = list.open.length
     ? `<div class="task-list" data-tasklist="open">${list.open.map(renderTask).join('')}</div>`
     : `<div class="empty-note">// nothing open, you're all caught up</div>`;
-  const doneRows = list.done.length
-    ? `<div class="focus-done">${list.done.map(renderTask).join('')}</div>` : '';
+  const doneRows = list.done.length ? `
+    <div class="section focus-done">
+      <button class="section-head${state.doneOpen ? ' open' : ' collapsed'}" data-act="toggle-done">
+        <span class="s-pill">
+          <span class="s-title">Completed</span>
+          <span class="s-count">${list.done.length}</span>
+        </span>
+      </button>
+      <div class="collapse-wrap${state.doneOpen ? '' : ' closed'}">
+        <div>
+          <div class="task-list" style="padding-top:${state.doneOpen ? 2 : 0}px">
+            ${list.done.map(renderTask).join('')}
+          </div>
+        </div>
+      </div>
+    </div>` : '';
   return `
     <div class="focus-view">
       <div class="focus-inner">
@@ -331,16 +421,15 @@ function renderFocus() {
 // ">" = Auto-Hide (Standard), "<" = fixiert (bleibt sichtbar).
 function renderRailPin() {
   const I = Icons;
-  const glyph = state.railPinned ? I.ChevLeft : I.ChevRight;
   const title = state.railPinned ? 'Unpin toolbar' : 'Pin toolbar';
-  return `<button class="rail-pin${state.railPinned ? ' pinned' : ''}" data-act="rail-pin" title="${title}">${glyph}</button>`;
+  return `<button class="rail-pin${state.railPinned ? ' pinned' : ''}" data-act="rail-pin" title="${title}">${I.ChevRight}</button>`;
 }
 
 function renderToolbar() {
   const I = Icons;
   const btn = (icon, label, hotkey, act, opt) => {
     opt = opt || {};
-    const cls = 'tool-btn' + (opt.danger ? ' danger' : '') + (opt.active ? ' active' : '');
+    const cls = 'tool-btn' + (opt.danger ? ' danger' : '') + (opt.active ? ' active' : '') + (opt.on ? ' on' : '');
     const k = hotkey ? `<span class="k">${hotkey}</span>` : '';
     return `<button class="${cls}" data-act="${act}">${icon}<span class="tip">${label}${k}</span></button>`;
   };
@@ -353,16 +442,30 @@ function renderToolbar() {
         ${btn(I.Help, 'Shortcuts', '?', 'tb-help')}
         <div class="tool-sep"></div>
         ${btn(state.locked ? I.Lock : I.Unlock, 'Lock app', 'Ctrl+L', 'tb-lock')}
-        ${btn(I.Alert, 'Emergency', 'Ctrl+Shift+!', 'tb-emergency', { danger: true })}
+        ${btn(I.Alert, 'Panic', '', 'tb-emergency', { danger: true, on: !!state.panic })}
         <div class="tool-sep"></div>
         ${btn(I.Copy, 'Copy task', '', 'tb-copy')}
         ${btn(I.Pencil, state.selectedId ? 'Edit task' : 'Rename list', '', 'tb-rename')}
         ${btn(I.Trash, 'Delete task', '', 'tb-delete')}
         <div class="tool-sep"></div>
         ${btn(I.Diag, 'App status', '', 'tb-status')}
-        ${btn(I.Globe, state.online ? 'Go offline' : 'Go online', 'G', 'net', { active: state.online })}
+        ${renderNetBtn()}
       </div>
     </div>`;
+}
+
+// WLAN-/Flugzeug-Knopf der Tool-Rail. Online: WLAN-Symbol mit echter
+// Signalstaerke. Offline: Flugzeug (Flugmodus). Beim Umschalten fliegt das neue
+// Symbol von der Seite herein und purzelt dabei (CSS-Klasse net-anim, nur fuer
+// genau diesen einen Render gesetzt, danach sofort wieder geloescht).
+function renderNetBtn() {
+  const icon = state.online ? wifiSvg(wifiLevel) : Icons.Plane;
+  const label = state.online ? 'Go offline' : 'Go online';
+  const anim = netAnim ? ' net-anim' : '';
+  netAnim = false;
+  return `<button class="tool-btn${state.online ? ' active' : ''}" data-act="net">`
+    + `<span class="net-ico${anim}">${icon}</span>`
+    + `<span class="tip">${label}<span class="k">G</span></span></button>`;
 }
 
 function renderNotifMenu() {
@@ -405,10 +508,13 @@ function renderProfileMenu() {
 function renderListCtx() {
   if (!state.ctxList) return '';
   const I = Icons;
-  const { x, y } = state.ctxList;
+  const { x, y, fromDock } = state.ctxList;
+  // Aus dem Dock geoeffnet: das Menue waechst nach OBEN (translateY -100%), damit
+  // es ueber dem grossen Namen schwebt und nicht mit dem "+"-Knopf kollidiert.
+  const up = fromDock ? ';transform:translateY(-100%)' : '';
   return `
     <div class="menu list-ctx" data-keep
-         style="position:fixed;left:${x}px;top:${y}px;min-width:180px">
+         style="position:fixed;left:${x}px;top:${y}px;min-width:180px${up}">
       <button class="menu-item" data-act="ctx-rename-list">${I.Pencil} Rename list</button>
       <button class="menu-item ctx-danger" data-act="ctx-delete-list">${I.Trash} Delete list</button>
     </div>`;
@@ -422,21 +528,6 @@ function renderModal() {
   const I = Icons;
   const list = activeList();
   switch (state.modal) {
-    case 'emergency':
-      return scrim(`
-        <div class="modal modal-emergency">
-          <div class="modal-stripe"></div>
-          <div class="modal-body">
-            <div class="modal-icon danger">${I.Alert}</div>
-            <h3>Panic, lock everything?</h3>
-            <p>This immediately locks NoaToDo, drops the in-memory cache, and pulls the local database offline. Cloud sync stays paused until you unlock with your passphrase.
-            Nothing is deleted, <span class="mono">tasks.db</span> stays encrypted on this machine.</p>
-          </div>
-          <div class="modal-actions">
-            <button class="btn" data-act="modal-close">Cancel</button>
-            <button class="btn btn-danger" data-act="do-panic">Lock now</button>
-          </div>
-        </div>`);
     case 'status': {
       const online = state.online;
       const rows = [
@@ -497,7 +588,7 @@ function renderModal() {
       const sc = [
         ['New task', ['↵']], ['New list', ['N']],
         ['Toggle sidebar', ['Ctrl', 'B']], ['Focus mode', ['F']],
-        ['Lock app', ['Ctrl', 'L']], ['Emergency lock', ['Ctrl', 'Shift', '!']],
+        ['Lock app', ['Ctrl', 'L']],
         ['Export list', ['Ctrl', 'E']],
         ['Toggle theme', ['Ctrl', 'J']], ['Online / offline', ['G']],
       ];
@@ -557,18 +648,109 @@ function renderSettings() {
 function renderLock() {
   if (!state.locked) return '';
   const I = Icons;
+  const pill = lockTyping
+    ? `<div class="lock-input" data-keep>
+         <input id="lock-pass" type="password" placeholder="Passphrase…" autocomplete="off" spellcheck="false" />
+         <button class="dock-close" data-act="lock-cancel" title="Cancel">${I.Close}</button>
+       </div>`
+    : `<button class="lock-pill" data-act="lock-open">Password</button>`;
   return `
     <div class="lock-screen">
       <div class="lock-card">
         <div class="lock-ring">${I.Lock}</div>
         <h2>NoaToDo is locked</h2>
-        <p>LOCAL VAULT · ENCRYPTED · OFFLINE</p>
-        <div class="lock-dots">${[0, 1, 2, 3].map((i) => `<i class="${i < lockDots ? 'fill' : ''}"></i>`).join('')}</div>
-        <button class="lock-btn" data-act="lock-tap">${lockDots === 0 ? 'Enter passphrase' : lockDots >= 4 ? 'Unlocking…' : 'Tap to continue'}</button>
+        ${pill}
       </div>
     </div>`;
 }
-let lockDots = 0;
+let lockTyping = false;
+
+// ===========================================================================
+// Panik-Trigger (entsichert wie eine Cockpit-Waffenabdeckung). Bewusst KEIN
+// Tastenkuerzel. Stufe 1: Kippschalter von "No" auf "Yes" (armen). Stufe 2: die
+// separate "Confirm"-Pille faehrt darunter aus. Erst dann startet rein visuell
+// der Fortschrittsbalken bis 100 %, danach der Bestaetigungsschirm.
+// HINWEIS: loescht (noch) NICHTS, die echte Loeschlogik kommt in Phase 11.
+// ===========================================================================
+function renderPanic() {
+  if (!state.panic) return '';
+  const I = Icons;
+  const p = state.panic;
+
+  // Vollbild-Schirme: erst der "Wipe"-Fortschritt, dann die Bestaetigung.
+  if (p.stage === 'wiping' || p.stage === 'done') {
+    if (p.stage === 'done') {
+      return `
+        <div class="panic-screen done">
+          <div class="panic-screen-card">
+            <div class="panic-screen-ring ok">${I.Shield}</div>
+            <h2>All data securely wiped</h2>
+            <p class="panic-screen-sub">The local database, the in-memory cache and the cached keys were destroyed. Nothing recoverable remains on this machine.</p>
+            <button class="btn btn-danger panic-screen-btn" data-act="panic-done">Close</button>
+          </div>
+        </div>`;
+    }
+    return `
+      <div class="panic-screen">
+        <div class="panic-screen-card">
+          <div class="panic-screen-ring">${I.Alert}</div>
+          <h2>Wiping all data</h2>
+          <div class="panic-bar"><div class="panic-bar-fill" id="panic-fill"></div></div>
+          <div class="panic-wipe-row">
+            <span class="mono" id="panic-step">Shredding tasks.db</span>
+            <span class="mono panic-pct" id="panic-pct">0%</span>
+          </div>
+        </div>
+      </div>`;
+  }
+
+  // Stufe 1/2: schwebende Pille links neben dem Panik-Knopf der Rail.
+  const armed = !!p.armed;
+  const confirm = armed
+    ? `<div class="panic-confirm-wrap">
+         <button class="panic-confirm" data-act="panic-confirm">${I.Alert}<span>Confirm</span></button>
+       </div>`
+    : '';
+  return `
+    <div class="panic-panel" data-keep>
+      <div class="panic-stripe"></div>
+      <div class="panic-head">
+        <span class="panic-head-icon">${I.Alert}</span>
+        <span class="panic-head-text">Activate panic mode?</span>
+        <button class="panic-x" data-act="panic-close" title="Cancel">${I.Close}</button>
+      </div>
+      <p class="panic-note mono">Flip the guard to arm. Two steps, no shortcut.</p>
+      <button class="panic-switch${armed ? ' armed' : ''}" data-act="panic-toggle"
+              role="switch" aria-checked="${armed}">
+        <span class="panic-switch-label off">No</span>
+        <span class="panic-switch-label on">Yes</span>
+        <span class="panic-knob"></span>
+      </button>
+      ${confirm}
+    </div>`;
+}
+
+// Rein visueller "Wipe": Balken und Prozentzahl per requestAnimationFrame von
+// 0 auf 100 %, dann Wechsel auf den Bestaetigungsschirm. Loescht nichts.
+function startPanicWipe() {
+  const fill = document.getElementById('panic-fill');
+  const pct = document.getElementById('panic-pct');
+  const step = document.getElementById('panic-step');
+  const steps = ['Shredding tasks.db', 'Overwriting key material', 'Clearing memory cache', 'Zeroing free space'];
+  const dur = 2600;
+  const t0 = performance.now();
+  function frame(now) {
+    // Abbruch, falls der Nutzer den Panik-Modus zwischendurch verlassen hat.
+    if (!state.panic || state.panic.stage !== 'wiping') return;
+    const r = Math.min(1, (now - t0) / dur);
+    if (fill) fill.style.width = (r * 100).toFixed(1) + '%';
+    if (pct) pct.textContent = Math.floor(r * 100) + '%';
+    if (step) step.textContent = steps[Math.min(steps.length - 1, Math.floor(r * steps.length))];
+    if (r < 1) { requestAnimationFrame(frame); }
+    else { state.panic.stage = 'done'; render(); }
+  }
+  requestAnimationFrame(frame);
+}
 
 // ===========================================================================
 // Haupt-Render
@@ -591,6 +773,7 @@ function applyChrome() {
 //  - oder Cursor nahe am rechten Rand (railHover).
 function railVisible() {
   if (state.focus || state.mini) return false;
+  if (state.panic) return true;   // Panik-Panel haengt an der Rail, sie bleibt sichtbar
   return state.railPinned || sidebarVisible() || railHover;
 }
 function applyRail() {
@@ -617,6 +800,7 @@ function render() {
     renderRailPin() +
     renderListCtx() +
     renderModal() +
+    renderPanic() +
     renderLock();
   wireInputs();
 }
@@ -653,6 +837,23 @@ function wireInputs() {
     rl.addEventListener('keydown', (e) => {
       if (e.key === 'Enter') { e.preventDefault(); doRenameList(state.renamingId, rl.value); }
       else if (e.key === 'Escape') { e.preventDefault(); state.renamingId = null; render(); }
+    });
+  }
+  // Inline-Umbenennen-Pille im Dock (Rechtsklick auf den grossen Namen).
+  const rdk = document.getElementById('rename-dock-input');
+  if (rdk && state.renamingId) {
+    rdk.focus(); rdk.select();
+    rdk.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') { e.preventDefault(); doRenameList(state.renamingId, rdk.value); }
+      else if (e.key === 'Escape') { e.preventDefault(); state.renamingId = null; state.listEditDock = false; render(); }
+    });
+  }
+  const lp = document.getElementById('lock-pass');
+  if (lp) {
+    lp.focus();
+    lp.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') { e.preventDefault(); lockSubmit(lp.value); }
+      else if (e.key === 'Escape') { e.preventDefault(); lockCancel(); }
     });
   }
   const rh = document.getElementById('sidebar-resize-handle');
@@ -732,23 +933,25 @@ function _blip(ctx, freq, at, dur, gain) {
 }
 
 // "Datenstrom": vier helle Blips, schnell aufsteigend wie herabfallender Code.
-function playDoneSound() {
+async function playDoneSound() {
   const ctx = _ac();
   if (!ctx) return;
+  if (ctx.state !== 'running') { try { await ctx.resume(); } catch(e) { return; } }
   [1046, 1318, 1568, 2093].forEach((hz, i) => _blip(ctx, hz, i * 0.045, 0.05, 0.10));
 }
 
 async function toggleTask(id) {
+  // Sound sofort abspielen (vor dem await), damit kein Lag entsteht.
+  // Nur beim Abhaken (Aufgabe ist gerade noch offen).
+  const isChecking = state.lists.some((l) => l.open.some((t) => t.id === id));
+  if (isChecking) await playDoneSound();
+
   const res = await api().toggle_task(id);
   if (res && res.error) return pushToast(res.message || 'Error');
   // Aufgabe lokal zwischen open/done verschieben (wie im Konzept).
   for (const l of state.lists) {
     let i = l.open.findIndex((x) => x.id === id);
-    if (i >= 0) {
-      const [t] = l.open.splice(i, 1); t.done = true; l.done.unshift(t);
-      playDoneSound();  // Ton nur beim Abhaken (offen -> erledigt)
-      break;
-    }
+    if (i >= 0) { const [t] = l.open.splice(i, 1); t.done = true; l.done.unshift(t); break; }
     i = l.done.findIndex((x) => x.id === id);
     if (i >= 0) { const [t] = l.done.splice(i, 1); t.done = false; l.open.push(t); break; }
   }
@@ -810,11 +1013,12 @@ async function doRenameList(id, name) {
   if (!list) { state.renamingId = null; render(); return; }
   const trimmed = name.trim();
   // Leer oder unveraendert: stillschweigend abbrechen.
-  if (!trimmed || trimmed === list.name) { state.renamingId = null; render(); return; }
+  if (!trimmed || trimmed === list.name) { state.renamingId = null; state.listEditDock = false; render(); return; }
   const res = await api().rename_list(id, trimmed);
   if (res && res.error) return pushToast(res.message || 'Error');
   list.name = trimmed;
   state.renamingId = null;
+  state.listEditDock = false;
   render();
   pushToast('List renamed', trimmed);
 }
@@ -832,6 +1036,7 @@ async function doDeleteList() {
     state.doneOpen = false; state.editingId = null; state.selectedId = null;
   }
   state.confirmDeleteId = null;
+  state.listEditDock = false;
   render();
   pushToast('List deleted', removed ? removed.name : '');
 }
@@ -839,8 +1044,35 @@ async function doDeleteList() {
 async function setOnline(flag) {
   const res = await api().set_online(flag);
   state.online = res && typeof res.online === 'boolean' ? res.online : flag;
+  netAnim = true;              // naechster Render: Symbol fliegt herein und purzelt
+  if (state.online) startWifiPoll();
+  else stopWifiPoll();
   render();
   pushToast(flag ? 'Back online, syncing' : 'Going offline', flag ? 'MS To Do' : 'sync paused');
+}
+
+// Echte WLAN-Signalstaerke vom Backend holen und nur das Symbol aktualisieren
+// (kein Voll-Render, damit Inline-Bearbeitung o.ae. ungestoert bleibt und das
+// Symbol beim Pollen nicht erneut "hereinfliegt").
+let wifiTimer = null;
+async function refreshWifi() {
+  if (!state.online) return;
+  try {
+    const r = await api().get_wifi_signal();
+    if (r && typeof r.level === 'number') {
+      wifiLevel = r.level;
+      const host = document.querySelector('.net-ico');
+      if (host && state.online) host.innerHTML = wifiSvg(wifiLevel);
+    }
+  } catch (e) { /* WLAN-Abfrage ist nur Kosmetik, Fehler still ignorieren */ }
+}
+function startWifiPoll() {
+  stopWifiPoll();
+  refreshWifi();
+  wifiTimer = setInterval(refreshWifi, 15000);
+}
+function stopWifiPoll() {
+  if (wifiTimer) { clearInterval(wifiTimer); wifiTimer = null; }
 }
 
 async function setSetting(key, value) {
@@ -954,29 +1186,27 @@ function onMouseMove(e) {
 
 async function doLock() {
   await api().lock();
-  state.locked = true; lockDots = 0;
+  state.locked = true; lockTyping = false;
   render();
 }
 
-async function doPanic() {
-  await api().panic();
-  state.locked = true; state.online = false; state.modal = null; lockDots = 0;
+// Klick auf die "Password"-Pille: in die Eingabepille umschalten (gleiche
+// Optik wie die uebrigen Eingabepillen der App). wireInputs() fokussiert sie.
+function lockOpen() {
+  lockTyping = true;
   render();
 }
 
-async function lockTap() {
-  lockDots += 1;
-  if (lockDots >= 4) {
-    lockDots = 4; render();
-    const res = await api().unlock('');   // Phase 11: echte Passphrase
-    setTimeout(() => {
-      state.locked = !(res && res.ok);
-      lockDots = 0;
-      render();
-    }, 280);
-  } else {
-    render();
-  }
+function lockCancel() {
+  lockTyping = false;
+  render();
+}
+
+async function lockSubmit(value) {
+  const res = await api().unlock(value || '');   // Phase 11: echte Passphrase
+  state.locked = !(res && res.ok);
+  lockTyping = false;
+  render();
 }
 
 // Theme-Wechsel-Flackern vermeiden (ein Frame ohne Transitions).
@@ -1014,12 +1244,13 @@ function closeMenusIfOutside(e, a) {
   if (state.ctxList && !e.target.closest('.list-ctx')) {
     state.ctxList = null; changed = true;
   }
-  // Klick ausserhalb der Inline-Pillen verwirft Umbenennen / Loeschbestaetigung.
-  if (state.renamingId && !e.target.closest('.list-inline')) {
-    state.renamingId = null; changed = true;
+  // Klick ausserhalb der Inline-Pillen (Sidebar .list-inline ODER Dock .dock-edit)
+  // verwirft Umbenennen / Loeschbestaetigung.
+  if (state.renamingId && !e.target.closest('.list-inline, .dock-edit')) {
+    state.renamingId = null; state.listEditDock = false; changed = true;
   }
-  if (state.confirmDeleteId && !e.target.closest('.list-inline')) {
-    state.confirmDeleteId = null; changed = true;
+  if (state.confirmDeleteId && !e.target.closest('.list-inline, .dock-edit')) {
+    state.confirmDeleteId = null; state.listEditDock = false; changed = true;
   }
   return changed;
 }
@@ -1113,7 +1344,7 @@ async function onClick(e) {
     case 'tb-export': await doExport(); break;
     case 'tb-help': state.modal = 'shortcuts'; render(); break;
     case 'tb-lock': await doLock(); break;
-    case 'tb-emergency': state.modal = 'emergency'; render(); break;
+    case 'tb-emergency': state.panic = state.panic ? null : { armed: false, stage: 'panel' }; render(); break;
     case 'tb-copy': await doCopy(); break;
     case 'tb-rename':
       // Kontextuell: ausgewaehlte Aufgabe -> Inline-Bearbeitung; sonst Liste umbenennen.
@@ -1130,24 +1361,35 @@ async function onClick(e) {
     case 'do-rename': { const i = document.getElementById('rename-input'); if (i && i.value.trim()) await doRename(i.value.trim()); break; }
     case 'do-delete': await doDelete(); break;
     case 'ctx-rename-list': {
-      // Inline-Pille an der Listenposition oeffnen (statt Modal).
+      // Inline-Pille oeffnen: in der Sidebar an der Listenposition, oder (bei
+      // Rechtsklick auf den Dock-Namen) unten im Dock (listEditDock).
+      const fromDock = !!(state.ctxList && state.ctxList.fromDock);
       const cid = state.ctxList && state.ctxList.id;
       state.ctxList = null; state.confirmDeleteId = null;
       state.renamingId = cid;
+      state.listEditDock = fromDock;
       render(); break;
     }
     case 'ctx-delete-list': {
-      // Inline-Loeschbestaetigung an der Listenposition oeffnen.
+      // Inline-Loeschbestaetigung oeffnen (Sidebar oder Dock, siehe oben).
+      const fromDock = !!(state.ctxList && state.ctxList.fromDock);
       const cid = state.ctxList && state.ctxList.id;
       state.ctxList = null; state.renamingId = null;
       state.confirmDeleteId = cid;
+      state.listEditDock = fromDock;
       render(); break;
     }
-    case 'cancel-rename-list': state.renamingId = null; render(); break;
-    case 'cancel-delete-list': state.confirmDeleteId = null; render(); break;
+    case 'cancel-rename-list': state.renamingId = null; state.listEditDock = false; render(); break;
+    case 'cancel-delete-list': state.confirmDeleteId = null; state.listEditDock = false; render(); break;
     case 'do-delete-list': await doDeleteList(); break;
-    case 'do-panic': await doPanic(); break;
-    case 'lock-tap': await lockTap(); break;
+    case 'panic-toggle': if (state.panic) { state.panic.armed = !state.panic.armed; render(); } break;
+    case 'panic-close': state.panic = null; render(); break;
+    case 'panic-confirm':
+      if (state.panic && state.panic.armed) { state.panic.stage = 'wiping'; render(); startPanicWipe(); }
+      break;
+    case 'panic-done': state.panic = null; render(); break;
+    case 'lock-open': lockOpen(); break;
+    case 'lock-cancel': lockCancel(); break;
     default: if (needRender) render();
   }
 }
@@ -1169,6 +1411,19 @@ function onContextMenu(e) {
     render();
     return;
   }
+  // Rechtsklick auf die grosse Namens-Pille im unteren Dock: dasselbe Rename/
+  // Delete-Menue, aber oberhalb des Namens verankert (fromDock).
+  const dockPill = e.target.closest('.dock-pill');
+  if (dockPill && state.activeId) {
+    e.preventDefault();
+    const r = dockPill.getBoundingClientRect();
+    const x = Math.max(8, Math.min(r.left, window.innerWidth - 190));
+    const y = r.top - 8;
+    state.ctxList = { id: state.activeId, x, y, fromDock: true };
+    state.menu = null;
+    render();
+    return;
+  }
   e.preventDefault();
   if (state.ctxList) { state.ctxList = null; render(); }
 }
@@ -1184,7 +1439,10 @@ function onKeyGlobal(e) {
     state.menu = null; state.modal = null;
     state.focus = false; state.adding = false; state.addingTask = false;
     state.editingId = null; state.selectedId = null; state.ctxList = null;
-    state.renamingId = null; state.confirmDeleteId = null; render(); return;
+    state.renamingId = null; state.confirmDeleteId = null; state.listEditDock = false;
+    // Panik-Panel schliessen, aber den laufenden/fertigen Wipe-Schirm stehen lassen.
+    if (state.panic && state.panic.stage === 'panel') state.panic = null;
+    render(); return;
   }
   if (typing) return;
   if (state.locked) return;
@@ -1195,7 +1453,8 @@ function onKeyGlobal(e) {
   else if (meta && k === 'e') { e.preventDefault(); doExport(); }
   // Strg+C ist bewusst KEIN App-Shortcut mehr (Phase 6.5): kopiert wird nur
   // noch gezielt die ausgewaehlte Aufgabe ueber den Rail-Button (Gate G23).
-  else if (meta && e.shiftKey && (e.key === '!' || k === '1')) { e.preventDefault(); state.modal = 'emergency'; render(); }
+  // Der Panik-Trigger hat bewusst KEIN Tastenkuerzel (nur ueber den Rail-Knopf,
+  // zweistufig entsichert).
   else if (!meta && e.key === '?') { state.modal = 'shortcuts'; render(); }
   else if (!meta && k === 'f') { state.focus = !state.focus; render(); }
   else if (!meta && k === 'g') { setOnline(!state.online); }
@@ -1264,7 +1523,7 @@ window.noa = {
   onNotification(payload) {
     if (payload && payload.title) pushToast(payload.title, payload.body);
   },
-  onLocked() { state.locked = true; lockDots = 0; render(); },
+  onLocked() { state.locked = true; lockTyping = false; render(); },
 };
 
 async function refreshLists() {
@@ -1280,15 +1539,23 @@ async function boot() {
     const st = await api().get_state();
     Object.assign(state, st);
     // Pin-Zustand der Tool-Rail aus den Settings rekonstruieren (als String abgelegt).
-    state.railPinned = state.settings.railPinned === 'true' || state.settings.railPinned === true;
     // Sidebar-Breite wiederherstellen (als String gespeichert).
     const sw = parseInt(state.settings.sidebarWidth || '256', 10);
     state.sidebarWidth = (sw >= 180 && sw <= 520) ? sw : 256;
-    if (state.lists.length && !state.activeId) state.activeId = state.lists[0].id;
+    // Beim Start immer als leere Arbeitsflaeche: Sidebar eingeklappt, Tool-Rail
+    // nicht fixiert, keine Liste geoeffnet. Das ist bewusst unabhaengig von den
+    // zuletzt gespeicherten Settings (nur In-Memory erzwungen, die persistierten
+    // Werte wie sidebarWidth bleiben unangetastet). Werkzeuge holt man sich erst
+    // bei Bedarf auf die Flaeche.
+    state.settings.sidebar = 'closed';
+    state.railPinned = false;
+    state.focus = false;
+    state.activeId = null;
   } catch (err) {
     root.innerHTML = '<pre style="padding:24px">boot error: ' + err + '</pre>';
     return;
   }
+  document.addEventListener('pointerdown', () => _ac(), { once: true });
   document.addEventListener('click', onClick);
   document.addEventListener('contextmenu', onContextMenu);
   document.addEventListener('dblclick', onDblClick);
@@ -1299,6 +1566,7 @@ async function boot() {
   document.addEventListener('drop', onDrop);
   document.addEventListener('dragend', onDragEnd);
   render();
+  if (state.online) startWifiPoll();
 }
 
 if (window.pywebview) boot();

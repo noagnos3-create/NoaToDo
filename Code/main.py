@@ -100,6 +100,15 @@ def _apply_titlebar_theme(hwnd: int, dark: bool) -> None:
         pass
 
 
+# Die optisch hoehere Titelleiste wird NICHT nativ erzeugt: ein per WM_NCCALCSIZE
+# vergroesserter nicht-Client-Bereich liess die Zusatzhoehe unbemalt (weisser
+# Streifen), weil DWM die Caption nur in Standardhoehe bemalt und es keinen API-Weg
+# gibt, diesen Streifen zu fuellen. Stattdessen rueckt das Frontend seinen Inhalt um
+# 6px nach unten und legt diese 6px in Titelleistenfarbe (--surface, identisch zur
+# per DWM gesetzten Caption-Farbe) an die Oberkante (siehe style.css, border-top auf
+# .app). Native Caption und Streifen sind dadurch nahtlos und farbgleich.
+
+
 _APP_USER_MODEL_ID = "NoaGnos.NoaToDo"
 
 
@@ -327,10 +336,33 @@ def _cleanup_stale_webview_profiles() -> None:
             pass
 
 
+def _frontend_stamp() -> str:
+    """Aenderungszeit der wichtigsten Frontend-Dateien als kurzer Stempel.
+
+    Reine Diagnose: macht im Terminal sichtbar, welcher Frontend-Stand geladen
+    wird, damit "es hat sich nichts geaendert" sofort auf alt-laufendes Fenster
+    vs. echter Neustart zurueckgefuehrt werden kann.
+    """
+    parts = []
+    for name in ("frontend/index.html", "frontend/app.js", "frontend/style.css"):
+        path = os.path.join(HERE, name)
+        try:
+            ts = time.strftime("%H:%M:%S", time.localtime(os.path.getmtime(path)))
+        except OSError:
+            ts = "??"
+        parts.append(f"{os.path.basename(name)} {ts}")
+    return "Frontend: " + ", ".join(parts)
+
+
 def main() -> None:
     # Sichtbare Startmeldung: bestaetigt im Terminal, welcher Code laeuft. Hilft,
     # einen veralteten Start zu erkennen (fehlt die Zeile, laeuft nicht dieser Stand).
-    print("[NoaToDo] Start.", flush=True)
+    # Zusaetzlich die Aenderungszeit der geladenen Frontend-Dateien ausgeben: das
+    # Frontend wird per file:// frisch von der Platte geladen (kein Hot-Reload im
+    # laufenden Fenster), daher zeigen diese Zeitstempel zweifelsfrei, welcher
+    # Stand gerade geladen wird. Stimmen sie nicht mit der letzten Bearbeitung
+    # ueberein, laeuft noch ein altes Fenster: erst ganz schliessen, dann neu starten.
+    print("[NoaToDo] Start. " + _frontend_stamp(), flush=True)
 
     # Single-Instance-Schutz (Gate G19): zweite Instanz sofort beenden, sonst
     # Profil-/DB-Kollision auf dem gemeinsamen festen Profilordner.
