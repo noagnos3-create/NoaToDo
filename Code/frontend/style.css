@@ -1104,7 +1104,7 @@ input { font: inherit; }
 /* Schwebende Pille links neben dem Panik-Knopf der Rail */
 .panic-panel {
   position: fixed; right: 80px; top: 50%; transform: translateY(-50%);
-  z-index: 45; width: 268px;
+  z-index: 45; width: 268px; padding-bottom: 15px;
   background: var(--surface); overflow: hidden;
   border: 1px solid color-mix(in oklab, var(--danger) 50%, var(--border));
   border-radius: 16px;
@@ -1112,15 +1112,13 @@ input { font: inherit; }
   animation: panic-slide .22s cubic-bezier(.2,.7,.3,1);
 }
 @keyframes panic-slide { from { opacity: 0; transform: translateY(-50%) translateX(16px) scale(.96); } }
-.panic-stripe { height: 4px; background: repeating-linear-gradient(45deg, var(--danger) 0 12px, color-mix(in oklab,var(--danger) 55%, #000) 12px 24px); }
-.panic-head { display: flex; align-items: center; gap: 9px; padding: 13px 11px 4px 15px; }
+.panic-head { display: flex; align-items: center; gap: 9px; padding: 13px 11px 12px 15px; }
 .panic-head-icon { color: var(--danger); display: grid; place-items: center; }
 .panic-head-icon svg { width: 18px; height: 18px; }
 .panic-head-text { font-size: 14.5px; font-weight: 700; letter-spacing: -.01em; }
 .panic-x { margin-left: auto; width: 26px; height: 26px; border-radius: 7px; display: grid; place-items: center; color: var(--text-faint); transition: background .12s, color .12s; }
 .panic-x:hover { background: var(--surface-3); color: var(--text); }
 .panic-x svg { width: 15px; height: 15px; }
-.panic-note { padding: 0 15px 13px; font-size: 10.5px; color: var(--text-faint); line-height: 1.5; }
 
 /* Stufe 1: Kippschalter ("Sicherung"). Knopf gleitet von "No" auf "Yes". */
 .panic-switch {
@@ -1146,38 +1144,38 @@ input { font: inherit; }
 .panic-switch-label.on  { color: var(--text-faint); }
 .panic-switch.armed .panic-switch-label.off { color: var(--text-faint); }
 .panic-switch.armed .panic-switch-label.on  { color: var(--danger); }
-/* Der gleitende Knopf, mit Hazard-Schraffur wie eine echte Abdeckung */
+/* Der gleitende Knopf: glatte Pille, kein Schraffur-Muster */
 .panic-knob {
   position: absolute; z-index: 1; top: 4px; left: 4px; bottom: 4px;
   width: calc(50% - 4px); border-radius: 9px;
   background: var(--surface); border: 1px solid var(--border-strong);
   box-shadow: 0 1px 3px rgba(0,0,0,.22);
-  background-image: repeating-linear-gradient(45deg, transparent 0 5px, color-mix(in oklab, var(--text-faint) 16%, transparent) 5px 8px);
-  transition: transform .26s cubic-bezier(.5,1.5,.4,1), border-color .2s, background-image .2s;
+  transition: transform .4s cubic-bezier(.5,1.5,.4,1), border-color .2s, background .2s;
 }
 .panic-switch.armed .panic-knob {
   transform: translateX(100%);
   border-color: var(--danger);
-  background-image: repeating-linear-gradient(45deg, transparent 0 5px, color-mix(in oklab, var(--danger) 42%, transparent) 5px 8px);
+  background: color-mix(in oklab, var(--danger) 16%, var(--surface));
 }
 
-/* Stufe 2: separate Confirm-Pille, faehrt unter dem Schalter aus */
-.panic-confirm-wrap { padding: 11px 15px 15px; animation: panic-drop .26s cubic-bezier(.2,.7,.3,1); }
-@keyframes panic-drop { from { opacity: 0; transform: translateY(-8px); } }
+/* Stufe 2: kleine Confirm-Pille, ploppt unter dem Schalter auf */
+.panic-confirm-wrap { display: flex; justify-content: center; padding: 9px 15px 0; animation: panic-drop .26s cubic-bezier(.2,.7,.3,1); }
+@keyframes panic-drop { from { opacity: 0; transform: translateY(-6px) scale(.9); } }
 .panic-confirm {
-  width: 100%; height: 44px; display: flex; align-items: center; justify-content: center; gap: 8px;
-  border-radius: 12px; background: var(--danger); color: #fff;
-  font-weight: 700; font-size: 14px; letter-spacing: .02em;
-  box-shadow: 0 6px 18px color-mix(in oklab, var(--danger) 36%, transparent);
+  display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+  height: 28px; padding: 0 14px;
+  border-radius: 999px; background: var(--danger); color: #fff;
+  font-weight: 700; font-size: 12px; letter-spacing: .02em;
+  box-shadow: 0 4px 12px color-mix(in oklab, var(--danger) 34%, transparent);
   animation: panic-pulse 1.7s ease-in-out infinite;
   transition: transform .1s, background .14s;
 }
 .panic-confirm:hover { background: color-mix(in oklab, var(--danger) 88%, #000); }
-.panic-confirm:active { transform: scale(.97); }
-.panic-confirm svg { width: 16px; height: 16px; }
+.panic-confirm:active { transform: scale(.95); }
+.panic-confirm svg { width: 13px; height: 13px; }
 @keyframes panic-pulse {
-  0%,100% { box-shadow: 0 6px 16px color-mix(in oklab, var(--danger) 28%, transparent); }
-  50%     { box-shadow: 0 6px 28px color-mix(in oklab, var(--danger) 62%, transparent); }
+  0%,100% { box-shadow: 0 3px 10px color-mix(in oklab, var(--danger) 26%, transparent); }
+  50%     { box-shadow: 0 3px 18px color-mix(in oklab, var(--danger) 58%, transparent); }
 }
 
 /* Vollbild-Schirme: Wipe-Fortschritt und Bestaetigung */

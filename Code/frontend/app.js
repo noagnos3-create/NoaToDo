@@ -707,13 +707,11 @@ function renderPanic() {
     : '';
   return `
     <div class="panic-panel" data-keep>
-      <div class="panic-stripe"></div>
       <div class="panic-head">
         <span class="panic-head-icon">${I.Alert}</span>
         <span class="panic-head-text">Activate panic mode?</span>
         <button class="panic-x" data-act="panic-close" title="Cancel">${I.Close}</button>
       </div>
-      <p class="panic-note mono">Flip the guard to arm. Two steps, no shortcut.</p>
       <button class="panic-switch${armed ? ' armed' : ''}" data-act="panic-toggle"
               role="switch" aria-checked="${armed}">
         <span class="panic-switch-label off">No</span>
@@ -1278,7 +1276,13 @@ async function onClick(e) {
     case 'open-notif': state.menu = state.menu === 'notif' ? null : 'notif'; render(); break;
     case 'open-profile': state.menu = state.menu === 'profile' ? null : 'profile'; render(); break;
     case 'sign-out': state.menu = null; await api().sign_out(); render(); pushToast('Signed out'); break;
-    case 'select-list': state.activeId = id; state.doneOpen = false; state.editingId = null; state.selectedId = null; render(); break;
+    case 'select-list':
+      // Klick auf die bereits ausgewaehlte Liste schliesst sie wieder (zurueck
+      // zur leeren Arbeitsflaeche). Sonst die angeklickte Liste oeffnen.
+      state.activeId = state.activeId === id ? null : id;
+      state.doneOpen = false; state.editingId = null; state.selectedId = null;
+      render();
+      break;
     case 'select-task':
       // Klick auf die Karte: Auswahl umschalten (waehrend einer Inline-
       // Bearbeitung nicht, dort gehoeren Klicks den Eingabefeldern).
