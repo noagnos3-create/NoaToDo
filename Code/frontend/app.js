@@ -231,15 +231,9 @@ function renderMain() {
   const I = Icons;
   const list = activeList();
   if (!list) {
-    // Zwei Leerzustaende: gar keine Listen vorhanden, oder schlicht keine Liste
-    // ausgewaehlt (so startet die App, leere Arbeitsflaeche). Im zweiten Fall ein
-    // dezenter Hinweis, dass man links eine Liste oeffnet.
-    const note = state.lists.length === 0
-      ? '// no lists yet, create one in the sidebar'
-      : '// open a list from the sidebar';
-    return `<main class="main"><div class="main-inner">
-      <div class="empty-note">${note}</div>
-    </div></main>`;
+    // Keine Liste ausgewaehlt (so startet die App): wirklich leere Arbeitsflaeche,
+    // kein Hinweistext.
+    return `<main class="main"><div class="main-inner"></div></main>`;
   }
   const openSection = list.open.length === 0
     ? `<div class="empty-note">// nothing open, you're all caught up</div>`

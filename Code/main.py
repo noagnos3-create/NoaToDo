@@ -336,6 +336,38 @@ def _cleanup_stale_webview_profiles() -> None:
             pass
 
 
+def _purge_webview_cache() -> None:
+    """Loescht HTTP- und Code-Cache im WebView2-Profil bei jedem Start.
+
+    Bug (2026-06-23): Seit dem Wechsel auf den festen Profilordner (PROFILE_DIR,
+    kein Privatmodus mehr, Stand 2026-06-20) ueberlebt der WebView2-Disk-Cache den
+    Neustart. Das Frontend wird per ``file://`` geladen; fuer Dateien ohne
+    Cache-Header vergibt Chromium eine heuristische Frische (rund 10 % des
+    Dateialters) und liefert ``index.html``/``app.js``/``style.css`` aus dem Cache,
+    statt sie frisch von der Platte zu lesen. Folge: Aenderungen am Frontend
+    erscheinen erst Stunden bis einen Tag spaeter, selbst nach komplettem Schliessen
+    und Neustart. Frueher (Temp-Profil pro Start) trat das nicht auf, weil der Cache
+    jedes Mal verschwand. Hier wird genau dieses Verhalten gezielt wiederhergestellt,
+    ohne das ganze Profil zu opfern: nur die reinen Cache-Ordner ("Cache",
+    "Code Cache") werden entfernt, der GPU-/Shader-Status bleibt erhalten. Laeuft
+    vor ``webview.start``, solange WebView2 die Ordner noch nicht gesperrt hat;
+    gesperrte Ordner (verwaister ``msedgewebview2.exe``) werden uebersprungen.
+    """
+    if not os.path.isdir(PROFILE_DIR):
+        return
+    cache_dir_names = {"Cache", "Code Cache"}
+    for root, dirs, _files in os.walk(PROFILE_DIR):
+        for name in list(dirs):
+            if name in cache_dir_names:
+                try:
+                    shutil.rmtree(os.path.join(root, name))
+                except OSError:
+                    # Gesperrt oder in Benutzung: ignorieren, kein harter Fehler.
+                    pass
+                # Nicht in den (idealerweise geloeschten) Cache-Ordner absteigen.
+                dirs.remove(name)
+
+
 def _frontend_stamp() -> str:
     """Aenderungszeit der wichtigsten Frontend-Dateien als kurzer Stempel.
 
@@ -378,6 +410,11 @@ def main() -> None:
 
     # Altlasten frueherer Privatmodus-Starts einmalig wegraeumen (Gate G14).
     _cleanup_stale_webview_profiles()
+
+    # WebView2-Cache bei jedem Start leeren, damit Frontend-Aenderungen sofort
+    # sichtbar sind (siehe _purge_webview_cache). Behebt den "alte Version laeuft
+    # trotz Neustart"-Bug, der mit dem festen Profilordner aufkam.
+    _purge_webview_cache()
 
     # Per-Monitor-V2-DPI-Kontext: muss vor dem ersten Fenster gesetzt sein.
     # Python.exe hat kein DPI-Manifest und laeuft sonst als DPI-unaware,
