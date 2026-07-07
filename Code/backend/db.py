@@ -375,6 +375,11 @@ class Database:
             "toolbar": "floating",
             "density": "comfortable",
             "sidebar": "open",
+            # Benachrichtigungen (Phase 10): standardmaessig an. notify ist der
+            # Master, notifyInApp/notifyWindows die beiden Kanaele.
+            "notify": "true",
+            "notifyInApp": "true",
+            "notifyWindows": "true",
         }
         for k, v in defaults.items():
             self.conn.execute(

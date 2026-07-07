@@ -27,7 +27,7 @@ const Icons = {
   Bell: _svg(_p('M6 9a6 6 0 0 1 12 0c0 5 2 6 2 6H4s2-1 2-6z') + _p('M10 19a2 2 0 0 0 4 0')),
   Plus: _svg(_l(12, 5, 12, 19) + _l(5, 12, 19, 12)),
   Check: _svg(_p('M5 12l5 5L19 6')),
-  Gear: _svg(_c(12, 12, 3) + _p('M12 2v3M12 19v3M4.2 4.2l2.1 2.1M17.7 17.7l2.1 2.1M2 12h3M19 12h3M4.2 19.8l2.1-2.1M17.7 6.3l2.1-2.1')),
+  Gear: _svg(_c(12, 12, 3) + _p('M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z')),
   Chevron: _svg(_p('M6 9l6 6 6-6')),
   ChevRight: _svg(_p('M9 6l6 6-6 6')),
   ChevLeft: _svg(_p('M15 6l-6 6 6 6')),
@@ -457,7 +457,9 @@ function renderNetBtn() {
   const label = state.online ? 'Go offline' : 'Go online';
   const anim = netAnim ? ' net-anim' : '';
   netAnim = false;
-  return `<button class="tool-btn${state.online ? ' active' : ''}" data-act="net">`
+  // Bewusst OHNE Akzentfarbe/aktive Umrandung: online ist der Normalzustand,
+  // der Knopf sieht aus wie jeder andere Rail-Knopf.
+  return `<button class="tool-btn" data-act="net">`
     + `<span class="net-ico${anim}">${icon}</span>`
     + `<span class="tip">${label}<span class="k">G</span></span></button>`;
 }
@@ -582,6 +584,7 @@ function renderModal() {
       const sc = [
         ['New task', ['↵']], ['New list', ['N']],
         ['Toggle sidebar', ['Ctrl', 'B']], ['Focus mode', ['F']],
+        ['Switch list', ['Ctrl', '↑/↓']],
         ['Lock app', ['Ctrl', 'L']],
         ['Export list', ['Ctrl', 'E']],
         ['Toggle theme', ['Ctrl', 'J']], ['Online / offline', ['G']],
@@ -606,6 +609,10 @@ function renderModal() {
 }
 
 // Settings-Modal: steuert die persistierten Einstellungen (Bauplan B.6).
+// Desktop-Layout statt "Handy-Liste": breites Modal, zwei Spalten
+// ("Appearance" links, "Workspace"/"Notifications" rechts), Sektionskoepfe im
+// Stil des Sidebar-Labels (Mono-Eyebrow + Hairline). Alle Zustandswechsel
+// laufen in-place ueber syncSettingsUi(), NIE ueber ein Voll-Render.
 function renderSettings() {
   const I = Icons;
   const s = state.settings;
@@ -615,23 +622,45 @@ function renderSettings() {
   const sw = ACCENTS.map((c) =>
     `<button class="swatch${c === s.accent ? ' sel' : ''}" data-act="set-accent" data-color="${c}" style="background:${c}"></button>`
   ).join('');
-  const row = (label, control) =>
-    `<div style="display:flex;align-items:center;gap:12px;padding:11px 0;border-bottom:1px dashed var(--border)">
-       <span style="font-size:13.5px;font-weight:500">${label}</span>
-       <span style="margin-left:auto">${control}</span></div>`;
+  const masterOn = s.notify !== false;
+  // Kippschalter (klickbar UND ziehbar, siehe onTogglePointerDown). Die
+  // Kanal-Schalter gleiten sichtbar nach LINKS, wenn der Master aus ist
+  // (nicht nur dimmen); ihr gespeicherter Wert bleibt dabei erhalten und
+  // kommt beim Wiedereinschalten des Masters zurueck.
+  const tog = (key, disabled) => {
+    const on = s[key] !== false && !disabled;
+    return `<button class="toggle${on ? ' on' : ''}${disabled ? ' disabled' : ''}"
+        data-act="toggle-setting" data-key="${key}" role="switch"
+        aria-checked="${on}" aria-disabled="${!!disabled}"><span class="toggle-knob"></span></button>`;
+  };
+  const row = (label, control, hint) =>
+    `<div class="set-row">
+       <span class="set-label">${label}${hint ? `<small class="set-hint">${hint}</small>` : ''}</span>
+       <span class="set-ctl">${control}</span></div>`;
+  const subRow = (label, control) =>
+    `<div class="set-row sub${masterOn ? '' : ' dim'}" data-sub-of="notify">
+       <span class="set-label">${label}</span>
+       <span class="set-ctl">${control}</span></div>`;
+  const head = (label) => `<div class="settings-head"><span>${label}</span><span class="line"></span></div>`;
   return `
-    <div class="modal">
+    <div class="modal modal-settings">
       <div class="modal-body">
         <div class="modal-icon accent">${I.Gear}</div>
         <h3>Settings</h3>
-        <div style="margin-top:14px;display:flex;flex-direction:column">
-          ${row('Theme', seg('dark', [['true', 'Dark'], ['false', 'Light']], String(!!s.dark)))}
-          ${row('Density', seg('density', [['comfortable', 'Comfortable'], ['compact', 'Compact']], s.density))}
-          ${row('Toolbar', seg('toolbar', [['floating', 'Floating'], ['flush', 'Flush']], s.toolbar))}
-          ${row('Sidebar', seg('sidebar', [['open', 'Open'], ['closed', 'Closed']], s.sidebar))}
-          <div style="display:flex;align-items:center;gap:12px;padding:11px 0">
-            <span style="font-size:13.5px;font-weight:500">Accent</span>
-            <span style="margin-left:auto"><div class="swatches">${sw}</div></span>
+        <div class="settings-grid">
+          <div class="settings-col">
+            ${head('Appearance')}
+            ${row('Theme', seg('dark', [['true', 'Dark'], ['false', 'Light']], String(!!s.dark)))}
+            ${row('Density', seg('density', [['comfortable', 'Comfortable'], ['compact', 'Compact']], s.density), 'row size, spacing, font size')}
+            ${row('Accent', `<div class="swatches">${sw}</div>`)}
+          </div>
+          <div class="settings-col">
+            ${head('Workspace')}
+            ${row('Sidebar', seg('sidebar', [['open', 'Open'], ['closed', 'Closed']], s.sidebar))}
+            ${head('Notifications')}
+            ${row('Notifications', tog('notify'))}
+            ${subRow('In-app alerts', tog('notifyInApp', !masterOn))}
+            ${subRow('Windows toasts', tog('notifyWindows', !masterOn))}
           </div>
         </div>
       </div>
@@ -639,25 +668,57 @@ function renderSettings() {
     </div>`;
 }
 
+// Zustaende aller Settings-Controls in-place nachziehen (Seg-Knoepfe,
+// Farbfelder, Kippschalter samt Kanal-Dimmen). KEIN render(): das Modal
+// bleibt im DOM stehen, nichts flackert, Transitions laufen sauber durch.
+function syncSettingsUi() {
+  const s = state.settings;
+  document.querySelectorAll('.seg-btn[data-key]').forEach((b) => {
+    const key = b.dataset.key;
+    const cur = key === 'dark' ? String(!!s.dark) : s[key];
+    b.classList.toggle('on', b.dataset.value === cur);
+  });
+  document.querySelectorAll('.swatch[data-color]').forEach((el) => {
+    el.classList.toggle('sel', el.dataset.color === s.accent);
+  });
+  const masterOn = s.notify !== false;
+  document.querySelectorAll('.toggle[data-key]').forEach((t) => {
+    const key = t.dataset.key;
+    const disabled = key !== 'notify' && !masterOn;
+    const on = s[key] !== false && !disabled;
+    t.classList.toggle('on', on);
+    t.classList.toggle('disabled', disabled);
+    t.setAttribute('aria-checked', String(on));
+    t.setAttribute('aria-disabled', String(disabled));
+  });
+  document.querySelectorAll('[data-sub-of="notify"]').forEach((r) => {
+    r.classList.toggle('dim', !masterOn);
+  });
+}
+
 function renderLock() {
   if (!state.locked) return '';
   const I = Icons;
-  const pill = lockTyping
-    ? `<div class="lock-input" data-keep>
-         <input id="lock-pass" type="password" placeholder="Passphrase…" autocomplete="off" spellcheck="false" />
-         <button class="dock-close" data-act="lock-cancel" title="Cancel">${I.Close}</button>
-       </div>`
-    : `<button class="lock-pill" data-act="lock-open">Password</button>`;
+  // Die Passwort-Pille ist IMMER die Eingabepille (kein Klick-zum-Aufklappen):
+  // wireInputs() fokussiert sie, tippen schreibt direkt hinein. Die Breite
+  // waechst erst, wenn die Eingabe laenger als die Grundpille wird (JS, s.u.).
+  // Waehrend der Aufschliess-Animation (lockUnlocking) verschwindet die Pille
+  // und der Ring wird gruen, der Buegel des Schlosses geht auf.
+  const pill = lockUnlocking ? '' : `
+        <div class="lock-input" data-keep>
+          <input id="lock-pass" type="password" placeholder="Password" autocomplete="off" spellcheck="false" />
+        </div>`;
   return `
-    <div class="lock-screen">
+    <div class="lock-screen${lockUnlocking ? ' unlocking' : ''}">
       <div class="lock-card">
-        <div class="lock-ring">${I.Lock}</div>
+        <div class="lock-ring">${lockUnlocking ? I.Unlock : I.Lock}</div>
         <h2>NoaToDo is locked</h2>
         ${pill}
       </div>
     </div>`;
 }
-let lockTyping = false;
+// true, solange die Aufschliess-Animation nach richtigem Passwort laeuft.
+let lockUnlocking = false;
 
 // ===========================================================================
 // Panik-Trigger (entsichert wie eine Cockpit-Waffenabdeckung). Bewusst KEIN
@@ -750,7 +811,9 @@ function startPanicWipe() {
 function applyChrome() {
   root.setAttribute('data-theme', state.settings.dark ? 'dark' : 'light');
   root.setAttribute('data-density', state.settings.density || 'comfortable');
-  root.setAttribute('data-toolbar', state.settings.toolbar || 'floating');
+  // Die Tool-Rail ist immer "floating"; die frühere Floating/Flush-Einstellung
+  // wurde aus den Settings entfernt (ein evtl. gespeicherter Wert wird ignoriert).
+  root.setAttribute('data-toolbar', 'floating');
   root.setAttribute('data-sidebar', sidebarVisible() ? 'open' : 'closed');
   root.setAttribute('data-mini', state.mini ? 'on' : 'off');
   root.setAttribute('data-focus', state.focus ? 'on' : 'off');
@@ -774,6 +837,14 @@ function applyRail() {
 
 function render() {
   applyChrome();
+  // Panik-Wipe: sobald geloescht wird bzw. der "wiped"-Schirm steht, ist die App
+  // theoretisch weg. Es darf NICHTS vom normalen UI mehr dahinter liegen (kein
+  // Header mit "+", keine Sidebar, keine Rail), sonst kann man versehentlich
+  // durch das Overlay hindurch etwas anklicken.
+  if (state.panic && (state.panic.stage === 'wiping' || state.panic.stage === 'done')) {
+    root.innerHTML = renderPanic();
+    return;
+  }
   if (state.mini) {
     root.innerHTML = renderMini() + renderLock();
     wireInputs();
@@ -842,10 +913,28 @@ function wireInputs() {
   }
   const lp = document.getElementById('lock-pass');
   if (lp) {
+    // Pillenbreite: die Punkte werden ECHT vermessen (Canvas measureText mit
+    // der Schrift des Feldes), die Pille waechst also erst, wenn die Eingabe
+    // wirklich am rechten Rand ankommt, nicht schon vorher. Nach oben ist sie
+    // auf etwa die Breite der "NoaToDo is locked"-Zeile begrenzt; laengere
+    // Eingaben laufen einfach im Feld weiter, ohne die Pille zu verbreitern.
+    const h2 = document.querySelector('.lock-card h2');
+    const cs = getComputedStyle(lp);
+    const meter = document.createElement('canvas').getContext('2d');
+    meter.font = `${cs.fontWeight} ${cs.fontSize} ${cs.fontFamily}`;
+    const basePx = lp.offsetWidth || 120;
+    const maxPx = Math.max(basePx, (h2 ? h2.offsetWidth : 300) - 40);
+    const fit = () => {
+      const dots = '•'.repeat(lp.value.length);
+      const w = Math.ceil(meter.measureText(dots).width) + 14; // Luft fuer den Cursor
+      lp.style.width = Math.min(maxPx, Math.max(basePx, w)) + 'px';
+    };
+    fit();
+    lp.addEventListener('input', fit);
     lp.focus();
     lp.addEventListener('keydown', (e) => {
       if (e.key === 'Enter') { e.preventDefault(); lockSubmit(lp.value); }
-      else if (e.key === 'Escape') { e.preventDefault(); lockCancel(); }
+      else if (e.key === 'Escape') { e.preventDefault(); lp.value = ''; fit(); }
     });
   }
   const rh = document.getElementById('sidebar-resize-handle');
@@ -1073,16 +1162,67 @@ async function setSetting(key, value) {
   if (key === 'dark') applied = (value === true || value === 'true');
   state.settings[key] = applied;
   if (key === 'dark') flashThemeSwitch();
+  // Bewusst KEIN render(): Theme/Density/Sidebar wirken ueber die Attribute
+  // in applyChrome (CSS uebernimmt), die Settings-Controls werden in-place
+  // nachgezogen. Ein Voll-Render wuerde bei jedem Umschalten kurz flackern.
   applyChrome();
+  syncSettingsUi();
   await api().set_setting(key, value);
-  render();
 }
 
 async function setAccent(color) {
   state.settings.accent = color;
+  // Sofort und ohne Voll-Render anwenden: nur die CSS-Variable umsetzen und
+  // die Controls in-place nachziehen (kein Flackern).
   root.style.setProperty('--accent', color);
+  syncSettingsUi();
   await api().set_setting('accent', color);
-  render();
+}
+
+// Kippschalter: klickbar UND ziehbar (wie ein iOS-Switch). Ein reiner Klick
+// kippt den Zustand; zieht man den Knopf, folgt er dem Zeiger und rastet nach
+// der Seite ein, ueber die er beim Loslassen steht. Der Zustand wird erst beim
+// Loslassen ueber setSetting persistiert (ein set_setting pro Interaktion).
+function onTogglePointerDown(e) {
+  if (e.button != null && e.button !== 0) return;
+  const el = e.target.closest('.toggle');
+  if (!el || el.classList.contains('disabled')) return;
+  e.preventDefault();
+  const knob = el.querySelector('.toggle-knob');
+  const key = el.dataset.key;
+  const startOn = el.classList.contains('on');
+  const rect = el.getBoundingClientRect();
+  const pad = 3;
+  const travel = Math.max(0, rect.width - pad * 2 - knob.offsetWidth);
+  let moved = false;
+  let targetOn = startOn;
+  el.classList.add('dragging');
+  try { el.setPointerCapture(e.pointerId); } catch (_) {}
+
+  const onMove = (ev) => {
+    const dx = ev.clientX - e.clientX;
+    if (Math.abs(dx) > 3) moved = true;
+    let x = (startOn ? travel : 0) + dx;
+    x = Math.max(0, Math.min(travel, x));
+    knob.style.transform = `translateX(${x}px)`;
+    targetOn = x >= travel / 2;
+    el.classList.toggle('on', targetOn);
+  };
+  const finish = () => {
+    el.removeEventListener('pointermove', onMove);
+    el.removeEventListener('pointerup', finish);
+    el.removeEventListener('pointercancel', finish);
+    try { el.releasePointerCapture(e.pointerId); } catch (_) {}
+    el.classList.remove('dragging');
+    knob.style.transform = '';
+    // Klick (kaum bewegt) kippt; Ziehen nimmt die Seite beim Loslassen.
+    const finalOn = moved ? targetOn : !startOn;
+    if (finalOn !== startOn) setSetting(key, finalOn);
+    else el.classList.toggle('on', startOn);  // visuell zuruecksetzen, kein Re-Render
+  };
+  el.addEventListener('pointermove', onMove);
+  el.addEventListener('pointerup', finish);
+  el.addEventListener('pointercancel', finish);
 }
 
 async function doExport() {
@@ -1178,27 +1318,29 @@ function onMouseMove(e) {
 
 async function doLock() {
   await api().lock();
-  state.locked = true; lockTyping = false;
-  render();
-}
-
-// Klick auf die "Password"-Pille: in die Eingabepille umschalten (gleiche
-// Optik wie die uebrigen Eingabepillen der App). wireInputs() fokussiert sie.
-function lockOpen() {
-  lockTyping = true;
-  render();
-}
-
-function lockCancel() {
-  lockTyping = false;
+  state.locked = true; lockUnlocking = false;
   render();
 }
 
 async function lockSubmit(value) {
   const res = await api().unlock(value || '');   // Phase 11: echte Passphrase
-  state.locked = !(res && res.ok);
-  lockTyping = false;
+  if (!(res && res.ok)) {
+    // Falsches Passwort: Feld leeren (input-Event zieht die Breite nach),
+    // gesperrt bleiben.
+    const lp = document.getElementById('lock-pass');
+    if (lp) { lp.value = ''; lp.dispatchEvent(new Event('input')); lp.focus(); }
+    return;
+  }
+  // Richtig: erst die Aufschliess-Animation zeigen (Ring wird gruen, der
+  // Schloss-Buegel geht auf), dann wirklich entsperren. Die Dauer muss zu den
+  // CSS-Animationen (unlockPop/unlockShackle/lockFadeOut) passen.
+  lockUnlocking = true;
   render();
+  setTimeout(() => {
+    lockUnlocking = false;
+    state.locked = false;
+    render();
+  }, 1900);
 }
 
 // Theme-Wechsel-Flackern vermeiden (ein Frame ohne Transitions).
@@ -1283,12 +1425,27 @@ async function onClick(e) {
       state.doneOpen = false; state.editingId = null; state.selectedId = null;
       render();
       break;
-    case 'select-task':
+    case 'select-task': {
       // Klick auf die Karte: Auswahl umschalten (waehrend einer Inline-
       // Bearbeitung nicht, dort gehoeren Klicks den Eingabefeldern).
+      // Doppelklick wird HIER von Hand erkannt (zwei Klicks auf dieselbe
+      // Karte innerhalb von 450 ms) statt ueber das native dblclick-Event:
+      // jeder Einzelklick rendert neu und ersetzt die Karte im DOM, wodurch
+      // das native dblclick auf einem abgehaengten Knoten feuert und den
+      // document-Listener nicht mehr erreicht. Doppelklick auf eine offene
+      // Aufgabe = Inline-Bearbeitung, auf eine ERLEDIGTE = zurueck zu offen.
       if (state.editingId === id) break;
+      const now = performance.now();
+      const isDbl = _lastTaskClick.id === id && (now - _lastTaskClick.t) < 450;
+      _lastTaskClick = isDbl ? { id: null, t: 0 } : { id: id, t: now };
+      if (isDbl) {
+        if (a.classList.contains('done')) { await toggleTask(id); break; }
+        state.editingId = id;
+        render(); break;
+      }
       state.selectedId = state.selectedId === id ? null : id;
       render(); break;
+    }
     case 'new-list-show': state.adding = true; render(); break;
     case 'settings': state.menu = null; state.modal = 'settings'; render(); break;
     case 'toggle-task': await toggleTask(id); break;
@@ -1336,25 +1493,37 @@ async function onClick(e) {
       break;
     }
     case 'net': await setOnline(!state.online); break;
-    case 'tb-mini': await doMini(!state.mini); break;
-    case 'tb-focus': state.focus = !state.focus; state.menu = null; render(); break;
+    // Alle Werkzeuge, die eine Liste brauchen (Mini, Fokus, Umbenennen, Copy,
+    // Loeschen, Export), tun ohne offene Liste einfach NICHTS: kein Modal,
+    // kein Toast. Verlassen von Mini/Fokus geht dagegen immer.
+    case 'tb-mini': if (!state.mini && !activeList()) break; await doMini(!state.mini); break;
+    case 'tb-focus':
+      if (!state.focus && !activeList()) break;
+      state.focus = !state.focus; state.menu = null; render(); break;
     case 'rail-pin': toggleRailPin(); break;
     case 'tb-export': await doExport(); break;
     case 'tb-help': state.modal = 'shortcuts'; render(); break;
     case 'tb-lock': await doLock(); break;
     case 'tb-emergency': state.panic = state.panic ? null : { armed: false, stage: 'panel' }; render(); break;
-    case 'tb-copy': await doCopy(); break;
+    case 'tb-copy': if (!activeList()) break; await doCopy(); break;
     case 'tb-rename':
       // Kontextuell: ausgewaehlte Aufgabe -> Inline-Bearbeitung; sonst Liste umbenennen.
+      if (!activeList()) break;
       if (state.selectedId) { state.editingId = state.selectedId; render(); }
       else { state.modal = 'rename'; render(); }
       break;
-    case 'tb-delete': if (state.selectedId) await deleteTask(state.selectedId); break;
+    case 'tb-delete': if (activeList() && state.selectedId) await deleteTask(state.selectedId); break;
     case 'tb-status': state.modal = 'status'; render(); break;
     case 'exit-focus': state.focus = false; render(); break;
     case 'set-accent': await setAccent(a.dataset.color); break;
     case 'set': await setSetting(a.dataset.key, a.dataset.value); break;
     case 'scrim-close':
+      // Nur schliessen, wenn der Klick WIRKLICH auf dem geblurten Hintergrund
+      // landet. Klicks auf nicht-interaktive Flaechen INNERHALB des Modals
+      // (data-keep-Huelle) blubbern sonst bis zum Scrim hoch und wuerden das
+      // Fenster ungewollt zumachen.
+      if (e.target.closest('[data-keep]')) break;
+      state.modal = null; render(); break;
     case 'modal-close': state.modal = null; render(); break;
     case 'do-rename': { const i = document.getElementById('rename-input'); if (i && i.value.trim()) await doRename(i.value.trim()); break; }
     case 'do-delete': await doDelete(); break;
@@ -1386,8 +1555,6 @@ async function onClick(e) {
       if (state.panic && state.panic.armed) { state.panic.stage = 'wiping'; render(); startPanicWipe(); }
       break;
     case 'panic-done': state.panic = null; render(); break;
-    case 'lock-open': lockOpen(); break;
-    case 'lock-cancel': lockCancel(); break;
     default: if (needRender) render();
   }
 }
@@ -1432,6 +1599,14 @@ function onContextMenu(e) {
 function onKeyGlobal(e) {
   const typing = /^(INPUT|TEXTAREA)$/.test(e.target.tagName);
   const meta = e.metaKey || e.ctrlKey;
+  if (state.locked) {
+    // Auf dem Sperrschirm landet Tippen IMMER direkt im Passwortfeld: hat das
+    // Feld den Fokus verloren (z.B. Klick daneben), holt der erste druckbare
+    // Buchstabe ihn zurueck; das Zeichen selbst wird danach regulaer eingefuegt.
+    const lp = document.getElementById('lock-pass');
+    if (lp && document.activeElement !== lp && !meta && !e.altKey && e.key.length === 1) lp.focus();
+    return;
+  }
   if (e.key === 'Escape') {
     if (state.mini) { doMini(false); return; }
     state.menu = null; state.modal = null;
@@ -1443,31 +1618,49 @@ function onKeyGlobal(e) {
     render(); return;
   }
   if (typing) return;
-  if (state.locked) return;
   const k = e.key.toLowerCase();
   if (meta && k === 'b') { e.preventDefault(); const wasFocus = state.focus; state.focus = false; state.settings.sidebar = sidebarVisible() ? 'closed' : 'open'; api().set_setting('sidebar', state.settings.sidebar); if (wasFocus) render(); else applyChrome(); }
   else if (meta && k === 'j') { e.preventDefault(); setSetting('dark', !state.settings.dark); }
   else if (meta && k === 'l') { e.preventDefault(); doLock(); }
   else if (meta && k === 'e') { e.preventDefault(); doExport(); }
+  else if (meta && (e.key === 'ArrowUp' || e.key === 'ArrowDown')) {
+    // Ctrl+Pfeil hoch/runter: durch die Listen der Sidebar wechseln. Nur wenn
+    // die Sidebar offen UND bereits eine Liste geoeffnet ist; an den Enden
+    // wird gestoppt (kein Umlauf von der untersten Liste zur obersten).
+    if (!sidebarVisible() || !state.activeId) return;
+    e.preventDefault();
+    const idx = state.lists.findIndex((l) => l.id === state.activeId);
+    if (idx < 0) return;
+    const next = idx + (e.key === 'ArrowDown' ? 1 : -1);
+    if (next < 0 || next >= state.lists.length) return;
+    state.activeId = state.lists[next].id;
+    state.doneOpen = false; state.editingId = null; state.selectedId = null;
+    render();
+  }
   // Strg+C ist bewusst KEIN App-Shortcut mehr (Phase 6.5): kopiert wird nur
   // noch gezielt die ausgewaehlte Aufgabe ueber den Rail-Button (Gate G23).
   // Der Panik-Trigger hat bewusst KEIN Tastenkuerzel (nur ueber den Rail-Knopf,
   // zweistufig entsichert).
   else if (!meta && e.key === '?') { state.modal = 'shortcuts'; render(); }
-  else if (!meta && k === 'f') { state.focus = !state.focus; render(); }
+  else if (!meta && k === 'f') {
+    // Fokusmodus braucht eine offene Liste; Verlassen geht immer.
+    if (!state.focus && !activeList()) return;
+    state.focus = !state.focus; render();
+  }
   else if (!meta && k === 'g') { setOnline(!state.online); }
-  else if (!meta && k === 'n') { state.adding = true; render(); }
+  else if (!meta && k === 'n') {
+    // preventDefault: sonst landet das ausloesende "n" bereits als erster
+    // Buchstabe im frisch fokussierten "New list"-Eingabefeld.
+    e.preventDefault();
+    state.adding = true; render();
+  }
 }
 
-// Doppelklick auf eine Aufgaben-Karte startet die Inline-Bearbeitung
-// (nicht auf Check/Loeschen/Griff, die haben eigene Funktionen).
-function onDblClick(e) {
-  const row = e.target.closest('.task');
-  if (!row || row.classList.contains('editing')) return;
-  if (e.target.closest('.check, .t-del, .t-grip')) return;
-  state.editingId = row.dataset.taskId;
-  render();
-}
+// Doppelklick auf Aufgaben-Karten wird NICHT ueber das native dblclick-Event
+// behandelt, sondern von Hand in der Klick-Delegation (case 'select-task'):
+// die Einzelklicks rendern neu und haengen die Karte aus dem DOM, das native
+// dblclick geht dadurch verloren. Merker fuer die Von-Hand-Erkennung:
+let _lastTaskClick = { id: null, t: 0 };
 
 // ===========================================================================
 // Drag & Drop, Reihenfolge offener Aufgaben (Bridge: reorder)
@@ -1521,7 +1714,7 @@ window.noa = {
   onNotification(payload) {
     if (payload && payload.title) pushToast(payload.title, payload.body);
   },
-  onLocked() { state.locked = true; lockTyping = false; render(); },
+  onLocked() { state.locked = true; lockUnlocking = false; render(); },
 };
 
 async function refreshLists() {
@@ -1556,13 +1749,13 @@ async function boot() {
   document.addEventListener('pointerdown', () => _ac(), { once: true });
   document.addEventListener('click', onClick);
   document.addEventListener('contextmenu', onContextMenu);
-  document.addEventListener('dblclick', onDblClick);
   document.addEventListener('keydown', onKeyGlobal);
   document.addEventListener('mousemove', onMouseMove);
   document.addEventListener('dragstart', onDragStart);
   document.addEventListener('dragover', onDragOver);
   document.addEventListener('drop', onDrop);
   document.addEventListener('dragend', onDragEnd);
+  document.addEventListener('pointerdown', onTogglePointerDown);
   render();
   if (state.online) startWifiPoll();
 }

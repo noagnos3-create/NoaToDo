@@ -35,7 +35,9 @@ def bridge(fn: Callable) -> Callable:
 
 
 # Typumwandlung beim Lesen der settings-Tabelle (dort liegt alles als String).
-_BOOL_SETTINGS = {"dark"}
+# notify/notifyInApp/notifyWindows steuern die Benachrichtigungen (Phase 10) und
+# werden als Bool gelesen; fehlt der Key, gilt im Frontend "an" als Default.
+_BOOL_SETTINGS = {"dark", "notify", "notifyInApp", "notifyWindows"}
 
 
 def _typed_settings(raw: dict[str, str]) -> dict[str, Any]:

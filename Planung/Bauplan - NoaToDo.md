@@ -237,8 +237,10 @@ Spalten **Sidebar | Main | Toolbar**.
 - Brand: quadratisches Akzent-Logo mit Schild-Icon, Wortmarke „Noa**ToDo**" (das
   „ToDo" in Akzentfarbe), danach Status-Pill „**LOCAL · ENCRYPTED**" mit pulsierendem
   grünen Punkt.
-- Rechts: Glocke mit roter Zahl-Badge (öffnet **Benachrichtigungs-Menü**), Avatar
-  „NA" (öffnet **Profil-Menü**).
+- Mitte: zentrale Benachrichtigungs-Pille mit Zähler-Badge (öffnet die
+  **Benachrichtigungs-Pille**, aufklappend nach unten; siehe Phase 10, Punkt 5).
+  Ersetzt die frühere Glocke oben rechts.
+- Rechts: Avatar „NA" (öffnet **Profil-Menü**).
 
 **Sidebar** (`renderSidebar`)
 - Mono-Label „LISTS" mit Trennlinie.
@@ -288,9 +290,11 @@ Karte, Standard). Buttons mit Tooltip + Hotkey, in Gruppen durch Trenner:
 11. **Go online/offline** (🌐, `G`), aktiv-Zustand wenn online.
 
 **Overlays** (`renderOverlays`)
-- **NotifMenu**, Dropdown unter der Glocke: Liste von Benachrichtigungen (Titel,
-  Mono-Unterzeile, farbiger Punkt). Beispiele: „Reminder: …", „Sync complete",
-  „Backup written".
+- **NotifMenu**, ab Phase 10 als zentrale Aufklapp-Pille oben mittig (iPadOS-Lade-Pille
+  als Vorbild, siehe Phase 10, Punkt 5; nicht mehr als klassisches Dropdown oben
+  rechts): Liste von Benachrichtigungen (Titel, Mono-Unterzeile, farbiger Punkt).
+  Beispiele: „Reminder: …", „Sync complete", „Backup written". Leer-Zustand „keine
+  Benachrichtigungen".
 - **ProfileMenu**, Dropdown unter dem Avatar: Kopf mit Avatar + Name + „signed in ·
   local"; Einträge Account, Privacy & data, Export database, Sign out.
 - **EmergencyModal**, roter Streifen oben, Warn-Icon, Titel „Panic, lock everything?",
@@ -332,6 +336,14 @@ Beim Tippen in Eingabefeldern dürfen die Buchstaben-Hotkeys nicht feuern (auße
 (`comfortable`|`compact`), `sidebar` (`open`|`closed`). Werden beim Start aus
 `get_state()` gelesen und auf das `.app`-Element als `data-*`/`--accent` gesetzt;
 Änderungen sofort via `set_setting` zurückschreiben.
+
+**Nachtrag 2026-07-07 (Phase 10, Benachrichtigungen abschaltbar):** drei zusätzliche
+Keys steuern die Benachrichtigungen (Default jeweils `true`, also an):
+`notify` (bool, Master-Schalter für alle Benachrichtigungen), `notifyInApp` (bool,
+zentrale In-App-Pille + Zähler), `notifyWindows` (bool, native Windows-Toasts). Ein
+Kanal gilt nur als aktiv, wenn `notify` **und** der jeweilige Kanal-Key `true` sind.
+Die Auswertung erfolgt im Backend (siehe Phase 10, Punkt 4). Diese drei Keys sind in
+die `set_setting`-Whitelist aus **G20** aufzunehmen.
 
 ### B.7 Verschlüsselung (verbindlich): Doppel-Kaskade AES-256 + ChaCha20
 
@@ -1091,8 +1103,49 @@ wirkungslos (per textContent als reiner Text dargestellt, zusätzlich von der CS
 3. Jede Benachrichtigung zusätzlich in das In-App-NotifMenu einspeisen
    (`on_notification`).
 
+**Nachtrag 2026-07-07 (verbindlich, Nutzerwunsch):**
+
+4. **Benachrichtigungen abschaltbar in den Einstellungen.** Es muss möglich sein,
+   Benachrichtigungen komplett auszuschalten, und zwar getrennt für die zwei Kanäle:
+   die **In-App-Benachrichtigungen** (Glocken-Pille + Zähler) und die
+   **Windows-Toasts**. Umsetzung: ein Master-Schalter plus zwei Kanal-Schalter in
+   den Einstellungen (Settings-Modal), persistiert in der `settings`-Tabelle (Keys
+   `notify`, `notifyInApp`, `notifyWindows`, siehe B.6). Ist ein Kanal aus, wird für
+   diesen Kanal **nichts** erzeugt: bei `notifyWindows=false` ruft `notify.py`
+   `winotify` gar nicht auf; bei `notifyInApp=false` wird kein `on_notification`-Event
+   gefeuert und der Glocken-Badge bleibt leer. Der Master-Schalter `notify=false`
+   schaltet beide Kanäle aus. Die Prüfung passiert **im Backend** (nicht nur im
+   Frontend), damit ein ausgeschalteter Kanal wirklich still ist. Die drei neuen Keys
+   sind in die `set_setting`-Whitelist aus **G20** aufzunehmen.
+
+5. **In-App-Benachrichtigung als zentrale Drop-down-Pille (Design, kein altmodisches
+   Menü).** Die Glocke soll **nicht** oben rechts als klassisches Dropdown-Menü
+   erscheinen, sondern **oben in der Mitte** des Headers als moderne, zur App passende
+   **Pille**, die sich nach unten aufklappt: Vorbild ist die iPadOS-Lade-Pille (Apple
+   Pencil oben angesetzt -> schmale Pille fährt oben mittig herein und klappt zu einem
+   kleinen Panel auf). Anforderungen: schmale, abgerundete Pille mittig im Header mit
+   Zähler-Badge; beim Öffnen weiche Aufklapp-/Einfahr-Animation nach unten (nicht
+   hart ein-/ausblenden); Design mit den vorhandenen Design-Tokens (Akzentfarbe,
+   Mono-Font, `--radius`, Glas-/Wash-Hintergründe), **kein** graues Standard-Dropdown.
+   Der bisherige Glocken-Platz oben rechts entfällt bzw. wird durch diese zentrale
+   Pille ersetzt. CSS ausschliesslich in `frontend/style.css`, keine externen Assets
+   (CSP).
+
+6. **Windows-Toasts im App-Design.** Die Windows-Toasts sollen optisch zur App
+   passen (Akzentfarbe, Logo/Icon, Ton), nicht wie ein generischer Windows-Toast
+   wirken. Umsetzung im Rahmen dessen, was `winotify` erlaubt: App-Icon (das
+   vorhandene `frontend/icon.ico`) als Toast-Logo, konsistente Titel/Text-Sprache
+   (Englisch, siehe UI-Sprache), passende Akzent-Anmutung. **Ehrliche Einschränkung:**
+   native Windows-Toasts sind vom OS gerendert und lassen sich nur begrenzt gestalten
+   (Icon, Titel, Text, Aktions-Buttons, App-Name), nicht frei per CSS. Volle
+   gestalterische Freiheit gibt es nur bei den In-App-Benachrichtigungen (Punkt 5).
+   Was am Windows-Toast beeinflussbar ist, wird ans App-Design angeglichen; alles
+   Übrige bleibt beim OS.
+
 **Abnahme:** Eine Aufgabe mit naher Fälligkeit erzeugt zur richtigen Zeit einen
-Windows-Toast und einen Eintrag im Glocken-Menü.
+Windows-Toast (mit App-Icon) und eine Aufklapp-Pille oben mittig im Header. In den
+Einstellungen lassen sich In-App- und Windows-Benachrichtigungen einzeln und
+gemeinsam abschalten; ist ein Kanal aus, erscheint dort nachweislich nichts.
 
 ---
 

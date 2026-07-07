@@ -32,6 +32,8 @@ Consequently the running app today is single-layer only: `db.connect()` opens SQ
 $env:NOATODO_DEBUG = "1"; .\venv\Scripts\python.exe main.py
 ```
 
+`Code/run.ps1` is a convenience launcher: it always starts `main.py` with the project's own `venv` python regardless of the current directory, so you can double-click or call it from anywhere.
+
 No build step, the frontend is vanilla HTML/CSS/JS loaded directly by PyWebView. There is no hot-reload: frontend edits need a full app restart (close the window AND make sure the python process is gone, a still-running instance also blocks relaunch via the single-instance mutex). The WebView2 cache is purged on each startup (see "Stale frontend cache" above), so a clean restart always shows the latest code. `main.py` prints `[NoaToDo] Start. Frontend: index.html HH:MM:SS, app.js ..., style.css ...` at launch; if those mtimes do not match your last edit, an old window is still running.
 
 **No test suite exists yet**, there is no `tests/` dir and pytest is not a dependency. There is currently no lint/typecheck config. Verify changes by running the app.
@@ -168,7 +170,7 @@ Backend -> frontend events (via `window.evaluate_js`): `window.noa.onSyncDone(su
 `lists(id, name, synced, position, created_at, updated_at)`, `synced=1` means imported from MS To Do.  
 `tasks(id, list_id, text, meta, done, position, source, graph_etag, due_at, created_at, updated_at)`, `source` is `'local'` or `'graph'`.  
 `sync_state(list_id, delta_link, last_sync)`, one row per list, holds the Graph delta link.  
-`settings(key, value)`, key/value pairs: `accent`, `dark`, `toolbar`, `density`, `sidebar`, `railPinned`, `sidebarWidth`. All values stored as strings; `dark` is cast to bool on read, `railPinned` is compared to the string `'true'`, `sidebarWidth` is parsed as int (valid range 180-520).
+`settings(key, value)`, key/value pairs: `accent`, `dark`, `toolbar`, `density`, `sidebar`, `railPinned`, `sidebarWidth`, `notify`, `notifyInApp`, `notifyWindows`. All values stored as strings; the bool-typed keys read back as bool via `_BOOL_SETTINGS` in `api.py` (`dark`, `notify`, `notifyInApp`, `notifyWindows`), `railPinned` is compared to the string `'true'`, `sidebarWidth` is parsed as int (valid range 180-520). `notify` is the master notification switch, `notifyInApp`/`notifyWindows` the two channels (Phase 10, all default `"true"`). `toolbar` is still stored/seeded but no longer exposed in the settings UI (the rail is always `floating`; any saved value is ignored on read in `applyChrome`).
 
 IDs: local items use `'l'+uuid` (lists) or `'t'+uuid` (tasks); imported items use their stable Graph ID.
 
@@ -216,7 +218,8 @@ Complete acceptance criteria for each phase are in `Planung/Bauplan - NoaToDo.md
 | New task | `Enter` (in new-task field) |
 | New list | `N` |
 | Toggle sidebar | `Ctrl+B` |
-| Focus mode | `F` |
+| Focus mode | `F` (needs an open list; exit always works) |
+| Switch list | `Ctrl+ArrowUp` / `Ctrl+ArrowDown` (sidebar open and a list open; stops at the ends, no wrap-around) |
 | Lock app | `Ctrl+L` |
 | Panic lock | `Ctrl+Shift+!` |
 | Export list | `Ctrl+E` |
@@ -225,7 +228,7 @@ Complete acceptance criteria for each phase are in `Planung/Bauplan - NoaToDo.md
 | Shortcut help | `?` |
 | Close all | `Esc` |
 
-Letter hotkeys (`N`, `F`, `G`, `?`) must not fire while focus is inside an input or textarea.
+Letter hotkeys (`N`, `F`, `G`, `?`) must not fire while focus is inside an input or textarea. `N` calls `e.preventDefault()` so the triggering letter does not land in the freshly focused new-list input. While the app is locked, all shortcuts are disabled; any printable key instead focuses the lock-screen password input (the character itself is then inserted normally).
 
 ## Key dependencies
 
