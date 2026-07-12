@@ -2,17 +2,8 @@
 # Fenster / WebView2-Wrapper
 pywebview
 
-# HTTP zu Microsoft Graph
-httpx
-
-# Microsoft-Authentifizierung (Public Client, Auth-Code + PKCE)
-msal
-
-# Tokens sicher im Windows Credential Manager
+# DPAPI-Pepper der Schlüsselableitung, sicher im Windows Credential Manager (siehe G18)
 keyring
-
-# Lokale Windows-Benachrichtigungen
-winotify
 
 # --- Verschlüsselung (Doppel-Kaskade, siehe Bauplan B.7) ---
 # Schicht 1: SQLCipher / AES-256 (Pflicht)

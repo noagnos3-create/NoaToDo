@@ -573,6 +573,7 @@ input { font: inherit; }
 }
 .list-inline-label {
   padding-left: 4px; color: var(--text-faint);
+  min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 .list-inline-label.danger-tag { color: var(--danger); }
 .list-pill {
@@ -588,10 +589,6 @@ input { font: inherit; }
   color: var(--text); font-size: 14px; font-weight: 500;
 }
 .list-pill input::placeholder { color: var(--text-faint); }
-.list-pill .confirm-name {
-  flex: 1; min-width: 0; font-size: 14px; font-weight: 500; color: var(--text);
-  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-}
 .list-pill .pill-x {
   flex: none; width: 26px; height: 26px; border-radius: 50%;
   display: grid; place-items: center;
@@ -804,7 +801,7 @@ input { font: inherit; }
   display: flex; flex-direction: column; gap: 7px; align-items: flex-start;
   animation: rise .16s ease;
 }
-.dock-edit-label { padding-left: 20px; color: var(--text-faint); }
+.dock-edit-label { padding-left: 20px; color: var(--text-faint); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .dock-edit-label.danger-tag { color: var(--danger); }
 .dock-edit-pill {
   display: flex; align-items: center; gap: 12px;
@@ -821,11 +818,6 @@ input { font: inherit; }
   color: var(--text); font-size: 24px; font-weight: 600; letter-spacing: -.01em;
 }
 .dock-edit-pill input::placeholder { color: var(--text-faint); }
-.dock-edit-pill .confirm-name {
-  flex: 1; min-width: 0; max-width: 440px;
-  font-size: 24px; font-weight: 600; color: var(--text);
-  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-}
 .dock-edit-pill .pill-x,
 .dock-edit-pill .confirm-del {
   flex: none; width: 38px; height: 38px; border-radius: 50%;
@@ -948,7 +940,7 @@ input { font: inherit; }
    MINI WINDOW (kompaktes, oben rechts angeheftetes Lesefenster)
    =========================================================================== */
 .app[data-mini="on"] { display: block; height: 100vh; background: var(--bg); }
-.mini { display: flex; flex-direction: column; height: 100vh; }
+.mini { position: relative; display: flex; flex-direction: column; height: 100vh; }
 .mini-bar {
   display: flex; align-items: center; gap: 9px;
   flex: none; padding: 11px 13px;
@@ -969,8 +961,28 @@ input { font: inherit; }
 .mini-btn:hover { background: var(--surface-3); color: var(--text); }
 .mini-btn:active { transform: scale(.92); }
 .mini-btn svg { width: 17px; height: 17px; }
-.mini-scroll { flex: 1; overflow-y: auto; padding: 8px 10px 14px; }
+.mini-scroll { flex: 1; overflow-y: auto; padding: 8px 10px 72px; }
 .mini-scroll .task-list { display: flex; flex-direction: column; gap: 1px; }
+/* Schwebender "+"-Knopf unten links: nutzt die Dock-Klassen (.dock-add /
+   .dock-add-wrap / .dock-input), damit die Plus-zu-X-Drehung und die
+   einschwingende Eingabe-Pille identisch zum unteren Dock laufen. Er schwebt
+   ueber der Liste (absolut), damit Aufgaben darunter durchscrollen. */
+.mini-add-wrap { position: absolute; left: 12px; bottom: 22px; margin-left: 0; z-index: 5; }
+.mini .dock-add { width: 40px; height: 40px; }
+.mini .dock-add svg { width: 18px; height: 18px; }
+/* Eingabe-Pille im Mini-Modus: erscheint RECHTS neben dem Plus auf gleicher
+   Hoehe (nicht darueber) und laeuft bis fast zum anderen Fensterrand. */
+.mini .dock-input {
+  bottom: auto; top: 50%; left: calc(100% + 8px);
+  width: calc(100vw - 76px);
+  transform: translateY(-50%); transform-origin: center left;
+  animation: mini-dock-grow .2s cubic-bezier(.34, 1.56, .64, 1);
+}
+.mini .dock-input input { width: auto; flex: 1; max-width: none; font-size: 14px; }
+@keyframes mini-dock-grow {
+  from { opacity: 0; transform: translateY(-50%) translateX(-6px) scale(.9); }
+  to   { opacity: 1; transform: translateY(-50%); }
+}
 
 /* ===========================================================================
    OVERLAYS (modals, menus, lock, shortcuts, toasts)
@@ -1028,9 +1040,6 @@ input { font: inherit; }
 .menu-item .m-dot { width: 7px; height: 7px; border-radius: 50%; margin-left: auto; }
 .menu-item.ctx-danger { color: var(--danger); }
 .menu-item.ctx-danger:hover { background: var(--danger-wash); color: var(--danger); }
-.notif-item { align-items: flex-start; }
-.notif-item .n-body { display: flex; flex-direction: column; gap: 2px; }
-.notif-item .n-body small { font-family: var(--font-mono); font-size: 10.5px; color: var(--text-faint); }
 
 /* shortcuts overlay */
 .shortcuts-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px 22px; padding: 22px 26px 26px; }
@@ -1082,6 +1091,26 @@ input { font: inherit; }
    (und das Loesch-X) am Passwortfeld ausblenden. */
 .lock-input input::-ms-reveal,
 .lock-input input::-ms-clear { display: none; }
+
+/* Off-Knopf oben rechts auf dem Sperrschirm (Nachtrag N10): beendet die App
+   sofort ohne Passphrase (quit_app), loescht nie Daten. Dezenter Geist-Knopf,
+   der erst beim Hover in Warnfarbe kippt. */
+.lock-off {
+  position: absolute; top: 20px; right: 20px;
+  width: 42px; height: 42px; border-radius: 50%;
+  display: grid; place-items: center;
+  background: color-mix(in oklab, var(--surface) 70%, transparent);
+  border: 1px solid var(--border); color: var(--text-faint);
+  cursor: pointer;
+  transition: color .16s, border-color .16s, background .16s, transform .1s;
+}
+.lock-off:hover {
+  color: var(--danger);
+  border-color: color-mix(in oklab, var(--danger) 55%, var(--border));
+  background: var(--danger-wash);
+}
+.lock-off:active { transform: scale(.94); }
+.lock-off svg { width: 19px; height: 19px; }
 
 /* Aufschliess-Animation nach richtigem Passwort: der Ring springt auf Gruen,
    leuchtet, und das Schloss (offener Buegel, Icons.Unlock) wippt kurz auf.
@@ -1246,6 +1275,41 @@ input { font: inherit; }
 .panic-wipe-row .panic-pct { color: var(--danger); font-weight: 700; }
 .panic-screen-btn { flex: none; min-width: 150px; margin-top: 6px; }
 
+/* Endschirm-Ausgaenge (Nachtrag N10): links Finish (Akzent, App beenden,
+   nichts geloescht), rechts der zweistufige Killswitch (grau; erster Klick
+   entsichert, erst "OK" loescht unwiderruflich). */
+.panic-exit-row { display: flex; gap: 12px; margin-top: 6px; }
+.panic-exit-row .panic-finish { flex: none; min-width: 150px; }
+.kill-btn {
+  position: relative; overflow: hidden;
+  flex: none; min-width: 150px; padding: 11px 16px;
+  border-radius: 10px; font-weight: 600; font-size: 14px;
+  border: 1px solid var(--border); background: var(--surface-3); color: var(--text-dim);
+  cursor: pointer;
+  transition: background .18s, color .18s, border-color .18s, transform .1s;
+}
+.kill-btn:active { transform: scale(.98); }
+/* Der Schriftzug faehrt beim Entsichern nach rechts, das "OK" faehrt von
+   links herein. Klasse wird in-place umgeschaltet (kein Re-Render), damit
+   die Transition sichtbar ablaeuft. */
+.kill-btn .kill-label {
+  display: inline-block;
+  transition: transform .3s cubic-bezier(.2, .7, .3, 1), opacity .3s;
+}
+.kill-btn .kill-ok {
+  position: absolute; left: 18px; top: 50%;
+  transform: translate(-34px, -50%); opacity: 0;
+  font-size: 12px; font-weight: 700; letter-spacing: .1em;
+  transition: transform .3s cubic-bezier(.2, .7, .3, 1) .08s, opacity .3s .08s;
+}
+.kill-btn.armed {
+  border-color: color-mix(in oklab, var(--danger) 55%, var(--border));
+  background: var(--danger-wash); color: var(--danger);
+}
+.kill-btn.armed .kill-label { transform: translateX(30px); opacity: .4; }
+.kill-btn.armed .kill-ok { transform: translate(0, -50%); opacity: 1; }
+.kill-btn.armed:hover { background: color-mix(in oklab, var(--danger) 20%, var(--surface-3)); }
+
 /* toast */
 /* bottom angehoben, damit Toasts ueber dem fest verankerten .list-dock stehen. */
 .toast-wrap { position: fixed; bottom: 92px; left: 50%; transform: translateX(-50%); z-index: 70; display: flex; flex-direction: column; gap: 8px; align-items: center; }
@@ -1314,39 +1378,10 @@ input { font: inherit; }
 }
 .set-ctl { margin-left: auto; display: flex; align-items: center; }
 .set-ctl .swatches { padding: 0; }
-.set-row.sub { padding-left: 16px; }
-.set-row.sub .set-label { font-size: 13px; color: var(--text-dim); }
-.set-row.dim { opacity: .5; }
 @media (max-width: 760px) {
   .modal-settings { width: min(440px, 100%); }
   .settings-grid { grid-template-columns: 1fr; }
 }
-
-/* Kippschalter (iOS-artig): klickbar und ziehbar (onTogglePointerDown).
-   AN-Zustand traegt die Akzentfarbe, damit er zur App passt. */
-.toggle {
-  position: relative; flex: none; display: inline-block;
-  width: 46px; height: 26px; padding: 0; border-radius: 999px;
-  border: 1px solid var(--border-strong); background: var(--surface-3);
-  cursor: pointer; vertical-align: middle; touch-action: none;
-  transition: background .22s ease, border-color .22s ease;
-}
-.toggle:hover { border-color: var(--text-faint); }
-.toggle.on {
-  background: var(--accent);
-  border-color: color-mix(in oklab, var(--accent) 70%, #000);
-}
-.toggle-knob {
-  position: absolute; top: 2px; left: 2px;
-  width: 20px; height: 20px; border-radius: 50%;
-  background: #fff; box-shadow: 0 1px 3px rgba(0,0,0,.3);
-  transition: transform .28s cubic-bezier(.5,1.4,.5,1);
-}
-.toggle.on .toggle-knob { transform: translateX(20px); }
-/* Waehrend des Ziehens folgt der Knopf per Inline-transform dem Zeiger: keine
-   konkurrierende CSS-Transition. */
-.toggle.dragging .toggle-knob { transition: none; }
-.toggle.disabled { cursor: default; pointer-events: none; }
 
 /* ===========================================================================
    NoaToDo-Ergänzung Phase 6.5 (nicht aus dem Konzept): Inline-Bearbeiten

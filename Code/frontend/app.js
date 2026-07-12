@@ -24,7 +24,6 @@ const Icons = {
   Menu: _svg(_l(3, 6, 21, 6) + _l(3, 12, 21, 12) + _l(3, 18, 21, 18)),
   Close: _svg(_l(6, 6, 18, 18) + _l(18, 6, 6, 18)),
   Shield: _svg(_p('M12 3l7 3v5c0 4.5-3 7.5-7 9-4-1.5-7-4.5-7-9V6l7-3z') + _p('M9 12l2 2 4-4')),
-  Bell: _svg(_p('M6 9a6 6 0 0 1 12 0c0 5 2 6 2 6H4s2-1 2-6z') + _p('M10 19a2 2 0 0 0 4 0')),
   Plus: _svg(_l(12, 5, 12, 19) + _l(5, 12, 19, 12)),
   Check: _svg(_p('M5 12l5 5L19 6')),
   Gear: _svg(_c(12, 12, 3) + _p('M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z')),
@@ -54,6 +53,7 @@ const Icons = {
   Logout: _svg(_p('M14 7V5a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h7a2 2 0 0 0 2-2v-2') + _p('M9 12h12M18 9l3 3-3 3')),
   Pin: _svg(_p('M9 3h6l-1 7 3 3v2H7v-2l3-3-1-7z') + _l(12, 15, 12, 21)),
   Download: _svg(_p('M12 3v12M8 11l4 4 4-4') + _p('M4 19h16')),
+  Power: _svg(_l(12, 3, 12, 11) + _p('M7.05 6.3a8 8 0 1 0 9.9 0')),
 };
 
 // WLAN-Symbol mit Signalstaerke (wie in den Windows-Schnelleinstellungen):
@@ -82,7 +82,7 @@ const ACCENTS = ['#d97757', '#c75d3a', '#5a9d6b', '#4a86c5', '#d4a23c', '#a66a9c
 // ===========================================================================
 let state = {
   lists: [], activeId: null, settings: {}, online: true, locked: false,
-  menu: null,        // 'notif' | 'profile'
+  menu: null,        // 'profile'
   modal: null,       // 'status' | 'rename' | 'delete' | 'shortcuts' | 'settings'
   ctxList: null,     // Rechtsklick-Kontextmenue einer Liste: { id, x, y } | null
   renamingId: null,  // Liste, die gerade inline (Pille in der Sidebar) umbenannt wird
@@ -97,7 +97,7 @@ let state = {
   doneOpen: false,   // "Completed"-Sektion eingeklappt?
   editingId: null,   // Aufgabe, die gerade inline bearbeitet wird (Doppelklick)
   selectedId: null,  // per Klick ausgewaehlte Aufgabe (Ziel fuer Copy/Edit der Rail)
-  panic: null,       // zweistufiger Panik-Trigger: { armed:bool, stage:'panel'|'wiping'|'done' } | null
+  panic: null,       // Panik-Flow (N10): { armed:bool, stage:'panel'|'wiping'|'done'|'killing', killArmed:bool } | null
 };
 
 const root = document.getElementById('root');
@@ -113,8 +113,8 @@ let netAnim = false;
 // Maskiert & < > " ', deckt damit Text-, doppelt- UND einfach-gequotete
 // Attribut-Kontexte ab. Das fehlende ' war eine latente Luecke: sobald ein
 // Attribut mit einfachen Anfuehrungszeichen Fremddaten enthaelt, koennte ein
-// Wert sonst ausbrechen. Zusammen mit der CSP (index.html) und der spaeteren
-// textContent-Umstellung (Bauplan Phase 9, Pflicht-Gate) ist das Defense-in-Depth.
+// Wert sonst ausbrechen. Zusammen mit der CSP (index.html) ist das
+// Defense-in-Depth.
 const esc = (s) => String(s == null ? '' : s)
   .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
   .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
@@ -154,12 +154,10 @@ function renderRenamePill(l) {
 // Namen, einen roten Lösch-Knopf und ein X zum Abbrechen.
 function renderDeletePill(l) {
   const I = Icons;
-  const n = l.open.length + l.done.length;
   return `
     <div class="list-inline" data-keep data-id="${esc(l.id)}">
-      <span class="list-inline-label tag danger-tag">Delete${n ? ' · ' + n : ''}?</span>
+      <span class="list-inline-label tag danger-tag" title="${esc(l.name)}">Delete ${esc(l.name)}?</span>
       <div class="list-pill confirm">
-        <span class="confirm-name" title="${esc(l.name)}">${esc(l.name)}</span>
         <button class="confirm-del" data-act="do-delete-list" title="Delete list">${I.Trash}</button>
         <button class="pill-x" data-act="cancel-delete-list" title="Cancel">${I.Close}</button>
       </div>
@@ -236,7 +234,7 @@ function renderMain() {
     return `<main class="main"><div class="main-inner"></div></main>`;
   }
   const openSection = list.open.length === 0
-    ? `<div class="empty-note">// nothing open, you're all caught up</div>`
+    ? `<div class="empty-note">// all clear</div>`
     : `<div class="task-list" data-tasklist="open">${list.open.map(renderTask).join('')}</div>`;
 
   const doneSection = list.done.length > 0 ? `
@@ -279,7 +277,6 @@ function renderMain() {
 // Listenname bleibt sichtbar. Das "+" dreht sich dabei (gleiche Animation wie
 // der Sidebar-Schalter oben links) zu einem "x": ein erneuter Klick bricht ab,
 // schliesst das Eingabefeld und dreht das "x" zurueck zum "+".
-// Der kleine Punkt kodiert den Sync-Status (gruen = aus MS To Do, Akzent = lokal).
 function renderListDock(list) {
   const I = Icons;
   // Rechtsklick auf den grossen Namen oeffnet (wie in der Sidebar) das Rename/
@@ -324,13 +321,11 @@ function renderDockEdit(list) {
       </div>
     </div>`;
   }
-  const n = list.open.length + list.done.length;
   return `
     <div class="list-dock">
       <div class="dock-edit" data-keep data-id="${esc(list.id)}">
-        <span class="dock-edit-label tag danger-tag">Delete${n ? ' · ' + n : ''}?</span>
+        <span class="dock-edit-label tag danger-tag" title="${esc(list.name)}">Delete ${esc(list.name)}?</span>
         <div class="dock-edit-pill confirm">
-          <span class="confirm-name" title="${esc(list.name)}">${esc(list.name)}</span>
           <button class="confirm-del" data-act="do-delete-list" title="Delete list">${I.Trash}</button>
           <button class="pill-x" data-act="cancel-delete-list" title="Cancel">${I.Close}</button>
         </div>
@@ -346,7 +341,23 @@ function renderMini() {
   const open = list ? list.open : [];
   const rows = open.length
     ? `<div class="task-list" data-tasklist="open">${open.map(renderTask).join('')}</div>`
-    : `<div class="empty-note">// nothing open</div>`;
+    : `<div class="empty-note">// all clear</div>`;
+  // Kein festes "New task"-Feld mehr: nur die Aufgaben stehen oben. Der "+"-Knopf
+  // schwebt unten links und klappt (wie im Dock, gleiche Klassen -> gleiche
+  // Plus-zu-X-Drehung + einschwingende Pille) die Eingabe auf. Nur bei offener
+  // Liste, sonst gaebe es kein Ziel zum Hinzufuegen.
+  const adding = state.addingTask;
+  const inputPill = adding ? `
+        <div class="dock-input" data-keep>
+          <input id="new-task-input" placeholder="New task…" />
+          <button class="dock-close" data-act="dock-toggle" title="Close">${I.Close}</button>
+        </div>` : '';
+  const addCtl = list ? `
+      <div class="mini-add-wrap dock-add-wrap">
+        <button class="dock-add${adding ? ' active' : ''}" data-act="dock-toggle"
+          title="${adding ? 'Cancel' : 'Add task'}">${I.Plus}</button>
+        ${inputPill}
+      </div>` : '';
   return `
     <div class="mini">
       <div class="mini-bar">
@@ -357,12 +368,8 @@ function renderMini() {
       </div>
       <div class="mini-scroll">
         ${rows}
-        <div class="new-task" data-act="focus-newtask">
-          <span class="plus">${I.Plus}</span>
-          <input id="new-task-input" placeholder="New task…" />
-          <span class="kbd">↵</span>
-        </div>
       </div>
+      ${addCtl}
     </div>`;
 }
 
@@ -379,7 +386,7 @@ function renderFocus() {
   }
   const openRows = list.open.length
     ? `<div class="task-list" data-tasklist="open">${list.open.map(renderTask).join('')}</div>`
-    : `<div class="empty-note">// nothing open, you're all caught up</div>`;
+    : `<div class="empty-note">// all clear</div>`;
   const doneRows = list.done.length ? `
     <div class="section focus-done">
       <button class="section-head${state.doneOpen ? ' open' : ' collapsed'}" data-act="toggle-done">
@@ -464,38 +471,17 @@ function renderNetBtn() {
     + `<span class="tip">${label}<span class="k">G</span></span></button>`;
 }
 
-function renderNotifMenu() {
-  const I = Icons;
-  const items = [
-    { t: 'Reminder: "Going Zero"', s: 'Reading List · due today', dot: 'var(--accent)' },
-    { t: 'Sync complete', s: 'Microsoft To Do · 4 lists · 2m ago', dot: 'var(--secure)' },
-    { t: 'Backup written', s: 'tasks.db · local · 14:02', dot: 'var(--text-faint)' },
-  ];
-  const rows = items.map((n) => `
-    <button class="menu-item notif-item">
-      <span class="m-dot" style="background:${n.dot};margin-left:0;margin-top:5px"></span>
-      <span class="n-body"><span style="color:var(--text)">${esc(n.t)}</span><small>${esc(n.s)}</small></span>
-    </button>`).join('');
-  return `
-    <div class="menu" style="right:50px" data-keep>
-      <div class="menu-head">${I.Bell}<b style="font-size:13px">Notifications</b>
-        <span class="tag" style="margin-left:auto;color:var(--text-faint)">3 new</span></div>
-      ${rows}
-    </div>`;
-}
-
 function renderProfileMenu() {
   const I = Icons;
   return `
     <div class="menu" style="right:6px" data-keep>
       <div class="menu-head">
         <span class="avatar" style="width:32px;height:32px">NA</span>
-        <span class="n-body"><b style="font-size:13px">Noa Andersen</b><small class="mono" style="color:var(--text-faint)">signed in · local</small></span>
+        <span class="n-body"><b style="font-size:13px">Noa Andersen</b><small class="mono" style="color:var(--text-faint)">local</small></span>
       </div>
       <button class="menu-item">${I.User} Account</button>
       <button class="menu-item">${I.Shield} Privacy &amp; data</button>
       <button class="menu-item">${I.Download} Export database</button>
-      <button class="menu-item" data-act="sign-out">${I.Logout} Sign out</button>
     </div>`;
 }
 
@@ -529,8 +515,7 @@ function renderModal() {
       const rows = [
         ['Local database', 'tasks.db', 'var(--secure)', 'healthy'],
         ['Encryption', 'AES-256 + ChaCha20 · Argon2id', 'var(--secure)', 'active'],
-        ['Microsoft Graph', online ? 'Tasks.Read · token valid' : 'offline, sync paused', online ? 'var(--secure)' : 'var(--text-faint)', online ? 'connected' : 'paused'],
-        ['Last sync', online ? 'while online' : 'while online', 'var(--text-faint)', ''],
+        ['Network', online ? 'local only · online' : 'local only · offline', online ? 'var(--secure)' : 'var(--text-faint)', online ? 'online' : 'offline'],
         ['WebView2 runtime', 'system', 'var(--secure)', 'ok'],
       ];
       const body = rows.map((r, i) => `
@@ -582,9 +567,11 @@ function renderModal() {
     }
     case 'shortcuts': {
       const sc = [
-        ['New task', ['↵']], ['New list', ['N']],
+        ['New task', ['↵']], ['New task in list', ['Ctrl', 'N']],
+        ['New list', ['Ctrl', 'Shift', 'N']],
         ['Toggle sidebar', ['Ctrl', 'B']], ['Focus mode', ['F']],
         ['Switch list', ['Ctrl', '↑/↓']],
+        ['Open list 1-9', ['Ctrl', '1-9']],
         ['Lock app', ['Ctrl', 'L']],
         ['Export list', ['Ctrl', 'E']],
         ['Toggle theme', ['Ctrl', 'J']], ['Online / offline', ['G']],
@@ -610,7 +597,7 @@ function renderModal() {
 
 // Settings-Modal: steuert die persistierten Einstellungen (Bauplan B.6).
 // Desktop-Layout statt "Handy-Liste": breites Modal, zwei Spalten
-// ("Appearance" links, "Workspace"/"Notifications" rechts), Sektionskoepfe im
+// ("Appearance" links, "Workspace" rechts), Sektionskoepfe im
 // Stil des Sidebar-Labels (Mono-Eyebrow + Hairline). Alle Zustandswechsel
 // laufen in-place ueber syncSettingsUi(), NIE ueber ein Voll-Render.
 function renderSettings() {
@@ -622,24 +609,9 @@ function renderSettings() {
   const sw = ACCENTS.map((c) =>
     `<button class="swatch${c === s.accent ? ' sel' : ''}" data-act="set-accent" data-color="${c}" style="background:${c}"></button>`
   ).join('');
-  const masterOn = s.notify !== false;
-  // Kippschalter (klickbar UND ziehbar, siehe onTogglePointerDown). Die
-  // Kanal-Schalter gleiten sichtbar nach LINKS, wenn der Master aus ist
-  // (nicht nur dimmen); ihr gespeicherter Wert bleibt dabei erhalten und
-  // kommt beim Wiedereinschalten des Masters zurueck.
-  const tog = (key, disabled) => {
-    const on = s[key] !== false && !disabled;
-    return `<button class="toggle${on ? ' on' : ''}${disabled ? ' disabled' : ''}"
-        data-act="toggle-setting" data-key="${key}" role="switch"
-        aria-checked="${on}" aria-disabled="${!!disabled}"><span class="toggle-knob"></span></button>`;
-  };
   const row = (label, control, hint) =>
     `<div class="set-row">
        <span class="set-label">${label}${hint ? `<small class="set-hint">${hint}</small>` : ''}</span>
-       <span class="set-ctl">${control}</span></div>`;
-  const subRow = (label, control) =>
-    `<div class="set-row sub${masterOn ? '' : ' dim'}" data-sub-of="notify">
-       <span class="set-label">${label}</span>
        <span class="set-ctl">${control}</span></div>`;
   const head = (label) => `<div class="settings-head"><span>${label}</span><span class="line"></span></div>`;
   return `
@@ -651,16 +623,12 @@ function renderSettings() {
           <div class="settings-col">
             ${head('Appearance')}
             ${row('Theme', seg('dark', [['true', 'Dark'], ['false', 'Light']], String(!!s.dark)))}
-            ${row('Density', seg('density', [['comfortable', 'Comfortable'], ['compact', 'Compact']], s.density), 'row size, spacing, font size')}
+            ${row('Density', seg('density', [['comfortable', 'Comfortable'], ['compact', 'Compact']], s.density))}
             ${row('Accent', `<div class="swatches">${sw}</div>`)}
           </div>
           <div class="settings-col">
             ${head('Workspace')}
             ${row('Sidebar', seg('sidebar', [['open', 'Open'], ['closed', 'Closed']], s.sidebar))}
-            ${head('Notifications')}
-            ${row('Notifications', tog('notify'))}
-            ${subRow('In-app alerts', tog('notifyInApp', !masterOn))}
-            ${subRow('Windows toasts', tog('notifyWindows', !masterOn))}
           </div>
         </div>
       </div>
@@ -681,19 +649,6 @@ function syncSettingsUi() {
   document.querySelectorAll('.swatch[data-color]').forEach((el) => {
     el.classList.toggle('sel', el.dataset.color === s.accent);
   });
-  const masterOn = s.notify !== false;
-  document.querySelectorAll('.toggle[data-key]').forEach((t) => {
-    const key = t.dataset.key;
-    const disabled = key !== 'notify' && !masterOn;
-    const on = s[key] !== false && !disabled;
-    t.classList.toggle('on', on);
-    t.classList.toggle('disabled', disabled);
-    t.setAttribute('aria-checked', String(on));
-    t.setAttribute('aria-disabled', String(disabled));
-  });
-  document.querySelectorAll('[data-sub-of="notify"]').forEach((r) => {
-    r.classList.toggle('dim', !masterOn);
-  });
 }
 
 function renderLock() {
@@ -708,11 +663,17 @@ function renderLock() {
         <div class="lock-input" data-keep>
           <input id="lock-pass" type="password" placeholder="Password" autocomplete="off" spellcheck="false" />
         </div>`;
+  // Off-Knopf oben rechts (N10): beendet die App sofort ohne Passphrase
+  // (quit_app). Loescht nie Nutzer- oder App-Daten; der Raum wurde beim
+  // Sperren bereits bereinigt, das sichere Spuren-Wischen kommt in Phase 8.
+  const off = lockUnlocking ? '' : `
+      <button class="lock-off" data-act="lock-off" title="Quit NoaToDo">${I.Power}</button>`;
   return `
     <div class="lock-screen${lockUnlocking ? ' unlocking' : ''}">
+      ${off}
       <div class="lock-card">
         <div class="lock-ring">${lockUnlocking ? I.Unlock : I.Lock}</div>
-        <h2>NoaToDo is locked</h2>
+        <h2>${lockUnlocking ? 'NoaToDo unlocked' : 'NoaToDo is locked'}</h2>
         ${pill}
       </div>
     </div>`;
@@ -721,38 +682,54 @@ function renderLock() {
 let lockUnlocking = false;
 
 // ===========================================================================
-// Panik-Trigger (entsichert wie eine Cockpit-Waffenabdeckung). Bewusst KEIN
-// Tastenkuerzel. Stufe 1: Kippschalter von "No" auf "Yes" (armen). Stufe 2: die
-// separate "Confirm"-Pille faehrt darunter aus. Erst dann startet rein visuell
-// der Fortschrittsbalken bis 100 %, danach der Bestaetigungsschirm.
-// HINWEIS: loescht (noch) NICHTS, die echte Loeschlogik kommt in Phase 11.
+// Panik-Flow (Nachtrag N10). Entsichert wie eine Cockpit-Waffenabdeckung,
+// bewusst KEIN Tastenkuerzel. Stufe 1: Kippschalter von "No" auf "Yes" (armen).
+// Stufe 2: die separate "Confirm"-Pille faehrt darunter aus. Beim Bestaetigen
+// wird real bereinigt (Raum leeren, offline), der "Wipe"-Fortschritt laeuft,
+// danach der Endschirm mit zwei Ausgaengen: Finish (Akzent, App beenden, nichts
+// geloescht) und Killswitch (grau, zweistufig im Knopf; loescht ueber
+// api.killswitch() UNWIDERRUFLICH alle Datenbank-Inhalte und beendet die App).
+// Zurueck in die App fuehrt ab dem Wipe kein Weg mehr.
 // ===========================================================================
 function renderPanic() {
   if (!state.panic) return '';
   const I = Icons;
   const p = state.panic;
 
-  // Vollbild-Schirme: erst der "Wipe"-Fortschritt, dann die Bestaetigung.
-  if (p.stage === 'wiping' || p.stage === 'done') {
+  // Vollbild-Schirme: "Wipe"-Fortschritt, Endschirm, Killswitch-Fortschritt.
+  if (p.stage === 'wiping' || p.stage === 'done' || p.stage === 'killing') {
     if (p.stage === 'done') {
+      // Endschirm: links Finish (Akzent), rechts der zweistufige Killswitch.
+      // killArmed steuert die Im-Knopf-Animation (Schriftzug faehrt nach
+      // rechts, "OK" faehrt herein); der Klick-Handler schaltet die Klasse
+      // in-place um, damit die CSS-Transition sichtbar laeuft (ein Re-Render
+      // wuerde den Knopf neu erzeugen und die Animation verschlucken).
+      const killArmed = !!p.killArmed;
       return `
         <div class="panic-screen done">
           <div class="panic-screen-card">
             <div class="panic-screen-ring ok">${I.Shield}</div>
             <h2>All data securely wiped</h2>
-            <p class="panic-screen-sub">The local database, the in-memory cache and the cached keys were destroyed. Nothing recoverable remains on this machine.</p>
-            <button class="btn btn-danger panic-screen-btn" data-act="panic-done">Close</button>
+            <p class="panic-screen-sub">The workspace, the in-memory cache and the cached keys were destroyed and the app went offline. Nothing readable remains on this machine.</p>
+            <div class="panic-exit-row">
+              <button class="btn btn-primary panic-finish" data-act="panic-finish">Finish</button>
+              <button class="kill-btn${killArmed ? ' armed' : ''}" data-act="${killArmed ? 'kill-ok' : 'kill-arm'}" title="Irreversibly erase the database">
+                <span class="kill-label">Killswitch</span>
+                <span class="kill-ok mono">OK</span>
+              </button>
+            </div>
           </div>
         </div>`;
     }
+    const killing = p.stage === 'killing';
     return `
       <div class="panic-screen">
         <div class="panic-screen-card">
           <div class="panic-screen-ring">${I.Alert}</div>
-          <h2>Wiping all data</h2>
+          <h2>${killing ? 'Erasing user data' : 'Wiping all data'}</h2>
           <div class="panic-bar"><div class="panic-bar-fill" id="panic-fill"></div></div>
           <div class="panic-wipe-row">
-            <span class="mono" id="panic-step">Shredding tasks.db</span>
+            <span class="mono" id="panic-step">${killing ? 'Deleting user data' : 'Shredding tasks.db'}</span>
             <span class="mono panic-pct" id="panic-pct">0%</span>
           </div>
         </div>
@@ -783,26 +760,62 @@ function renderPanic() {
     </div>`;
 }
 
-// Rein visueller "Wipe": Balken und Prozentzahl per requestAnimationFrame von
-// 0 auf 100 %, dann Wechsel auf den Bestaetigungsschirm. Loescht nichts.
-function startPanicWipe() {
+// Gemeinsamer Fortschritts-Laeufer fuer beide Panik-Schirme: Balken und
+// Prozentzahl per requestAnimationFrame von 0 auf 100 %, die Statuszeile
+// wechselt entlang der Schritte, am Ende feuert onDone. Bricht ab, wenn der
+// Panik-Zustand die erwartete Stage verlassen hat.
+function runPanicProgress(stage, steps, dur, onDone) {
   const fill = document.getElementById('panic-fill');
   const pct = document.getElementById('panic-pct');
   const step = document.getElementById('panic-step');
-  const steps = ['Shredding tasks.db', 'Overwriting key material', 'Clearing memory cache', 'Zeroing free space'];
-  const dur = 2600;
   const t0 = performance.now();
   function frame(now) {
-    // Abbruch, falls der Nutzer den Panik-Modus zwischendurch verlassen hat.
-    if (!state.panic || state.panic.stage !== 'wiping') return;
+    if (!state.panic || state.panic.stage !== stage) return;
     const r = Math.min(1, (now - t0) / dur);
     if (fill) fill.style.width = (r * 100).toFixed(1) + '%';
     if (pct) pct.textContent = Math.floor(r * 100) + '%';
     if (step) step.textContent = steps[Math.min(steps.length - 1, Math.floor(r * steps.length))];
     if (r < 1) { requestAnimationFrame(frame); }
-    else { state.panic.stage = 'done'; render(); }
+    else { onDone(); }
   }
   requestAnimationFrame(frame);
+}
+
+// "Wipe"-Schirm nach dem Bestaetigen: die echte Bereinigung (Raum leeren,
+// offline, Backend-panic) ist beim Confirm schon passiert; der Balken hier ist
+// die Aussendarstellung. Danach der Endschirm mit Finish/Killswitch.
+function startPanicWipe() {
+  runPanicProgress(
+    'wiping',
+    ['Shredding tasks.db', 'Overwriting key material', 'Clearing memory cache', 'Zeroing free space'],
+    2600,
+    () => { state.panic.stage = 'done'; render(); }
+  );
+}
+
+// Killswitch (N10): loescht REAL und unwiderruflich alle Datenbank-Inhalte
+// (api.killswitch: lists/tasks/settings weg, Standard-Settings neu,
+// VACUUM; naechster Start wie ein Erststart ohne Demo-Daten). Der Backend-Call
+// laeuft parallel zum Balken; beendet wird erst, wenn beides fertig ist.
+function startKillswitch() {
+  state.panic.stage = 'killing';
+  state.panic.killArmed = false;
+  render();
+  const req = api().killswitch();
+  runPanicProgress(
+    'killing',
+    ['Deleting user data', 'Deleting lists', 'Deleting settings', 'Rebuilding empty database'],
+    2800,
+    async () => {
+      const res = await req;
+      if (res && res.error) {
+        // Loeschen fehlgeschlagen: NICHT so tun, als waere es passiert.
+        pushToast(res.message || 'Killswitch failed');
+        return;
+      }
+      await api().quit_app();
+    }
+  );
 }
 
 // ===========================================================================
@@ -841,7 +854,7 @@ function render() {
   // theoretisch weg. Es darf NICHTS vom normalen UI mehr dahinter liegen (kein
   // Header mit "+", keine Sidebar, keine Rail), sonst kann man versehentlich
   // durch das Overlay hindurch etwas anklicken.
-  if (state.panic && (state.panic.stage === 'wiping' || state.panic.stage === 'done')) {
+  if (state.panic && state.panic.stage !== 'panel') {
     root.innerHTML = renderPanic();
     return;
   }
@@ -984,15 +997,26 @@ async function commitNewList(name) {
 // ===========================================================================
 // Ton beim Abhaken: "Datenstrom", heller digitaler Aufstieg (Web Audio API).
 // Kein Audio-File noetig, daher CSP-kompatibel (default-src 'self').
-// AudioContext wird erst beim ersten Abhaken erzeugt (der Klick zaehlt als
-// User-Geste, die Browser fuer Audio voraussetzen) und danach wiederverwendet.
+// AudioContext wird beim ersten Klick (pointerdown, siehe boot()) erzeugt und
+// danach wiederverwendet. Damit der Blip beim Abhaken WIRKLICH sofort kommt,
+// bleibt der Context dauerhaft warm: ein stiller Dauerton (ConstantSource mit
+// gain 0, als DC-Signal ohnehin unhoerbar) haelt das Ausgabegeraet offen, sonst
+// laesst WebView2 es bei Stille einschlafen und der naechste Ton hat eine
+// spuerbare Kaltstart-Verzoegerung.
 // ===========================================================================
 let _audioCtx = null;
 function _ac() {
   if (!_audioCtx) {
     const AC = window.AudioContext || window.webkitAudioContext;
     if (!AC) return null;
-    _audioCtx = new AC();
+    _audioCtx = new AC({ latencyHint: 'interactive' });
+    try {
+      const keep = _audioCtx.createConstantSource();
+      const kg = _audioCtx.createGain();
+      kg.gain.value = 0;
+      keep.connect(kg).connect(_audioCtx.destination);
+      keep.start();
+    } catch (e) { /* Keep-alive ist nur Optimierung, Fehler egal */ }
   }
   if (_audioCtx.state === 'suspended') _audioCtx.resume();
   return _audioCtx;
@@ -1014,18 +1038,21 @@ function _blip(ctx, freq, at, dur, gain) {
 }
 
 // "Datenstrom": vier helle Blips, schnell aufsteigend wie herabfallender Code.
-async function playDoneSound() {
+// Bewusst NICHT auf ctx.resume() warten: die Blips werden sofort geplant, damit
+// kein Lag entsteht. Ist der Context ausnahmsweise suspendiert, hat _ac() das
+// Aufwecken schon (nicht blockierend) angestossen und die geplanten Toene kommen,
+// sobald er laeuft.
+function playDoneSound() {
   const ctx = _ac();
   if (!ctx) return;
-  if (ctx.state !== 'running') { try { await ctx.resume(); } catch(e) { return; } }
   [1046, 1318, 1568, 2093].forEach((hz, i) => _blip(ctx, hz, i * 0.045, 0.05, 0.10));
 }
 
 async function toggleTask(id) {
-  // Sound sofort abspielen (vor dem await), damit kein Lag entsteht.
+  // Sound sofort abspielen (vor dem await, ohne await), damit kein Lag entsteht.
   // Nur beim Abhaken (Aufgabe ist gerade noch offen).
   const isChecking = state.lists.some((l) => l.open.some((t) => t.id === id));
-  if (isChecking) await playDoneSound();
+  if (isChecking) playDoneSound();
 
   const res = await api().toggle_task(id);
   if (res && res.error) return pushToast(res.message || 'Error');
@@ -1129,7 +1156,7 @@ async function setOnline(flag) {
   if (state.online) startWifiPoll();
   else stopWifiPoll();
   render();
-  pushToast(flag ? 'Back online, syncing' : 'Going offline', flag ? 'MS To Do' : 'sync paused');
+  pushToast(flag ? 'Back online' : 'Offline mode', flag ? 'network enabled' : 'working offline');
 }
 
 // Echte WLAN-Signalstaerke vom Backend holen und nur das Symbol aktualisieren
@@ -1179,51 +1206,6 @@ async function setAccent(color) {
   await api().set_setting('accent', color);
 }
 
-// Kippschalter: klickbar UND ziehbar (wie ein iOS-Switch). Ein reiner Klick
-// kippt den Zustand; zieht man den Knopf, folgt er dem Zeiger und rastet nach
-// der Seite ein, ueber die er beim Loslassen steht. Der Zustand wird erst beim
-// Loslassen ueber setSetting persistiert (ein set_setting pro Interaktion).
-function onTogglePointerDown(e) {
-  if (e.button != null && e.button !== 0) return;
-  const el = e.target.closest('.toggle');
-  if (!el || el.classList.contains('disabled')) return;
-  e.preventDefault();
-  const knob = el.querySelector('.toggle-knob');
-  const key = el.dataset.key;
-  const startOn = el.classList.contains('on');
-  const rect = el.getBoundingClientRect();
-  const pad = 3;
-  const travel = Math.max(0, rect.width - pad * 2 - knob.offsetWidth);
-  let moved = false;
-  let targetOn = startOn;
-  el.classList.add('dragging');
-  try { el.setPointerCapture(e.pointerId); } catch (_) {}
-
-  const onMove = (ev) => {
-    const dx = ev.clientX - e.clientX;
-    if (Math.abs(dx) > 3) moved = true;
-    let x = (startOn ? travel : 0) + dx;
-    x = Math.max(0, Math.min(travel, x));
-    knob.style.transform = `translateX(${x}px)`;
-    targetOn = x >= travel / 2;
-    el.classList.toggle('on', targetOn);
-  };
-  const finish = () => {
-    el.removeEventListener('pointermove', onMove);
-    el.removeEventListener('pointerup', finish);
-    el.removeEventListener('pointercancel', finish);
-    try { el.releasePointerCapture(e.pointerId); } catch (_) {}
-    el.classList.remove('dragging');
-    knob.style.transform = '';
-    // Klick (kaum bewegt) kippt; Ziehen nimmt die Seite beim Loslassen.
-    const finalOn = moved ? targetOn : !startOn;
-    if (finalOn !== startOn) setSetting(key, finalOn);
-    else el.classList.toggle('on', startOn);  // visuell zuruecksetzen, kein Re-Render
-  };
-  el.addEventListener('pointermove', onMove);
-  el.addEventListener('pointerup', finish);
-  el.addEventListener('pointercancel', finish);
-}
 
 async function doExport() {
   const list = activeList();
@@ -1248,6 +1230,10 @@ async function doMini(flag) {
   const res = await api().set_mini(flag);
   if (res && res.error) { pushToast(res.message || 'Mini window failed'); return; }
   state.mini = res && typeof res.mini === 'boolean' ? res.mini : flag;
+  // Ein offenes "Neue Aufgabe"-Eingabefeld beim Moduswechsel IMMER schliessen
+  // (in beide Richtungen): es soll nicht aus dem Mini- ins grosse Fenster oder
+  // umgekehrt mitwandern.
+  state.addingTask = false;
   if (state.mini) {
     // Im Mini-Modus alles Überlagernde schließen, damit nur die Liste bleibt.
     state.focus = false; state.menu = null; state.modal = null;
@@ -1316,14 +1302,36 @@ function onMouseMove(e) {
   if (next !== railHover) { railHover = next; applyRail(); }
 }
 
+// "Raum leeren" (Nachtrag N10): gemeinsame Bereinigung fuer Lock und Panik.
+// Verwirft den kompletten In-Memory-Zustand (Listen, Auswahl, Menues, Modals,
+// Eingaben) und stellt auf offline. Loescht NICHTS: das Backend bleibt die
+// Wahrheit und liefert nach dem Entsperren alles frisch per get_state().
+function clearWorkspace() {
+  state.lists = [];
+  state.activeId = null;
+  state.menu = null; state.modal = null; state.ctxList = null;
+  state.renamingId = null; state.confirmDeleteId = null; state.listEditDock = false;
+  state.adding = false; state.addingTask = false; state.doneOpen = false;
+  state.editingId = null; state.selectedId = null;
+  state.focus = false;
+  state.settings.sidebar = 'closed';   // nur in-memory, wie beim Boot
+  state.railPinned = false;
+  state.online = false;
+}
+
 async function doLock() {
+  // Verstaerkte Sperre (N10): erst den Raum bereinigen wie bei Panik
+  // (Ansicht leeren, In-Memory-Zustand verwerfen, offline schalten), dann
+  // sperren. Es wird nichts geloescht.
+  clearWorkspace();
+  api().set_online(false);
   await api().lock();
   state.locked = true; lockUnlocking = false;
   render();
 }
 
 async function lockSubmit(value) {
-  const res = await api().unlock(value || '');   // Phase 11: echte Passphrase
+  const res = await api().unlock(value || '');   // Phase 8: echte Passphrase
   if (!(res && res.ok)) {
     // Falsches Passwort: Feld leeren (input-Event zieht die Breite nach),
     // gesperrt bleiben.
@@ -1334,9 +1342,32 @@ async function lockSubmit(value) {
   // Richtig: erst die Aufschliess-Animation zeigen (Ring wird gruen, der
   // Schloss-Buegel geht auf), dann wirklich entsperren. Die Dauer muss zu den
   // CSS-Animationen (unlockPop/unlockShackle/lockFadeOut) passen.
+  // Bewusst KEIN render(): der bestehende Lock-Screen wird in-place
+  // umgeschaltet, ein voller innerHTML-Neuaufbau wuerde sichtbar flackern.
   lockUnlocking = true;
-  render();
+  const ls = document.querySelector('.lock-screen');
+  if (ls) {
+    ls.classList.add('unlocking');
+    const ring = ls.querySelector('.lock-ring');
+    if (ring) ring.innerHTML = Icons.Unlock;
+    const h2 = ls.querySelector('h2');
+    if (h2) h2.textContent = 'NoaToDo unlocked';
+    const pill = ls.querySelector('.lock-input');
+    if (pill) pill.remove();
+    const off = ls.querySelector('.lock-off');
+    if (off) off.remove();
+  }
+  // Der Raum wurde beim Sperren geleert (N10): waehrend die Animation laeuft,
+  // den Zustand frisch vom Backend holen (danach leere Arbeitsflaeche wie beim
+  // Boot). Offline bleibt die App, bis der Nutzer es bewusst wieder einschaltet.
+  let st = null;
+  try { st = await api().get_state(); } catch (e) { /* Fallback: leerer Raum */ }
   setTimeout(() => {
+    if (st && st.lists) {
+      state.lists = st.lists;
+      state.settings = Object.assign({}, st.settings, { sidebar: 'closed' });
+      state.online = !!st.online;
+    }
     lockUnlocking = false;
     state.locked = false;
     render();
@@ -1372,7 +1403,7 @@ function pushToast(text, mono) {
 function closeMenusIfOutside(e, a) {
   let changed = false;
   const act = a ? a.dataset.act : null;
-  if (state.menu && !e.target.closest('[data-keep]') && act !== 'open-notif' && act !== 'open-profile') {
+  if (state.menu && !e.target.closest('[data-keep]') && act !== 'open-profile') {
     state.menu = null; changed = true;
   }
   if (state.ctxList && !e.target.closest('.list-ctx')) {
@@ -1415,9 +1446,7 @@ async function onClick(e) {
       if (wasFocus) render(); else applyChrome();
       break;
     }
-    case 'open-notif': state.menu = state.menu === 'notif' ? null : 'notif'; render(); break;
     case 'open-profile': state.menu = state.menu === 'profile' ? null : 'profile'; render(); break;
-    case 'sign-out': state.menu = null; await api().sign_out(); render(); pushToast('Signed out'); break;
     case 'select-list':
       // Klick auf die bereits ausgewaehlte Liste schliesst sie wieder (zurueck
       // zur leeren Arbeitsflaeche). Sonst die angeklickte Liste oeffnen.
@@ -1434,12 +1463,17 @@ async function onClick(e) {
       // das native dblclick auf einem abgehaengten Knoten feuert und den
       // document-Listener nicht mehr erreicht. Doppelklick auf eine offene
       // Aufgabe = Inline-Bearbeitung, auf eine ERLEDIGTE = zurueck zu offen.
+      // Eine erledigte Aufgabe geht nur bei einem WIRKLICH schnellen Doppelklick
+      // (< 250 ms) wieder nach oben. Klickt man langsamer zweimal, wird die
+      // Karte nur ent- bzw. ausgewaehlt, nicht bewegt.
       if (state.editingId === id) break;
       const now = performance.now();
-      const isDbl = _lastTaskClick.id === id && (now - _lastTaskClick.t) < 450;
+      const isDone = a.classList.contains('done');
+      const dt = _lastTaskClick.id === id ? now - _lastTaskClick.t : Infinity;
+      const isDbl = dt < (isDone ? 250 : 450);
       _lastTaskClick = isDbl ? { id: null, t: 0 } : { id: id, t: now };
       if (isDbl) {
-        if (a.classList.contains('done')) { await toggleTask(id); break; }
+        if (isDone) { await toggleTask(id); break; }
         state.editingId = id;
         render(); break;
       }
@@ -1552,9 +1586,35 @@ async function onClick(e) {
     case 'panic-toggle': if (state.panic) { state.panic.armed = !state.panic.armed; render(); } break;
     case 'panic-close': state.panic = null; render(); break;
     case 'panic-confirm':
-      if (state.panic && state.panic.armed) { state.panic.stage = 'wiping'; render(); startPanicWipe(); }
+      if (state.panic && state.panic.armed) {
+        // Ab hier gibt es kein Zurueck in die App mehr (N10): sofort real
+        // bereinigen (Raum leeren, offline, Backend-Panik), dann den
+        // Wipe-Fortschritt zeigen und in den Endschirm wechseln.
+        clearWorkspace();
+        api().panic();
+        state.panic.stage = 'wiping'; render(); startPanicWipe();
+      }
       break;
-    case 'panic-done': state.panic = null; render(); break;
+    // Endschirm-Ausgaenge (N10): Finish beendet nur die App (nichts geloescht).
+    case 'panic-finish': await api().quit_app(); break;
+    // Killswitch, Stufe 1: nur entsichern. Klasse und data-act werden in-place
+    // umgeschaltet (kein render()), damit die Schriftzug/OK-Transition laeuft.
+    case 'kill-arm': {
+      if (!state.panic || state.panic.stage !== 'done') break;
+      state.panic.killArmed = true;
+      const btn = a.closest('.kill-btn') || a;
+      btn.classList.add('armed');
+      btn.dataset.act = 'kill-ok';
+      break;
+    }
+    // Killswitch, Stufe 2 ("OK"): unwiderruflich loeschen, dann beendet
+    // sich die App von selbst (startKillswitch).
+    case 'kill-ok':
+      if (state.panic && state.panic.stage === 'done' && state.panic.killArmed) startKillswitch();
+      break;
+    // Off-Knopf des Sperrschirms (N10): App sofort beenden, ohne Passphrase,
+    // ohne Datenverlust.
+    case 'lock-off': await api().quit_app(); break;
     default: if (needRender) render();
   }
 }
@@ -1617,8 +1677,13 @@ function onKeyGlobal(e) {
     if (state.panic && state.panic.stage === 'panel') state.panic = null;
     render(); return;
   }
-  if (typing) return;
   const k = e.key.toLowerCase();
+  // Strg+N / Strg+Shift+N duerfen auch aus dem gerade geoeffneten Eingabefeld
+  // heraus feuern: der erste Druck oeffnet das Feld und fokussiert es, ein
+  // zweiter Druck soll es wieder schliessen (Toggle). Ohne diese Ausnahme
+  // wuerde der "typing"-Riegel den zweiten Druck schlucken. Alle anderen
+  // Buchstaben-Kuerzel bleiben waehrend des Tippens blockiert.
+  if (typing && !(meta && k === 'n')) return;
   if (meta && k === 'b') { e.preventDefault(); const wasFocus = state.focus; state.focus = false; state.settings.sidebar = sidebarVisible() ? 'closed' : 'open'; api().set_setting('sidebar', state.settings.sidebar); if (wasFocus) render(); else applyChrome(); }
   else if (meta && k === 'j') { e.preventDefault(); setSetting('dark', !state.settings.dark); }
   else if (meta && k === 'l') { e.preventDefault(); doLock(); }
@@ -1637,6 +1702,21 @@ function onKeyGlobal(e) {
     state.doneOpen = false; state.editingId = null; state.selectedId = null;
     render();
   }
+  else if (meta && !e.altKey && !e.shiftKey && e.key >= '1' && e.key <= '9') {
+    // Strg+1 bis Strg+9: direkt die n-te Liste der Sidebar oeffnen (1 = oberste).
+    // Nochmaliges Druecken derselben Nummer schliesst die Liste wieder (Toggle,
+    // gleiches Verhalten wie ein Klick auf die bereits offene Liste). Nur erlaubt,
+    // wenn die Sidebar offen ist (eine offene Liste bei geschlossener Sidebar
+    // reicht NICHT); an der UI selbst aendert sich nichts (keine sichtbaren Nummern).
+    if (!sidebarVisible()) return;
+    const idx = parseInt(e.key, 10) - 1;
+    if (idx >= state.lists.length) return;
+    e.preventDefault();
+    const id = state.lists[idx].id;
+    state.activeId = state.activeId === id ? null : id;
+    state.doneOpen = false; state.editingId = null; state.selectedId = null;
+    render();
+  }
   // Strg+C ist bewusst KEIN App-Shortcut mehr (Phase 6.5): kopiert wird nur
   // noch gezielt die ausgewaehlte Aufgabe ueber den Rail-Button (Gate G23).
   // Der Panik-Trigger hat bewusst KEIN Tastenkuerzel (nur ueber den Rail-Knopf,
@@ -1648,11 +1728,29 @@ function onKeyGlobal(e) {
     state.focus = !state.focus; render();
   }
   else if (!meta && k === 'g') { setOnline(!state.online); }
-  else if (!meta && k === 'n') {
-    // preventDefault: sonst landet das ausloesende "n" bereits als erster
-    // Buchstabe im frisch fokussierten "New list"-Eingabefeld.
+  else if (meta && e.shiftKey && k === 'n') {
+    // Strg+Shift+N: "New list"-Eingabefeld umschalten. Erster Druck oeffnet es,
+    // ein zweiter schliesst es wieder (wie Escape, ohne zu committen), damit die
+    // App gut nur mit der Tastatur bedienbar ist. preventDefault unterdrueckt das
+    // Browser-Standard (neues Fenster) und verhindert, dass das ausloesende "n"
+    // als erster Buchstabe im frisch fokussierten Eingabefeld landet.
     e.preventDefault();
-    state.adding = true; render();
+    state.adding = !state.adding; render();
+  }
+  else if (meta && k === 'n') {
+    // Strg+N: "New task"-Eingabefeld in der offenen Liste umschalten. Erster
+    // Druck oeffnet, ein zweiter schliesst wieder. Braucht eine offene Liste.
+    // Ueber den Dock-"+"-Knopf, damit die Auf/Zu-Animation erhalten bleibt und
+    // der Fokus in-place gesetzt wird (dieselbe Logik wie ein Klick darauf).
+    e.preventDefault();
+    if (!activeList()) return;
+    const addBtn = document.querySelector('.dock-add');
+    if (addBtn) addBtn.click();
+    else {
+      state.addingTask = !state.addingTask;
+      if (state.addingTask) refocusNewTask = true;
+      render();
+    }
   }
 }
 
@@ -1707,20 +1805,8 @@ function onDragEnd() {
 // Backend -> Frontend Events (Bauplan B.2)
 // ===========================================================================
 window.noa = {
-  onSyncDone(summary) {
-    if (summary && summary.changed) refreshLists();
-    pushToast('Sync complete', summary && summary.lists ? summary.lists + ' lists' : '');
-  },
-  onNotification(payload) {
-    if (payload && payload.title) pushToast(payload.title, payload.body);
-  },
   onLocked() { state.locked = true; lockUnlocking = false; render(); },
 };
-
-async function refreshLists() {
-  const lists = await api().get_lists();
-  if (Array.isArray(lists)) { state.lists = lists; render(); }
-}
 
 // ===========================================================================
 // Boot
@@ -1755,7 +1841,6 @@ async function boot() {
   document.addEventListener('dragover', onDragOver);
   document.addEventListener('drop', onDrop);
   document.addEventListener('dragend', onDragEnd);
-  document.addEventListener('pointerdown', onTogglePointerDown);
   render();
   if (state.online) startWifiPoll();
 }

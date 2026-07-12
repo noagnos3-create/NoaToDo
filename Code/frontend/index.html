@@ -3,10 +3,10 @@
 <head>
   <meta charset="utf-8" />
   <!-- Content Security Policy (Bauplan B.9 Regel 2), Defense-in-Depth gegen
-       Sync-XSS/RCE. 'unsafe-inline' NUR fuer style-src (das Frontend nutzt
+       XSS/RCE. 'unsafe-inline' NUR fuer style-src (das Frontend nutzt
        inline style=""-Attribute), NICHT fuer script-src: damit bleiben
-       eingeschleuste Inline-Handler (z.B. <img onerror=...> aus MS-Graph-Daten)
-       wirkungslos, selbst wenn doch einmal innerHTML mit Fremddaten benutzt wird. -->
+       eingeschleuste Inline-Handler (z.B. <img onerror=...>) wirkungslos,
+       selbst wenn doch einmal innerHTML mit Fremddaten benutzt wird. -->
   <meta http-equiv="Content-Security-Policy"
         content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'none';" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />

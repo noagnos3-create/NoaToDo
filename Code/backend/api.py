@@ -5,8 +5,8 @@ aufgerufen und gibt ein JSON-serialisierbares Dict/Listen-Objekt zurück. Tritt 
 Fehler auf, kommt ``{"error": code, "message": ...}`` zurück (Fehlerkonvention B.2).
 
 In Phase 2 sind alle lokalen Methoden echt (lesen/schreiben die DB). Die
-Microsoft- und Sicherheits-Methoden sind sinnvolle Platzhalter und werden in den
-Phasen 7-11 ausgefüllt.
+Sicherheits-Methoden (Lock/Unlock/Panic) sind sinnvolle Platzhalter und werden
+in Phase 8 ausgefüllt.
 """
 from __future__ import annotations
 
@@ -35,9 +35,7 @@ def bridge(fn: Callable) -> Callable:
 
 
 # Typumwandlung beim Lesen der settings-Tabelle (dort liegt alles als String).
-# notify/notifyInApp/notifyWindows steuern die Benachrichtigungen (Phase 10) und
-# werden als Bool gelesen; fehlt der Key, gilt im Frontend "an" als Default.
-_BOOL_SETTINGS = {"dark", "notify", "notifyInApp", "notifyWindows"}
+_BOOL_SETTINGS = {"dark"}
 
 
 def _typed_settings(raw: dict[str, str]) -> dict[str, Any]:
@@ -323,26 +321,16 @@ class Api:
                 "layer2": "ChaCha20-Poly1305 · Argon2id",
                 "active": True,
             },
-            "graph": {"scope": "Tasks.Read", "signed_in": False, "token": "offline"},
-            "last_sync": None,
             "runtime": {"webview2": _webview2_version()},
         }
 
     # =====================================================================
-    # Microsoft (Stubs: Phasen 8/9)
+    # Netzwerk / Offline-Modus
+    #
+    # Die App arbeitet rein lokal. Der Online/Offline-Schalter ist ein reiner
+    # Datenschutz-/Flugmodus-Umschalter (keine Cloud, kein Sync); ``online`` und
+    # das WLAN-Symbol sind nur kosmetische Statusanzeigen.
     # =====================================================================
-    @bridge
-    def sign_in(self) -> dict[str, Any]:
-        return {"error": "not_implemented", "message": "Microsoft-Login folgt in Phase 8."}
-
-    @bridge
-    def sign_out(self) -> dict[str, Any]:
-        return {"ok": True}
-
-    @bridge
-    def sync_now(self) -> dict[str, Any]:
-        return {"changed": 0, "lists": 0}
-
     @bridge
     def set_online(self, flag: bool) -> dict[str, Any]:
         self.online = bool(flag)
@@ -387,7 +375,7 @@ class Api:
         return {"connected": True, "percent": percent, "level": level}
 
     # =====================================================================
-    # Sicherheit (Stubs: Phase 11)
+    # Sicherheit (Stubs: Phase 8)
     # =====================================================================
     @bridge
     def lock(self) -> dict[str, Any]:
@@ -396,7 +384,7 @@ class Api:
 
     @bridge
     def unlock(self, passphrase: str) -> dict[str, Any]:
-        # Phase 11: Argon2-Hash prüfen + Schlüssel ableiten. Vorerst immer offen.
+        # Phase 8: Argon2-Hash prüfen + Schlüssel ableiten. Vorerst immer offen.
         self.locked = False
         return {"ok": True}
 
@@ -405,6 +393,43 @@ class Api:
         self.locked = True
         self.online = False
         return {"locked": True}
+
+    @bridge
+    def killswitch(self) -> dict[str, Any]:
+        """Löscht unwiderruflich alle Nutzerdaten aus der DB (Nachtrag N10).
+
+        Nur vom Panik-Endschirm aus erreichbar (zweistufig bestätigter
+        Killswitch-Knopf). Löscht ausschließlich Datenbank-Inhalte, nie das
+        Programm; der nächste Start verhält sich wie ein Erststart ohne
+        Demo-Daten (Details in db.killswitch).
+        """
+        return self.db.killswitch()
+
+    @bridge
+    def quit_app(self) -> dict[str, Any]:
+        """Beendet die App sauber (Off-Knopf des Lock-Screens, Panik-Endschirm).
+
+        Läuft im API-Worker-Thread: das Schließen wird deshalb per
+        ``form.BeginInvoke`` auf den WinForms-UI-Thread gestellt (asynchron,
+        nicht blockierend), analog zu set_mini; ein direkter Fensterzugriff von
+        hier könnte die Nachrichtenschleife verklemmen. Das sichere Wischen der
+        Spuren (PROFILE_DIR, Gate G14) folgt in Phase 8 auf genau diesem Pfad.
+        """
+        win = self._window
+        if win is None:
+            return {"error": "no_window", "message": "Kein Fenster verfügbar."}
+        form = getattr(win, "native", None)
+        if form is not None:
+            try:
+                from System import Action  # pythonnet, nach webview.start verfügbar
+
+                form.BeginInvoke(Action(form.Close))
+                return {"ok": True}
+            except Exception:
+                pass
+        # Fallback ohne native Form: PyWebViews eigener Weg.
+        win.destroy()
+        return {"ok": True}
 
 
 # ---------------------------------------------------------------------------

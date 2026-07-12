@@ -1,9 +1,9 @@
 """NoaToDo, Einstiegspunkt (Bauplan Phase 3).
 
 Erzeugt die Api-Bridge, öffnet das PyWebView-Fenster mit ``js_api`` und stellt
-einen Kanal Backend -> Frontend bereit (für Sync-/Notification-/Lock-Events).
+einen Kanal Backend -> Frontend bereit (für Lock-Events).
 Der Windows-Sitzungssperre-Hook ist als Platzhalter vorgesehen (echte Logik in
-Phase 11 / Bauplan B.8).
+Phase 8 / Bauplan B.8).
 """
 from __future__ import annotations
 
@@ -27,7 +27,7 @@ INDEX = os.path.join(HERE, "frontend", "index.html")
 # %LOCALAPPDATA%\NoaToDo\webview, also benutzerprivat. Enthaelt nur nicht-sensiblen
 # UI-Cache (eigene HTML/CSS/JS/Fonts, GPU-Status), nie Aufgabeninhalte: das
 # Frontend nutzt kein localStorage/IndexedDB/Cookies/fetch, alle Daten kommen ueber
-# die In-Memory-Bridge ins DOM. Das sichere Wischen bei Lock/Panic kommt in Phase 11
+# die In-Memory-Bridge ins DOM. Das sichere Wischen bei Lock/Panic kommt in Phase 8
 # (siehe Bauplan Gate G14).
 _LOCALAPPDATA = os.environ.get("LOCALAPPDATA") or os.path.join(os.path.expanduser("~"), "AppData", "Local")
 PROFILE_DIR = os.path.join(_LOCALAPPDATA, "NoaToDo", "webview")
@@ -265,8 +265,8 @@ def _run_on_ui_thread(window, work) -> None:
 def emit(window, event: str, payload=None) -> None:
     """Backend -> Frontend: ruft ``window.noa.<event>(payload)`` im Frontend auf.
 
-    Wird für ``onSyncDone``, ``onNotification``, ``onLocked`` genutzt
-    (Bauplan B.2). Robust gegen ein noch nicht geladenes Frontend.
+    Wird für ``onLocked`` genutzt (Bauplan B.2). Robust gegen ein noch nicht
+    geladenes Frontend.
     """
     if window is None:
         return
@@ -279,17 +279,6 @@ def emit(window, event: str, payload=None) -> None:
         window.evaluate_js(js)
     except Exception:
         pass
-
-
-def _register_session_lock_hook(window, api: Api) -> None:
-    """Platzhalter für den Windows-Sitzungssperre-Hook (Phase 11 / B.8).
-
-    Geplant: ``WTSRegisterSessionNotification`` auf das Fensterhandle,
-    ``WM_WTSSESSION_CHANGE`` abfangen und bei ``WTS_SESSION_LOCK`` ``api.lock()``
-    aufrufen. Wird in Phase 11 implementiert.
-    """
-    # TODO(Phase 11): ctypes/pywin32 WTSRegisterSessionNotification verdrahten.
-    return
 
 
 def _acquire_single_instance() -> bool:
@@ -427,7 +416,7 @@ def main() -> None:
     _set_app_user_model_id()
 
     # Schicht-1-Schlüssel: in der Entwicklung fester Dev-Key (Bauplan Phase 1).
-    # In Phase 11 wird er aus der Passphrase via Argon2id abgeleitet.
+    # In Phase 8 wird er aus der Passphrase via Argon2id abgeleitet.
     database = db_module.connect()
     api = Api(database)
 
@@ -449,8 +438,8 @@ def main() -> None:
     api._window = window  # privat, sonst kollidiert es mit PyWebViews Methoden-Introspektion
 
     def on_start():
-        _register_session_lock_hook(window, api)
-
+        # Windows-Sitzungssperre-Hook entfaellt bewusst (N11.8.4: Win+L loest keine
+        # App-Sperre aus; die Auto-Sperre laeuft stattdessen als Hintergrund-Timer).
         # Alle nativen Fenster-Operationen laufen ueber den UI-Thread (BeginInvoke),
         # NICHT direkt aus diesem Worker-Thread: sonst Deadlock mit der WebView2-
         # Initialisierung, siehe _run_on_ui_thread. Im UI-Thread existiert das
@@ -516,7 +505,7 @@ def main() -> None:
     # zweite/verwaiste Instanz das geteilte Profil sperrt (sonst weisses Fenster,
     # "reagiert nicht"). Was im Profil liegt, ist nur nicht-sensibler UI-Cache, nie
     # Aufgabeninhalte (siehe Kommentar an PROFILE_DIR). Das sichere Wischen dieses
-    # Ordners bei lock()/panic()/sauberem Quit folgt in Phase 11 (Bauplan G14).
+    # Ordners bei lock()/panic()/sauberem Quit folgt in Phase 8 (Bauplan G14).
     os.makedirs(PROFILE_DIR, exist_ok=True)
     webview.start(
         on_start,
