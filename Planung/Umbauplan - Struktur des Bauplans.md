@@ -455,3 +455,111 @@ Wenn diese Liste steht, ist der Bauplan so uebersichtlich wie moeglich, **ohne d
 ein einziger Fachinhalt geaendert hat**, und die Redaktionsregel des Plans ist zum ersten
 Mal wirklich eingeloest: neue Entscheidung sofort in den Vertrag, Nachtrag nur noch
 Protokoll.
+
+---
+
+## Anhang A: Etappe-0-Arbeitscheckliste (Baseline + Blockliste)
+
+Konkrete, abhakbare Fassung von Etappe 0. Die Baseline-Inventare sind bereits mit den
+echten Ist-Werten aus dem Bauplan gefuellt (Stand des Umbauplan-Commits), damit man nach
+dem Umbau exakt dagegen pruefen kann.
+
+### A.0 Sicherung
+
+- [ ] Ist-Bauplan als Referenz einfrieren (Commit-Tag oder Kopie), bevor irgendein Wort
+      wandert.
+
+### A.1 Baseline-Inventare (Ist-Werte, fuer die Erhalt-Pruefung)
+
+**Gate-Baseline (G-Erhalt-5).** 30 vorkommende Gate-Nummern:
+
+```
+G6 G7 G8 G9 G10 G11 G12 G13 G14 G15 G16 G17 G18 G19 G20 G21 G22 G23
+G24 G25 G26 G27 G28 G29 G30 G31 G32 G33 G34 G35
+```
+
+- [ ] Nach dem Umbau muss dieselbe Menge (30 Nummern) auftauchen. Hinweis: **G10 und G24**
+      sind entfernte Sync-Gates (nur historisch erwaehnt), **G26** ist verworfen; diese
+      drei bleiben als Erwaehnung, werden aber nicht zu aktiven Gates. Aktiv-Gates unveraendert.
+
+**Entscheid-/Befund-ID-Baseline (G-Erhalt-2).** Jede dieser IDs muss nach dem Umbau ueber
+das Register (Anhang 1) auf genau einen Ort aufloesen:
+
+- N-Bloecke: `N10 N10.1 N10.3 N10.4 N11 N11.1..N11.1.6 N11.2 N11.2.1 N11.2.2 N11.3 N11.4
+  N11.4.1..N11.4.3 N11.5 N11.6 N11.7 N11.8 N11.8.1..N11.8.4 N11.9 N11.10 N11.11
+  N11.11.1..N11.11.5(.1..4) N11.12(.1..3) N11.13 N11.14 N11.15(.1..6)`
+- U: `U1..U25` (im Bauplan referenziert: U1 bis U25)
+- W: `W1 W3 W4 W5 W6 W8 W15 W18`
+- S: `S1..S7` | V: `V1..V12` (Teilmenge referenziert) | A: `A1..A7`
+
+- [ ] ID-Menge vorher = ID-Menge im Register nachher.
+
+**Zahlen-Inventar (G-Erhalt-3):** siehe Abschnitt 9, dort ist die Liste der harten
+Grenzwerte gefuehrt. Vor Etappe 3 einmal ziehen, nach Etappe 3 erneut, identisch.
+
+- [ ] Zahlen-Inventar vorher erfasst.
+
+**Vorgefundener Defekt, bei Etappe 0 aufzunehmen (kein Inhalt, ein toter Zeiger):**
+
+- [ ] **`N11.16` ist eine tote Referenz.** In N11.15.3 steht "die Vokabeln sind dieselben
+      wie in der Entsperr-Fehlerlogik **(N11.16)**", aber einen Abschnitt N11.16 **gibt es
+      nicht**. Die gemeinte Entsperr-Fehlerlogik ist **N6**. Beim Umzug (N6 wandert nach
+      B.2 `unlock()`) diesen Zeiger auf den neuen B.2-Ort umbiegen. Reiner Zeiger-Fix,
+      **kein** inhaltlicher Eingriff.
+
+### A.2 Blockliste (eine Zeile pro Nachtrag-Block)
+
+Legende **Typ:** `M` = normativer Wortlaut zieht um (Arbeit + Risiko) · `R` = Norm steht
+schon im Vertrag, nur Register-Zeile ziehen (billig) · `H` = nach Anhang 3 (Historie) ·
+`Spezial` = eigener Zielort. **`!`** = reihenfolge-/dichte-sensibel, mit Opus und
+Gegenlesen (G-Erhalt-6). Zwei Haken je Zeile: **[N]** Norm am Zielort · **[R]**
+Register-Zeile geschrieben.
+
+| Block | Typ | Zielort | [N] | [R] |
+|---|---|---|---|---|
+| Kopf: Sprach-/Plattform-Entscheid | M | A.5 | [ ] | [ ] |
+| N2 Offline-Pille | M | B.4 | [ ] | [ ] |
+| N4 Lock-Screen-UX | M | B.4 | [ ] | [ ] |
+| N5 Panik nur Maus | R | B.5 | [ ] | [ ] |
+| N6 Entsperr-Fehlerlogik | M ! | B.2 + B.4 | [ ] | [ ] |
+| N7 move_task/reorder_lists | R | B.2 + Phase 7 | [ ] | [ ] |
+| N8 Roadmap | M | Teil D | [ ] | [ ] |
+| N9 Startverhalten (ueberholt) | H | Anhang 3 | [ ] | [ ] |
+| N10.1 verstaerkte Sperre | M | B.8.2 | [ ] | [ ] |
+| N10.2 Off-Knopf | R | B.4 + B.8.5 | [ ] | [ ] |
+| N10.3 Panik-Endschirm | R | B.4 | [ ] | [ ] |
+| N10.4 nach Killswitch | M | B.8.7 | [ ] | [ ] |
+| N10.5 Bridge quit/killswitch | R | B.2 | [ ] | [ ] |
+| N11.1.1-.6 gestrichene Features | M | A.4 (+ Einzeiler B.1/B.2/Phase 1) | [ ] | [ ] |
+| N11.2 Export/Undo | R | Phase 7 + B.2 | [ ] | [ ] |
+| N11.2.1 Undo-Architektur | M | B.2 + Phase 7 | [ ] | [ ] |
+| N11.2.2 reorder/move-Randfaelle | M | B.2 (bei G20) | [ ] | [ ] |
+| N11.3 Einrichtung/Passphrase/Reset | M | B.2 + B.4 + B.7 | [ ] | [ ] |
+| N11.4 Auto-Sperre/Rate-Limit | M | B.8.3 + B.8.4 | [ ] | [ ] |
+| N11.4.1 Rate-Limit persistiert | M ! | B.8.4 + B.11 | [ ] | [ ] |
+| N11.4.2 Inaktivitaets-Definition | M | B.8.3 | [ ] | [ ] |
+| N11.4.3 Argon2-Parameter/MemoryError | M ! | B.7 + B.2 | [ ] | [ ] |
+| N11.5 echter Flugmodus | M | B.2 + B.4 + Phase 0 | [ ] | [ ] |
+| N11.6 Theme/Header/Fenster/Ton | M | B.6 + B.4 + B.5 | [ ] | [ ] |
+| N11.7 Settings-Whitelist | R | B.6 + G20 | [ ] | [ ] |
+| N11.8.1 Killswitch = Datei-Op | M | B.8.7 | [ ] | [ ] |
+| N11.8.2 Start-Weiche | R | B.2 | [ ] | [ ] |
+| N11.8.3 Zweitprofil-Spike | Spezial | bleibt Phase 8 | [ ] | [ ] |
+| N11.8.4 Win+L sperrt nicht | R | B.8.1 | [ ] | [ ] |
+| N11.9 beide Krypto-Schichten | M ! | B.7 | [ ] | [ ] |
+| N11.10 Sperre nicht mehr offline | M | B.8.2 + B.5 | [ ] | [ ] |
+| N11.11.1-.4 teardown-Sequenz | M ! | B.8.5 | [ ] | [ ] |
+| N11.11.5.1-.4 native Dialoge | M ! | B.8.6 | [ ] | [ ] |
+| N11.12.1-.3 Fehler-Hygiene | M | B.2 + B.9/Phase 9 | [ ] | [ ] |
+| N11.13 Onboarding-Bridge/Boot | R | B.2 + B.4 | [ ] | [ ] |
+| N11.14 Audit-Triage | Spezial | Anhang 2 | [ ] | [ ] |
+| N11.15.1-.6 config.json | M ! | B.11 | [ ] | [ ] |
+
+**Ableitung fuer die Modell-/Budget-Frage:** Die Zeilen mit `!` (N6, N11.4.1, N11.4.3,
+N11.9, N11.11, N11.11.5, N11.15) sind der teure, riskante Kern (Opus, Gegenlesen). Alle
+`R`-Zeilen sind billig (nur Register). Damit ist Etappe 3 planbar aufteilbar: erst alle
+`R` (schnell, risikoarm), dann die `M` ohne `!`, zuletzt die `!`-Zeilen einzeln.
+
+- [ ] Alle Zeilen mit `!` sind fuer den Opus-Durchgang mit Gegenlesen markiert.
+- [ ] Diese Blockliste ist vollstaendig gegen die N-/U-Baseline aus A.1 geprueft (kein
+      Block fehlt).
