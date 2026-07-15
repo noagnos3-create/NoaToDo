@@ -566,6 +566,8 @@ function renderModal() {
         </div>`);
     }
     case 'shortcuts': {
+      // Anzeige-Vollstaendigkeit nach Bauplan B.5 (einzige Wahrheit): auch Esc und
+      // ? selbst listen, Maus-Gesten als eigene Sektion, Rail-only-Hinweis unten.
       const sc = [
         ['New task', ['↵']], ['New task in list', ['Ctrl', 'N']],
         ['New list', ['Ctrl', 'Shift', 'N']],
@@ -573,19 +575,30 @@ function renderModal() {
         ['Switch list', ['Ctrl', '↑/↓']],
         ['Open list 1-9', ['Ctrl', '1-9']],
         ['Lock app', ['Ctrl', 'L']],
-        ['Export list', ['Ctrl', 'E']],
+        ['Export open list', ['Ctrl', 'E']],
         ['Toggle theme', ['Ctrl', 'J']], ['Online / offline', ['G']],
+        ['This help', ['?']],
+        ['Close all / exit mini', ['Esc']],
       ];
-      const grid = sc.map((s) => `
+      const mouse = [
+        ['Select task', ['click']],
+        ['Edit task', ['2× click']],
+        ['Reorder tasks', ['drag']],
+      ];
+      const row = (s) => `
         <div class="sc-row"><span>${s[0]}</span>
-          <span class="sc-keys">${s[1].map((k) => `<kbd>${k}</kbd>`).join('')}</span></div>`).join('');
+          <span class="sc-keys">${s[1].map((k) => `<kbd>${k}</kbd>`).join('')}</span></div>`;
       return scrim(`
         <div class="modal" style="width:min(560px,100%)">
           <div class="modal-body" style="padding-bottom:4px">
             <div class="modal-icon accent">${I.Help}</div>
             <h3>Keyboard shortcuts</h3>
           </div>
-          <div class="shortcuts-grid">${grid}</div>
+          <div class="shortcuts-grid">${sc.map(row).join('')}
+            <div class="sc-head">Mouse</div>
+            ${mouse.map(row).join('')}
+            <div class="sc-note">Panic, copy and mini mode are toolbar buttons only, on purpose.</div>
+          </div>
         </div>`);
     }
     case 'settings':

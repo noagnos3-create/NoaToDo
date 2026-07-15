@@ -64,7 +64,7 @@ Die UI-Texte sind englisch ("New task…", "Completed", "Settings"), aber `title
 ### 2.2 Mac-Symbole auf einer Windows-App
 Toolbar-Tooltips und das Shortcuts-Modal zeigen `⌘E`, `⌘L`, `⌘⇧!`, `⌘B`, `⌘J`. NoaToDo ist eine reine Windows-App, dort heisst das `Ctrl`/`Strg`. Das ⌘-Symbol ist fuer Windows-Nutzer Rauschen.
 
-**Vorschlag:** Ueberall `Ctrl` (bzw. `Ctrl+Shift+!`) anzeigen. Die kbd-Kapseln im Shortcuts-Modal vertragen Text problemlos.
+**Vorschlag:** Ueberall `Ctrl` anzeigen. Die kbd-Kapseln im Shortcuts-Modal vertragen Text problemlos.
 
 ### 2.3 Shortcuts-Modal ist unvollstaendig
 Es fehlen: `Esc` (alles schliessen), `?` selbst, Hinweis auf Doppelklick-Edit, und der Mini-Modus hat gar keinen Shortcut (nur Rail-Button). Ausserdem listet B.5 `Ctrl+E` als Export, aber nicht, dass nur die aktive Liste exportiert wird.
@@ -315,7 +315,7 @@ Bewusst getrennt von den Maengeln: das hier sind Erweiterungen, keine Reparature
 Damit die Security-Phasen spaeter nicht mit Behelfs-UI landen, lohnt es sich, die Patterns jetzt zu entwerfen:
 
 1. **Lock-Screen (Phase 11):** Der aktuelle "4x tippen"-Platzhalter muss durch ein echtes Passphrase-Feld ersetzt werden. Design-Anforderungen: Passwort-Feld mit Show/Hide, Fehlerzustand (falsche Passphrase: Shake + Meldung, keine Information ob Nutzer existiert), Hinweis bei Feststelltaste, Rate-Limit-Anzeige ("try again in 30 s"), und ein Zustand fuer "entsperre…" (Argon2id braucht spuerbar Zeit, das ist gewollt, also braucht es einen Fortschritt/Spinner). **[Sec]**
-2. **Panic-Flow:** Heute Modal mit zwei Buttons. Fuer einen Panik-Knopf ist ein Bestaetigungs-Modal diskutabel, der Hotkey `Ctrl+Shift+!` sollte in der Zielversion ohne Rueckfrage sofort sperren (B.8), das Modal nur beim Maus-Klick auf den Rail-Button erscheinen. Jetzt schon so umsetzen, damit sich kein anderes Muskelgedaechtnis einschleift. **[Sec]**
+2. **Panic-Flow:** Heute Modal mit zwei Buttons. Fuer einen Panik-Knopf ist ein Bestaetigungs-Modal diskutabel, das Modal erscheint nur beim Maus-Klick auf den Rail-Button. **[Ueberholt/entschieden 2026-07-13 (Bauplan N5): es gibt keinen Panik-Hotkey, der fruehere `Ctrl+Shift+!`-Vorschlag ist ersatzlos gestrichen; Panik ist nur per Maus erreichbar.]** **[Sec]**
 3. **Sign-in/Sync (Phasen 8/9):** Profil- und Glockenmenue (siehe 1.3) als ehrliche leere Zustaende anlegen; Sync-Status (letzter Sync, Fehler) braucht einen festen Ort, am ehesten die Offline-/Status-Pille aus 4.2. Konflikt-Hinweis ("cloud overwrote 2 local edits") als Notification-Eintrag vorsehen.
 4. **Status-Modal als ehrliches Security-Dashboard ausbauen** (siehe 1.4): aus `get_status()` gespeist, mit klarer Kennzeichnung, welche Schutzschicht aktiv ist. Das ist das Schaufenster der Security-Story. **[Sec]**
 
