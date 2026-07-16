@@ -382,6 +382,27 @@ aufgeraeumten Ablage sitzen.
   Ueberschriften-/Zeiger-/Etikett-Vokabeln.
 - **Etappe 6 (optional), Gate-2.** Gate-Volltexte aus den langen B.9-Zeilen in ihre
   Vertraege ziehen (Abschnitt 6). Nur wenn Zeit; klar getrennt vom Rest.
+  **Erledigt 2026-07-16:** die sechs in Abschnitt 6 benannten Gate-Zeilen mit komplettem
+  Inline-Volltext (G13, G14, G16, G20, G21, G34) sind auf das Muster "Titel-Satz plus
+  Volltext-Anker" gekuerzt; ihr Volltext zog wortgleich (skriptgestuetzter Zellen-Umzug
+  wie in Etappe 3) an den zustaendigen Ort: G13 nach B.2 als Abschnitt "Serverseitige
+  Lock-Durchsetzung (als Allowlist)" (aus der Doppel-Nennung "B.8.5/B.2" in Abschnitt 6
+  wurde B.2 gewaehlt, die Allowlist ist ein Bridge-Vertrag), G20 nach B.2 direkt hinter
+  die N11.2.2-Randfaelle, G16 nach B.7, G14 nach B.8.5, G21 in Phase 7, G34 in den
+  Phase-9-Gate-Block (dort stand schon der G27-Volltext). Jeder neue Abschnitt traegt
+  sein Etikett (Gxx) und den Hinweis, dass Status, Stand und Pruefweg weiter in B.9
+  gepflegt werden; die uebrigen Gate-Zeilen behalten ihren bisherigen Punkt (laut
+  Abschnitt 6 trugen nur diese sechs den kompletten Volltext inline). Zeiger
+  nachgezogen: die Volltext-Anker-Liste im B.9-Kopf fuehrt jetzt alle elf Anker (G13,
+  G14, G16, G20, G21, G27, G28, G29, G30, G34, G35), der Phase-8-Listenkopf und der
+  Phase-8-G13-Punkt ("Normative Fassung: B.2"), die Phase-7-Bullets G20/G21 und der
+  Phase-9-Blockkopf ("Volltext je hier") zeigen auf die neuen Orte; im G13-Wortlaut
+  wurde als reiner P1-Verweissatz "Diese Zeile ist die normative Fassung" zu "Dieser
+  Abschnitt ist die normative Fassung ... (Regel im B.9-Kopf: ...)". verify_umbau.py:
+  alle harten Pruefungen gruen (Gate-Anzahl 30, Zahlen-, Literal- und ID-Inventar
+  stabil); Wort-Diff der Etappe (gegen den Etappe-5-Stand) besteht aus 1x
+  verschwundenem "diese" (der angepasste Verweissatz) und ausschliesslich
+  hinzugekommenen Ueberschriften-, Etikett- und Anker-Vokabeln.
 - **Etappe 7, Abnahme.** Abschnitt 9 durchpruefen. Dann CLAUDE.md dort nachziehen, wo sie
   auf Struktur zeigt (nicht auf IDs, die bleiben ja): die "Bridge API"-Tabelle und die
   Abschnitts-Namen. Inhaltlich aendert sich auch in CLAUDE.md nichts.
