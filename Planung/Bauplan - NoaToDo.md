@@ -102,6 +102,19 @@ weniger Angriffsfläche, passt zum local-first-Sicherheitsgedanken. Das ist
 > Bridge-Verträge (B.2) und das Backend (Phasen 1-3, 8-9) bleiben gleich. Default
 > dieses Plans = Vanilla.
 
+### A.4 Global gestrichene Features
+
+> **Leere Hülle (Umbau-Etappe 1, 2026-07-16, siehe „Umbauplan - Struktur des
+> Bauplans.md"):** Noch ohne Inhalt. In Umbau-Etappe 3 zieht die gebündelte
+> Streich-Liste aus N11.1 (N11.1.1 bis N11.1.6) wortgleich hierher. Bis dahin bleibt
+> N11.1 der normative Ort.
+
+### A.5 Sprach- und Plattform-Basis
+
+> **Leere Hülle (Umbau-Etappe 1, 2026-07-16):** Noch ohne Inhalt. In Umbau-Etappe 3
+> zieht der Sprach- und Plattform-Entscheid aus dem Kopf des UX-Nachtrags vom
+> 2026-06-13 wortgleich hierher. Bis dahin bleibt der Nachtrag-Kopf der normative Ort.
+
 ---
 
 ## TEIL B: Die Verträge (für alle Bausteine verbindlich)
@@ -663,7 +676,7 @@ Platte; Write-back-Politik siehe G17).
 > oben betrifft nur das *Wo* des entsperrten Arbeitsstands (Arbeitsspeicher vs.
 > verschlüsselte Arbeitsdatei, N11.9), **nicht** ob die ChaCha20-Schicht existiert.
 
-### B.8 Sperr-Politik: wann die Passphrase verlangt wird
+### B.8 Sperr-, Auto-Sperr- und Beenden-Politik: wann die Passphrase verlangt wird
 
 Die App ist **entweder entsperrt** (Schlüssel im Speicher, UI nutzbar) **oder gesperrt**
 (Lock-Screen, DB zu, Schlüssel verworfen). Genau diese Ereignisse lösen eine **Sperre**
@@ -706,6 +719,39 @@ gebaut (kein `WTSRegisterSessionNotification`, kein `WM_WTSSESSION_CHANGE`, kein
 `WTS_SESSION_LOCK`-Handler), weder in `main.py` noch sonstwo. Die verlässliche Sperre ist
 allein die Auto-Sperre nach Inaktivität (N11.4), umgesetzt als Hintergrund-Timer auf einer
 monotonen Uhr, unabhängig von Fensterfokus und Windows-Sitzungszustand.
+
+> **Struktur-Umbau, Etappe 1 (2026-07-16):** Die folgenden Unterabschnitte B.8.1 bis
+> B.8.7 sind leere Hüllen (siehe „Umbauplan - Struktur des Bauplans.md", Abschnitt 3).
+> Sie werden in Umbau-Etappe 3 wortgleich mit den genannten Inhalten gefüllt; bis dahin
+> bleibt der jeweils genannte Block der normative Ort.
+
+#### B.8.1 Was sperrt, was nicht
+
+*Zielort für die B.8-Tabelle oben und N11.8.4 (Win+L). Noch ohne Inhalt.*
+
+#### B.8.2 Verstärkte Sperre / Raum-Bereinigung
+
+*Zielort für N10.1 (ohne Offline-Schalten, N11.10). Noch ohne Inhalt.*
+
+#### B.8.3 Auto-Sperre: Definition der Inaktivität
+
+*Zielort für N11.4.2 und den Auto-Sperre-Teil von N11.4. Noch ohne Inhalt.*
+
+#### B.8.4 Entsperr-Rate-Limit und seine Persistenz
+
+*Zielort für N11.4 (Leiter) und N11.4.1 (Persistenz). Noch ohne Inhalt.*
+
+#### B.8.5 Die gemeinsame teardown(reason)-Sequenz
+
+*Zielort für N11.11 (inkl. Tabelle N11.11.3). Noch ohne Inhalt.*
+
+#### B.8.6 Native Dialoge und die aufgeteilte Auto-Sperre
+
+*Zielort für N11.11.5. Noch ohne Inhalt.*
+
+#### B.8.7 Killswitch und Reset als Datei-Operation
+
+*Zielort für N11.8.1 (Bezug N11.13). Noch ohne Inhalt.*
 
 ### B.9 Eingabe-Sicherheit: Schutz vor bösartigem Inhalt (verbindlich)
 
@@ -1101,6 +1147,12 @@ Diese Tabelle ist der geforderte Rückbezug ("jedes Gate referenziert seine Klas
 > verworfener Vorschlag behält seine Zeile und wird als verworfen markiert (siehe
 > G26: "keine Klasse", genau deshalb verworfen).
 
+### B.11 Unverschlüsselte Konfiguration (`config.json`)
+
+> **Leere Hülle (Umbau-Etappe 1, 2026-07-16):** Noch ohne Inhalt. In Umbau-Etappe 3
+> zieht das vollständige config.json-Kapitel aus N11.15 (N11.15.1 bis N11.15.6)
+> wortgleich hierher. Bis dahin bleibt N11.15 der normative Ort.
+
 ## TEIL C: Baufolge (Phase 0 bis 9)
 
 ### Phase 0: Projektgerüst & Umgebung
@@ -1167,8 +1219,8 @@ leer (keine Demo-Daten, N11.1.4).
 4. **Keine Demo-Seed-Daten** (N11.1.4): ein frischer Tresor startet immer leer. Beim
    allerersten Start werden nur die Default-Settings geschrieben und der `seeded`-Marker
    gesetzt; es werden keine Beispiel-Listen mehr eingespielt. Der leere Zustand zeigt im
-   Frontend einen freundlichen Empty-State („Create your first list"). ANHANG 1 ist damit
-   hinfällig.
+   Frontend einen freundlichen Empty-State („Create your first list"). ANHANG 1 alt ist
+   damit hinfällig.
 5. Alle `*_at`-Felder als ISO-8601-UTC-Strings.
 
 **Abnahme:** Ein kleines Testskript legt eine Liste + Aufgabe an, schaltet sie auf
@@ -1284,7 +1336,7 @@ interaktiv. Dies ist die Vanilla-Umsetzung der React-Komponenten.
 | Modals | `renderModal(kind)` | Status/Rename/Delete/Shortcuts/Settings (Panik ist kein Modal mehr, sondern das PanicPanel an der Rail, N10) |
 | `LockScreen` | `renderLock()` | Sperrbildschirm |
 | `Toasts` | `pushToast()` | Toast-Stack |
-| `Icons` | `Icons` (Objekt) | die SVG-Icons (siehe **Anhang 2**, 1:1 aus Konzept) |
+| `Icons` | `Icons` (Objekt) | die SVG-Icons (siehe **Anhang 4**, 1:1 aus Konzept) |
 
 1. **Zustand** im Frontend ist nur ein Cache (`state = { lists, activeId, settings,
    online, locked, menu, modal, focus, colorOpen, toasts }`). Wahrheit bleibt das
@@ -2274,7 +2326,7 @@ Einleitung sofort an Ort und Stelle eingearbeitet und hier nur noch protokollier
    nach Reset, nach Killswitch). Es werden keine Beispiel-Listen mehr eingespielt; nur
    die Default-Settings werden geschrieben. Der leere Zustand bekommt einen freundlichen
    Empty-State (Hinweis "Create your first list"). Ueberschreibt: Phase 1 Punkt 4,
-   `seed_if_empty`-Demoinhalt, ANHANG 1.
+   `seed_if_empty`-Demoinhalt, ANHANG 1 alt.
 
 5. **JSON-Export entfernt.** Es gibt nur noch `txt` und `md`. Ueberschreibt: B.2
    (`export_list(id, format)` Enum wird `'md'|'txt'`), Phase 7 Punkt 1.
@@ -3683,7 +3735,28 @@ N11.7. Fälligkeiten/Erinnerungen sind aus dem Kern-Scope gestrichen, siehe N11.
 
 ---
 
-## ANHANG 1: Seed-Daten (Startfüllung der DB) [HINFÄLLIG]
+## ANHANG 1: Entscheidungsregister (N10 + N11 als Protokoll)
+
+> **Leere Hülle (Umbau-Etappe 1, 2026-07-16, siehe „Umbauplan - Struktur des
+> Bauplans.md", Abschnitt 8):** Noch ohne Inhalt. In Umbau-Etappe 3 entsteht hier das
+> Entscheidungsregister als eine Tabelle (Spalten: ID, Datum, Thema, „Norm jetzt in"),
+> das die Nachträge N10 und N11 als reines Änderungsprotokoll ablöst. Bis dahin bleiben
+> die Nachtrag-Blöcke die normativen Orte.
+
+## ANHANG 2: Audit-Status (Triage des UX/UI-Audits)
+
+> **Leere Hülle (Umbau-Etappe 1, 2026-07-16):** Noch ohne Inhalt. In Umbau-Etappe 3
+> zieht N11.14 (Triage des UX/UI-Audits) wortgleich hierher. Bis dahin bleibt N11.14
+> der normative Ort.
+
+## ANHANG 3: Historie / hinfällige Stände
+
+> **Leere Hülle (Umbau-Etappe 1, 2026-07-16):** Noch ohne Inhalt. In Umbau-Etappe 5
+> ziehen die hinfälligen Passagen hierher: ANHANG 1 alt (Seed-Daten), die
+> `~~durchgestrichenen~~` Reste und die „[Überholt/Gestrichen durch ...]"-Blöcke. Bis
+> dahin bleiben sie an ihrem heutigen Ort stehen.
+
+## ANHANG 1 alt: Seed-Daten (Startfüllung der DB) [HINFÄLLIG]
 
 > **Hinfällig seit N11.1.4:** Es werden **keine** Demo-Seed-Daten mehr eingespielt; ein
 > frischer Tresor startet immer leer. Dieser Anhang bleibt nur als historische Referenz
@@ -3716,7 +3789,7 @@ Beim ersten Start einspielen (entspricht dem Konzept), alle Listen sind rein lok
     „Read 24 books this year", „Visit grandparents monthly",
     „Plant a small herb garden"
 
-## ANHANG 2: Icon-Set
+## ANHANG 4: Icon-Set
 
 Das Konzept bringt ein eigenes, konsistentes Line-Art-Icon-Set mit (24er-Grid,
 Strichstärke 1.7, runde Enden). Diese SVG-Pfade **1:1 aus dem Konzept übernehmen**

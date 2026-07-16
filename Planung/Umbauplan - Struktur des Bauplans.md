@@ -295,7 +295,12 @@ aufgeraeumten Ablage sitzen.
 - **Etappe 1, Geruest ohne Umzug.** Die neuen leeren Huellen anlegen: A.4, A.5, die
   B.8-Unterstruktur (B.8.1 bis B.8.7), B.11, Anhang 1 (Register), Anhang 2 (Audit-Status),
   Anhang 3 (Historie). Noch **kein** Inhalt verschoben. Damit ist die Zielablage sichtbar,
-  bevor irgendetwas wandert.
+  bevor irgendetwas wandert. **Erledigt 2026-07-16:** alle Huellen angelegt (jeweils mit
+  Zeiger auf den heutigen normativen Ort und die fuellende Etappe); zur
+  Kollisionsvermeidung wurden die Alt-Anhaenge gemaess Zielskelett umbenannt (Seed nach
+  "ANHANG 1 alt", Icon-Set nach "ANHANG 4") und die drei Verweise darauf umgebogen
+  (Phase 1 Punkt 4, N11.1 Punkt 4, B.4-Icons-Zeile); die B.8-Ueberschrift traegt den
+  Zielnamen. Kein Inhalt verschoben, verify_umbau.py gruen.
 - **Etappe 2, Gate-1.** Die zwei B.9-Tabellen zu einer zusammenfuehren (nur Umstellen,
   kein Wort). Ergebnis einmal prueft: Gate-Anzahl vorher/nachher gleich, jede
   Gate-Nummer genau einmal vorhanden.
