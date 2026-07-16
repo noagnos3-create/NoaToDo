@@ -341,7 +341,24 @@ aufgeraeumten Ablage sitzen.
 - **Etappe 4, Leseregel und Zeiger.** Den Kopf-Satz "vorher die Nachtraege lesen" streichen
   (der Haupttext ist jetzt selbsttragend) und die "von oben nach unten"-Regel wieder allein
   gelten lassen. Alle "siehe N11.x"-Zeiger im Dokument auf die neuen Vertrags-Orte
-  umbiegen; Zeiger, die jetzt neben ihrem Inhalt stehen, entfallen.
+  umbiegen; Zeiger, die jetzt neben ihrem Inhalt stehen, entfallen. **Erledigt 2026-07-16:**
+  der Kopf-Satz "Und: Vor Beginn jeder Phase zuerst die Nachtraege N10 und N11 ... lesen ...
+  nie gesehen." ist gestrichen; an den Konsolidierungs-Absatz im Kopf ist ein datierter
+  Struktur-Umbau-Absatz angefuegt (Haupttext selbsttragend, Norm im Vertrag, Protokoll in
+  Anhang 1, Historie in Anhang 3, allein "von oben nach unten"). Rund 40 Zeiger in Teil A
+  bis D und der Schnell-Checkliste wurden auf die neuen Orte umgebogen (Muster "siehe
+  B.x (N11.y)" bzw. "N11.y in B.x"; u.a. lock()-Zeile und Fehlercode-Tabelle in B.2,
+  LockScreen/B.6/B.7-Zeiger, die Gate-Zeilen G8/G14/G18/G22-Umfeld in B.9, Phase 7/8-Texte,
+  D.3 und die Checklisten-Zeile "UX-Nachtrag (Abschnitt vor TEIL D)"); Zeiger neben ihrem
+  Inhalt wurden aufgeloest ("Details in Nachtrag N10" zu "Etikett N10"). Reine
+  Etiketten-Nennungen blieben unveraendert (P4); die Historie-Texte in Anhang 1/3 wurden
+  bewusst nicht angefasst (dort ist der alte Wortlaut selbst das Protokoll). Interne
+  Verweise auf weiterbestehende Unterueberschriften (N11.15.x in B.11, N11.11.x in B.8.5)
+  blieben, von aussen kommend mit B-Ort ergaenzt. verify_umbau.py: alle harten Pruefungen
+  gruen (Gate-Anzahl 30, Zahlen-/Literal-/ID-Inventar stabil); Wort-Diff der Etappe besteht
+  ausschliesslich aus dem gestrichenen Kopf-Satz und den Zeiger-Vokabeln (3x "Nachtrag",
+  1x "Details", "Abschnitt vor TEIL D"), hinzugekommen nur B-Verweise/Etikett/Anhang-Woerter
+  und der Struktur-Umbau-Absatz.
 - **Etappe 5, Historie einraeumen.** ANHANG 1 alt (Seed) und alle `~~durchgestrichenen~~`
   bzw. "[Ueberholt/Gestrichen durch ...]"-Reste nach **Anhang 3** verschieben. Der Baupfad
   (Teil A bis C) enthaelt danach keine hinfaelligen Passagen mehr, nur noch Verweise ins
@@ -549,6 +566,12 @@ Grenzwerte gefuehrt. Vor Etappe 3 einmal ziehen, nach Etappe 3 erneut, identisch
       ("N11.12 Fehler-Hygiene + Fehlercode-Katalog + Logging-Politik + Gate G29")
       rekonstruiert und der Fragment-Rest aus dem N11.11.5.4-Punkt entfernt. Reiner
       Struktur-Fix, **kein** inhaltlicher Eingriff.
+- [x] **Defekter Zeiger in der G32-Gate-Zeile (vorgefunden in Etappe 4, bestand schon im
+      Tag `bauplan-vor-umbau`).** Die G32-Zeile verwies fuer "Wechseldatentraeger und
+      Netz-/UNC-Pfade" auf **N11.15.6**; dieser Abschnitt ist aber der
+      Ueberschreib-Schutz. Gemeint ist **N11.15.4** ("Wechseldatentraeger, Netz- und
+      UNC-Pfade"). Erledigt 2026-07-16 (Etappe 4): der Zeiger lautet jetzt
+      "N11.15.4 (B.11)". Reiner Zeiger-Fix, **kein** inhaltlicher Eingriff.
 
 ### A.2 Blockliste (eine Zeile pro Nachtrag-Block)
 
