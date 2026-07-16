@@ -468,7 +468,7 @@ dem Umbau exakt dagegen pruefen kann.
 
 - [x] Ist-Bauplan als Referenz einfrieren (Commit-Tag oder Kopie), bevor irgendein Wort
       wandert. Erledigt 2026-07-16: annotiertes Git-Tag `bauplan-vor-umbau` auf Commit
-      `84e0d36` (main).
+      `de45ede` (main).
 
 ### A.1 Baseline-Inventare (Ist-Werte, fuer die Erhalt-Pruefung)
 
