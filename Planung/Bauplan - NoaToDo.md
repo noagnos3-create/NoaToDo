@@ -34,12 +34,14 @@
 > das Änderungsprotokoll fest (was entschieden wurde, wann, warum). Es werden
 > keine neuen Textschichten mehr angehängt, die den Haupttext überschreiben.
 >
-> **Struktur-Umbau (2026-07-16, Umbau-Etappen 1 bis 4):** Die Nachträge sind seither
+> **Struktur-Umbau (2026-07-16, Umbau-Etappen 1 bis 5):** Die Nachträge sind seither
 > vollständig in den Haupttext eingearbeitet: jede Norm steht in ihrem Vertrag (Teil B)
 > bzw. ihrer Phase (Teil C), das Änderungsprotokoll im Entscheidungsregister (Anhang 1),
 > Historisches in Anhang 3. Der Haupttext ist selbsttragend; es gilt allein die
 > Leserichtung von oben nach unten, und die frühere Kopf-Anweisung „vor jeder Phase
 > zuerst die Nachträge lesen" ist gestrichen.
+> Seit Etappe 5 liegen auch die früher als gestrichen/überholt markierten
+> Alt-Wortlaute und ANHANG 1 alt (Seed-Daten) gebündelt in Anhang 3.
 
 ---
 
@@ -137,7 +139,7 @@ weniger Angriffsfläche, passt zum local-first-Sicherheitsgedanken. Das ist
    nach Reset, nach Killswitch). Es werden keine Beispiel-Listen mehr eingespielt; nur
    die Default-Settings werden geschrieben. Der leere Zustand bekommt einen freundlichen
    Empty-State (Hinweis "Create your first list"). Ueberschreibt: Phase 1 Punkt 4,
-   `seed_if_empty`-Demoinhalt, ANHANG 1 alt.
+   `seed_if_empty`-Demoinhalt, ANHANG 1 alt (jetzt in Anhang 3).
 
 5. **JSON-Export entfernt.** Es gibt nur noch `txt` und `md`. Ueberschreibt: B.2
    (`export_list(id, format)` Enum wird `'md'|'txt'`), Phase 7 Punkt 1.
@@ -1435,9 +1437,8 @@ der Online-/Funkzustand bleibt exakt so, wie er gerade ist.** Erst dann erschein
 bekannte Lock-Screen mit der Passwort-Pille. Es werden dabei **keine Daten gelöscht**:
 das Backend bleibt die Wahrheit, nach dem Entsperren lädt das Frontend alles frisch per
 `get_state()` und startet wie mit leerer Arbeitsfläche (Sidebar zu, keine Liste offen).
-**[Gestrichen durch N11.10: „offline schalten" und „Offline bleibt die App, bis der
-Nutzer es bewusst wieder einschaltet." Die Sperre fasst den Online-Zustand nicht mehr
-an; nach dem Entsperren gilt der vorherige Zustand unverändert weiter.]**
+*(Der durch N11.10 gestrichene Alt-Wortlaut liegt wortgleich in Anhang 3,
+Umbau-Etappe 5.)*
 
 **Sperre schaltet nicht mehr offline (Etikett N11.10, 2026-07-13, W1-Entscheid) [Sec]**
 
@@ -2526,7 +2527,7 @@ leer (keine Demo-Daten, N11.1.4).
 4. **Keine Demo-Seed-Daten** (N11.1.4): ein frischer Tresor startet immer leer. Beim
    allerersten Start werden nur die Default-Settings geschrieben und der `seeded`-Marker
    gesetzt; es werden keine Beispiel-Listen mehr eingespielt. Der leere Zustand zeigt im
-   Frontend einen freundlichen Empty-State („Create your first list"). ANHANG 1 alt ist
+   Frontend einen freundlichen Empty-State („Create your first list"). ANHANG 1 alt (jetzt in Anhang 3) ist
    damit hinfällig.
 5. Alle `*_at`-Felder als ISO-8601-UTC-Strings.
 
@@ -3460,12 +3461,11 @@ Kern-Scope gestrichen, siehe N11.1.6 (A.4 Punkt 6).)
 Bewusst kein Kern-Scope, aber als Produktrichtung festgehalten:
 - **Aufgaben-Detailansicht (UX 7.4):** ausklappbare Detailzeile (Beschreibung,
   Erstellt-Datum).
-- **Volltextsuche/Filter (UX 7.2):** ~~`Ctrl+F`-Overlay mit Fuzzy-Filter~~ **wird nicht
-  gebaut** (Entscheidung N11.7).
 - **Mini-Modus, Listenwechsel (UX 7.7, 3.14):** ein Dropdown im `mini-bar`-Titel zum
   Wechseln der Liste, ohne den Mini-Modus zu verlassen.
-- **Meta-Feld benennen/strukturieren (UX 7.3):** ~~erledigt~~ **hinfällig**: das
-  Freitext-`meta` wurde ersatzlos entfernt (N11.1.3).
+
+(Zwei hinfällige Punkte dieser Liste, Volltextsuche UX 7.2 und Meta-Feld UX 7.3,
+liegen durchgestrichen in Anhang 3, Umbau-Etappe 5.)
 
 ---
 
@@ -3628,10 +3628,10 @@ Audit-Punkt ohne Zeile hier gilt als nicht entschieden und wird nicht gebaut.
 
 ## ANHANG 3: Historie / hinfällige Stände
 
-> **Leere Hülle (Umbau-Etappe 1, 2026-07-16):** Noch ohne Inhalt. In Umbau-Etappe 5
-> ziehen die hinfälligen Passagen hierher: ANHANG 1 alt (Seed-Daten), die
-> `~~durchgestrichenen~~` Reste und die „[Überholt/Gestrichen durch ...]"-Blöcke. Bis
-> dahin bleiben sie an ihrem heutigen Ort stehen.
+> **Gefüllt (Umbau-Etappen 3 und 5, 2026-07-16):** Hier liegt die Historie: die in
+> Etappe 3 eingedampften Nachtrag-Blöcke, seit Etappe 5 auch die durchgestrichenen
+> bzw. überholten Reste aus dem Baupfad und ANHANG 1 alt (Seed-Daten). Teil A bis C
+> enthält keine hinfälligen Passagen mehr, nur noch Verweise hierher.
 
 ### Eingedampfte Nachtrag-Bloecke (Umbau-Etappe 3)
 
@@ -3844,7 +3844,25 @@ dahinter fest.*
   bleibt, `.bak` sofort mitziehen, Argon2-Parameter auf G8-Soll heben.)
 
 
-## ANHANG 1 alt: Seed-Daten (Startfüllung der DB) [HINFÄLLIG]
+### Durchgestrichene und überholte Reste aus dem Baupfad (Umbau-Etappe 5)
+
+Die folgenden Passagen sind wortgleich hierher verschoben (Umbauplan, Etappe 5);
+an der Ursprungsstelle steht nur noch ein Verweis auf Anhang 3.
+
+**Aus B.8.2 (Verstärkte Sperre), der durch N11.10 gestrichene Alt-Wortlaut:**
+
+**[Gestrichen durch N11.10: „offline schalten" und „Offline bleibt die App, bis der
+Nutzer es bewusst wieder einschaltet." Die Sperre fasst den Online-Zustand nicht mehr
+an; nach dem Entsperren gilt der vorherige Zustand unverändert weiter.]**
+
+**Aus D.3 (Roadmap-Erweiterungen, Etikett N8), die zwei hinfälligen Listenpunkte:**
+
+- **Volltextsuche/Filter (UX 7.2):** ~~`Ctrl+F`-Overlay mit Fuzzy-Filter~~ **wird nicht
+  gebaut** (Entscheidung N11.7).
+- **Meta-Feld benennen/strukturieren (UX 7.3):** ~~erledigt~~ **hinfällig**: das
+  Freitext-`meta` wurde ersatzlos entfernt (N11.1.3).
+
+### ANHANG 1 alt: Seed-Daten (Startfüllung der DB) [HINFÄLLIG]
 
 > **Hinfällig seit N11.1.4:** Es werden **keine** Demo-Seed-Daten mehr eingespielt; ein
 > frischer Tresor startet immer leer. Dieser Anhang bleibt nur als historische Referenz

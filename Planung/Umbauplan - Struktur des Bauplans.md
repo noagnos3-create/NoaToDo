@@ -362,7 +362,24 @@ aufgeraeumten Ablage sitzen.
 - **Etappe 5, Historie einraeumen.** ANHANG 1 alt (Seed) und alle `~~durchgestrichenen~~`
   bzw. "[Ueberholt/Gestrichen durch ...]"-Reste nach **Anhang 3** verschieben. Der Baupfad
   (Teil A bis C) enthaelt danach keine hinfaelligen Passagen mehr, nur noch Verweise ins
-  Register/Anhang 3.
+  Register/Anhang 3. **Erledigt 2026-07-16:** ANHANG 1 alt (Seed-Daten) ist per
+  Ueberschriften-Stufe (## zu ###) wortgleich ein Unterabschnitt von Anhang 3 geworden
+  (er stand physisch schon direkt hinter dessen Inhalt); die letzten hinfaelligen
+  Passagen ausserhalb von Anhang 3 zogen wortgleich in den neuen Anhang-3-Abschnitt
+  "Durchgestrichene und ueberholte Reste aus dem Baupfad": der
+  "[Gestrichen durch N11.10]"-Block aus B.8.2 und die zwei durchgestrichenen
+  D.3-Listenpunkte (Volltextsuche UX 7.2, Meta-Feld UX 7.3); an beiden Ursprungsstellen
+  steht je ein Verweis auf Anhang 3. Nachgezogene Zeiger: die zwei
+  "ANHANG 1 alt"-Verweise (A.4 Punkt 4, Phase 1 Punkt 4) lauten jetzt "(jetzt in
+  Anhang 3)", die "Leere Huelle"-Notiz unter Anhang 3 ist durch die Gefuellt-Notiz
+  ersetzt, der Kopf-Absatz nennt die Etappen 1 bis 5 und den neuen Ablageort. Die
+  Klarstellungs-Saetze im Baupfad ("ist durch N11.10 gestrichen", "das fruehere
+  rein-lokale Flag ist ueberholt") blieben stehen: sie sind Teil der geltenden Norm,
+  kein Alt-Wortlaut. verify_umbau.py: alle harten Pruefungen gruen (Gate-Anzahl 30,
+  Zahlen-/Literal-/ID-Inventar stabil); Wort-Diff der Etappe (gegen den
+  Etappe-4-Stand) besteht ausschliesslich aus den 13 Woertern der ersetzten
+  Huellen-Notiz plus der alten Etappen-Spanne, hinzugekommen nur
+  Ueberschriften-/Zeiger-/Etikett-Vokabeln.
 - **Etappe 6 (optional), Gate-2.** Gate-Volltexte aus den langen B.9-Zeilen in ihre
   Vertraege ziehen (Abschnitt 6). Nur wenn Zeit; klar getrennt vom Rest.
 - **Etappe 7, Abnahme.** Abschnitt 9 durchpruefen. Dann CLAUDE.md dort nachziehen, wo sie
