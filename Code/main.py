@@ -434,6 +434,14 @@ def main() -> None:
         # (Api.set_mini, ~360px breit, oben rechts angeheftet) wirklich
         # schrumpfen kann und nicht von der OS-Mindestgröße geblockt wird.
         min_size=(340, 480),
+        # Gate G34 (b): Task-/Listentext ist NICHT selektierbar. PyWebView
+        # deaktiviert die Textselektion zwar per Default, aber das hier explizit
+        # zu setzen macht aus dem unbeabsichtigten Default eine bewusste,
+        # dokumentierte Entscheidung: markieren + natives Strg+C (an der
+        # Clipboard-Haertung G23 vorbei) bleibt so ausgeschlossen. Ein spaeteres
+        # text_select=True "fuer Komfort" muss diese Zeile bewusst aendern.
+        # Eingabefelder bleiben selektierbar (Phase 6.5 Punkt 3, akzeptiert).
+        text_select=False,
     )
     api._window = window  # privat, sonst kollidiert es mit PyWebViews Methoden-Introspektion
 

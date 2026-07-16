@@ -102,7 +102,18 @@ App-eigenes.
    die Auto-Sperren-Konsequenz (WLAN-Kill alle 15 min) ausdrücklich benennen und
    wollen. Realistisch will das niemand; darum Empfehlung Linie 1.
 
-### W2. Phase 8 "Tun" beschreibt weiterhin das alte, verworfene Krypto-Design
+### W2. Phase 8 "Tun" beschreibt weiterhin das alte, verworfene Krypto-Design  ✅ ERLEDIGT
+
+> **[ERLEDIGT: im Bauplan behoben (Marker 2026-07-16 nachgetragen). Die
+> normative G15-Zeile, B.7 (Schlüsselableitung) und der Phase-8-Unlock-Ablauf
+> beschreiben jetzt durchgängig das G15/N11.9-Design: Pepper-gebundenes `ikm` ->
+> Argon2id -> **ein** Master-Secret -> HKDF-SHA256 mit getrennten `info`-Labels;
+> es wird **kein** Argon2-/Verifikations-Hash gespeichert (Prüfung implizit über den
+> Poly1305-Tag), und es gibt keine unverschlüsselte Klartext-Arbeitskopie
+> (In-Memory bevorzugt, sonst SQLCipher-verschlüsselte Arbeitsdatei). Die alten
+> Formulierungen ("Argon2-Hash prüfen/ablegen", "Klartext-Arbeitskopie") sind
+> ersetzt, G15 vermerkt das ausdrücklich ("Ersetzt die ältere Formulierung in
+> B.7"). Der ursprüngliche Befund steht unverändert darunter.]**
 
 Die Arbeitsanweisung der wichtigsten Phase widerspricht ihren eigenen Gates:
 
@@ -132,7 +143,16 @@ eliminieren sollen).
 G15/N11.9-Stand umschreiben (Master-Secret, HKDF, AEAD-Prüfung, In-Memory bzw.
 verschlüsselter Fallback). Die "Präzisierung"-Box wird danach überflüssig.
 
-### W3. Die G14-Definitionszeile fordert immer noch `private_mode=True`
+### W3. Die G14-Definitionszeile fordert immer noch `private_mode=True`  ✅ ERLEDIGT
+
+> **[ERLEDIGT: im Bauplan behoben (Marker 2026-07-16 nachgetragen). Die normative
+> G14-Zeile schreibt jetzt den umgesetzten Stand fest: fester, benutzerprivater
+> Profilordner mit `private_mode=False` + `storage_path=PROFILE_DIR`, zwingend
+> zusammen mit dem G19-Mutex; `private_mode=True` ist ausdrücklich "ersatzlos
+> gestrichen und darf nicht wieder eingebaut werden". Offen bleibt (korrekt, als
+> Phase-8-Rest) nur das sichere Wischen bei Lock/Panik/Quit inkl. Fenster-X und die
+> verwaisten `msedgewebview2.exe`. Der ursprüngliche Befund steht unverändert
+> darunter.]**
 
 Die B.9-Tabellenzeile G14 (Zeile 525) sagt wörtlich: "Pflicht: `webview.start(...,
 private_mode=True)` **explizit** setzen". Das Gegenteil ist seit 2026-06-20 umgesetzt
@@ -147,7 +167,16 @@ bestätigt" markiert ist.
 offen nur sicheres Wischen bei lock/panic/quit inkl. Fenster-X sowie verwaiste
 `msedgewebview2.exe`. `private_mode=True` muss ersatzlos raus.
 
-### W4. G13 existiert in drei Fassungen, zwei davon veraltet
+### W4. G13 existiert in drei Fassungen, zwei davon veraltet  ✅ ERLEDIGT
+
+> **[ERLEDIGT: im Bauplan behoben (Marker 2026-07-16 nachgetragen). G13 ist jetzt
+> **eine** normative Zeile in der B.9-Tabelle, formuliert als explizite Allowlist
+> `ALLOWED_WHEN_LOCKED` (acht Methoden nach dem U1/N11.13-Entscheid), mit dem
+> ausdrücklichen Vermerk, dass Phasen und Schnellübersicht nur noch die Nummer
+> führen. Die Phase-8-Gateliste und die Phase-9-Testliste sind angeglichen (Test:
+> "jede Bridge-Methode ausserhalb der Allowlist liefert `locked`", `quit_app`/
+> `killswitch` funktionieren gesperrt). `lock`/`panic` sind bewusst gesperrt (V4).
+> Der ursprüngliche Befund steht unverändert darunter.]**
 
 - Phase-8-G13 (Zeile 1052-1058) und N10.5 (Zeile 1386-1389): erlaubt im gesperrten
   Zustand sind `unlock`, `quit_app`, `killswitch` (bewusste Ausnahmen).
@@ -316,7 +345,14 @@ scheitert bei der Installation.
 **Patch:** Beide Stellen korrigieren (ein Satz inkl. Begründung steht schon in
 requirements.txt und kann übernommen werden).
 
-### W12. `technische Grundlage.txt` beschreibt eine Architektur, die es nicht mehr gibt
+### W12. `technische Grundlage.txt` beschreibt eine Architektur, die es nicht mehr gibt  ✅ ERLEDIGT (2026-07-16)
+
+> **[ERLEDIGT 2026-07-16: Die Bauplan-Einleitung ist umformuliert. Der verbindliche
+> technische Stack steht jetzt ausschliesslich im Bauplan (Teil A/B);
+> `technische Grundlage.txt` ist ausdrücklich als "historisch und nur teilweise
+> gültig" markiert (die Sync-/Notification-/`sqlite3`-/CDN-Teile sind hinfällig, der
+> Krypto-Stack fehlt darin), mit der Vorrangregel "bei jedem Widerspruch gilt der
+> Bauplan". Der ursprüngliche Befund steht unverändert darunter.]**
 
 Die Bauplan-Einleitung (Zeile 6-7) verspricht eine App "auf dem in `technische
 Grundlage.txt` beschriebenen Fundament". Dieses Dokument beschreibt aber: SQLite über
@@ -466,7 +502,15 @@ Zweck), verliert ausgerechnet das neueste Pflicht-Gate.
 
 ## TEIL 2: Strukturelle Mängel
 
-### S1. Gate-Mehrfachbuchführung ohne führende Quelle; die Drift ist messbar
+### S1. Gate-Mehrfachbuchführung ohne führende Quelle; die Drift ist messbar  ✅ ERLEDIGT
+
+> **[ERLEDIGT: im Bauplan behoben (Marker 2026-07-16 nachgetragen). B.9 ist zur
+> **einzigen normativen Quelle** erklärt: Definition, Status, Stand (Datum) und
+> Prüfweg eines Gates stehen nur noch dort (eigene Spalten je Zeile), Phasen und
+> Schnellübersicht führen nur noch die Gate-Nummer. Die geforderte Redaktionsregel
+> ist als Pflicht verankert ("wer ein Gate ändert, ändert es an genau dieser einen
+> Stelle"). Damit ist die von W3/W4/W8/W18 belegte Kopier-Drift strukturell
+> geschlossen. Der ursprüngliche Befund steht unverändert darunter.]**
 
 Jedes Gate existiert bis zu viermal (B.9-Definition, Phasen-Wiederholung,
 Schnellübersicht, CLAUDE.md). W3, W4, W8 und W18 sind genau die vorhergesagten
@@ -478,7 +522,22 @@ Phasen listen nur Gate-Nummern mit Verweis; die Schnellübersicht wird als "nich
 normativ, Stand <Datum>" markiert oder bei jeder Gate-Änderung mit editiert
 (Redaktionsregel: "ein Gate ändern = alle vier Stellen in einem Commit").
 
-### S2. "SOFORT"-Gates ohne Termin und Prüfweg; G22 und G11 sind seit Wochen überfällig, und G22 ist zu eng gefasst
+### S2. "SOFORT"-Gates ohne Termin und Prüfweg; G22 und G11 sind seit Wochen überfällig, und G22 ist zu eng gefasst  ✅ ERLEDIGT (Plan); Code-Rest terminiert
+
+> **[ERLEDIGT im Plan (Marker 2026-07-16 nachgetragen), mit terminiertem Code-Rest.
+> (a) Die normative Gate-Tabelle B.9 hat jetzt die drei geforderten Spalten
+> **Status / Stand / Prüfweg** je Zeile. (b) Jedes "SOFORT" hat einen Termin
+> bekommen: G22 und G29 mit **2026-07-20**, G34 (b) `text_select` ebenfalls
+> **2026-07-20**. (c) G22 ist auf **alle** UI-Claims ausgeweitet (Status-Modal,
+> Header-Pill, Lock-Screen-Untertitel, Panik-Endschirm), nicht mehr nur
+> `get_status()`. (d) G11/V9 ist entschieden (`requirements.lock.txt` ist führend,
+> Release-Install nur daraus mit `--require-hashes`) und der Python-Pin 3.11.x
+> (U25) steht in G11.
+> **Code-Stand 2026-07-16:** G22 teilweise umgesetzt (`get_status()` + Status-Modal
+> jetzt ehrlich, `active:false`/Warnfarbe/`dev_key`-Flag); `text_select=False`
+> gesetzt (G34 b). **Offen bis zum Termin 2026-07-20:** der Panik-Endschirm-Text
+> ("securely wiped") und der G29-Basisschutz (`str(exc)` raus). Der ursprüngliche
+> Befund steht unverändert darunter.]**
 
 - **G22** ("SOFORT, spätestens mit 7", seit 2026-06-10): Stand heute zeigt
   `app.js:517` weiterhin hartkodiert "AES-256 + ChaCha20 · Argon2id / active",
@@ -1329,7 +1388,11 @@ Weg), und dass gepinnte Abhängigkeiten altern (Rebuild-Kadenz bei CVEs in
 **V11 (G22): auf alle UI-Claims ausweiten.** **[ERLEDIGT 2026-07-13 (mit S2): die
 normative G22-Zeile gilt für alle UI-Claims (Header-Pill, Lock-Screen-Untertitel,
 Panik-Endschirm), mit Termin 2026-07-20; die Umsetzung im Code steht noch aus und
-hängt am Termin, nicht mehr an der Plan-Lücke.]** Siehe S2: Header-Pill,
+hängt am Termin, nicht mehr an der Plan-Lücke. **Code-Stand 2026-07-16:**
+`get_status()` und das Status-Modal sind ehrlich umgesetzt (`active:false`,
+Warnfarbe, `dev_key`-Flag); Header-Pill und Lock-Screen-Untertitel existieren im
+Code gar nicht (nichts zu ändern); **offen bis zum Termin bleibt allein der
+Panik-Endschirm-Text** ("All data securely wiped", heute falsch).]** Siehe S2: Header-Pill,
 Lock-Screen-Untertitel und Panik-Endschirm-Text ("securely wiped") müssen bis
 Phase 8 genauso ehrlich degradiert werden wie das Status-Modal (Beleg für heute:
 app.js:517).
@@ -1471,7 +1534,11 @@ WebView2-Standard-Kontextmenü. **Patch (Vorschlag Gate G34, Release-Härtung):*
 S2-Regel), `AreBrowserAcceleratorKeysEnabled=false` (tötet `Strg+P`) und
 `AreDefaultContextMenusEnabled=false` in Phase 9; der Eingabefeld-Copy-Kanal steht
 jetzt ehrlich im Bedrohungsmodell (B.10.3 Punkt 8), Foto vom Bildschirm bleibt
-Nicht-Ziel.
+Nicht-Ziel. **Code-Stand 2026-07-16: `text_select=False` ist explizit in
+`main.py` `create_window` gesetzt (der zuvor unbeabsichtigte Default ist jetzt eine
+bewusste, kommentierte Entscheidung); der Regressionstest folgt mit der
+Phase-9-Testliste, da es heute noch kein Test-Setup gibt. Der Release-Rest (a)/(c)
+bleibt Phase 9.**
 
 **A7. Fenstertitel und sichtbare Metadaten. ✅ ERLEDIGT (2026-07-15)** Der native Fenstertitel ist für jeden
 Prozess ohne Privilegien lesbar (Fenster-Enumeration) und taucht in

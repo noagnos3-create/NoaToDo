@@ -310,17 +310,33 @@ class Api:
     def get_status(self) -> dict[str, Any]:
         db_path = getattr(self.db, "path", None)
         size = os.path.getsize(db_path) if db_path and os.path.exists(db_path) else 0
+        # Gate G22 (ehrliche Sicherheits-Behauptungen): Solange der oeffentliche
+        # Entwicklungs-Schluessel benutzt wird, meldet der Status den REALEN
+        # (unsicheren) Zustand, nie "active"/"encrypted". Schicht 2 (ChaCha20) und
+        # die Passphrase-Ableitung existieren erst ab Phase 8. Keine Verschluesselung
+        # vortaeuschen, solange der Schluessel oeffentlich im Repo steht.
+        dev_key = getattr(self.db, "dev_key", True)
+        if dev_key:
+            encryption = {
+                "layer1": "SQLCipher · AES-256 (public dev key, INSECURE)",
+                "layer2": "ChaCha20-Poly1305 · Argon2id (not implemented)",
+                "active": False,
+                "dev_key": True,
+            }
+        else:
+            encryption = {
+                "layer1": "SQLCipher · AES-256",
+                "layer2": "ChaCha20-Poly1305 · Argon2id",
+                "active": True,
+                "dev_key": False,
+            }
         return {
             "db": {
                 "path": db_path,
                 "size": size,
                 "size_human": f"{size / 1024:.1f} KB" if size else "0 KB",
             },
-            "encryption": {
-                "layer1": "SQLCipher · AES-256",
-                "layer2": "ChaCha20-Poly1305 · Argon2id",
-                "active": True,
-            },
+            "encryption": encryption,
             "runtime": {"webview2": _webview2_version()},
         }
 

@@ -514,7 +514,12 @@ function renderModal() {
       const online = state.online;
       const rows = [
         ['Local database', 'tasks.db', 'var(--secure)', 'healthy'],
-        ['Encryption', 'AES-256 + ChaCha20 · Argon2id', 'var(--secure)', 'active'],
+        // Gate G22: solange der oeffentliche Dev-Schluessel (DEV_AES_KEY) benutzt
+        // wird, darf hier keine echte Verschluesselung ("active"/"encrypted") in
+        // gruen stehen. Ehrlicher Ist-Zustand in Warnfarbe: einlagiges AES-256 mit
+        // oeffentlichem Schluessel, Schicht 2 (ChaCha20) + Passphrase erst ab
+        // Phase 8. Ab Phase 8 zeigt diese Zeile echte Werte (siehe get_status).
+        ['Encryption', 'AES-256 · dev key, layer 2 pending', 'var(--danger)', 'dev'],
         ['Network', online ? 'local only · online' : 'local only · offline', online ? 'var(--secure)' : 'var(--text-faint)', online ? 'online' : 'offline'],
         ['WebView2 runtime', 'system', 'var(--secure)', 'ok'],
       ];

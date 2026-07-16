@@ -64,6 +64,12 @@ class Database:
 
     def __init__(self, path: str, aes_key: str):
         self.path = path
+        # True, solange der oeffentliche Entwicklungs-Schluessel benutzt wird
+        # (Phase 1, DEV_AES_KEY). Steuert die ehrliche Statusanzeige (Gate G22):
+        # solange dies True ist, darf die UI keine echte Verschluesselung
+        # behaupten. In Phase 8 wird der Schluessel aus der Passphrase abgeleitet,
+        # dann ist dies False.
+        self.dev_key = aes_key == DEV_AES_KEY
         os.makedirs(os.path.dirname(os.path.abspath(path)), exist_ok=True)
         self.conn = sqlcipher3.connect(path, check_same_thread=False)
         # Schicht 1: Schlüssel SOFORT nach dem Öffnen setzen.
