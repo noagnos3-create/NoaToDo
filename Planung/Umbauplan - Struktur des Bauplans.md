@@ -466,8 +466,9 @@ dem Umbau exakt dagegen pruefen kann.
 
 ### A.0 Sicherung
 
-- [ ] Ist-Bauplan als Referenz einfrieren (Commit-Tag oder Kopie), bevor irgendein Wort
-      wandert.
+- [x] Ist-Bauplan als Referenz einfrieren (Commit-Tag oder Kopie), bevor irgendein Wort
+      wandert. Erledigt 2026-07-16: annotiertes Git-Tag `bauplan-vor-umbau` auf Commit
+      `84e0d36` (main).
 
 ### A.1 Baseline-Inventare (Ist-Werte, fuer die Erhalt-Pruefung)
 
@@ -497,7 +498,8 @@ das Register (Anhang 1) auf genau einen Ort aufloesen:
 **Zahlen-Inventar (G-Erhalt-3):** siehe Abschnitt 9, dort ist die Liste der harten
 Grenzwerte gefuehrt. Vor Etappe 3 einmal ziehen, nach Etappe 3 erneut, identisch.
 
-- [ ] Zahlen-Inventar vorher erfasst.
+- [x] Zahlen-Inventar vorher erfasst (2026-07-16: die Liste der harten Grenzwerte steht in
+      Abschnitt 9, G-Erhalt-3).
 
 **Vorgefundener Defekt, bei Etappe 0 aufzunehmen (kein Inhalt, ein toter Zeiger):**
 
@@ -560,6 +562,8 @@ N11.9, N11.11, N11.11.5, N11.15) sind der teure, riskante Kern (Opus, Gegenlesen
 `R`-Zeilen sind billig (nur Register). Damit ist Etappe 3 planbar aufteilbar: erst alle
 `R` (schnell, risikoarm), dann die `M` ohne `!`, zuletzt die `!`-Zeilen einzeln.
 
-- [ ] Alle Zeilen mit `!` sind fuer den Opus-Durchgang mit Gegenlesen markiert.
-- [ ] Diese Blockliste ist vollstaendig gegen die N-/U-Baseline aus A.1 geprueft (kein
-      Block fehlt).
+- [x] Alle Zeilen mit `!` sind fuer den Opus-Durchgang mit Gegenlesen markiert (N6,
+      N11.4.1, N11.4.3, N11.9, N11.11, N11.11.5, N11.15).
+- [x] Diese Blockliste ist vollstaendig gegen die N-/U-Baseline aus A.1 geprueft (kein
+      Block fehlt). Geprueft 2026-07-16 gegen die Nachtrag-Ueberschriften des Bauplans
+      (N2 bis N10 inkl. N10.1 bis N10.5, N11.1 bis N11.15.6): jeder Block hat eine Zeile.
