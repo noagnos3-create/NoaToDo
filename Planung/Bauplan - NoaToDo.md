@@ -757,13 +757,17 @@ monotonen Uhr, unabhängig von Fensterfokus und Windows-Sitzungszustand.
 
 > ## ⚠️ SICHERHEITS-HÄRTUNG, STAND & OFFENE PFLICHT-GATES
 >
-> Aus dem Security-Review (2026-06-08) ergab sich eine klare Trennung in
-> „sofort erledigt" und „muss in der jeweiligen Phase erledigt werden".
 > **Diese Liste ist verbindlich. Die offenen Punkte sind Gates: Die jeweilige
 > Phase gilt erst als fertig, wenn ihr Sicherheitspunkt umgesetzt ist.**
+> **Alle folgenden Gates sind verbindlich und vom Nutzer bestätigt. KEINER
+> dieser Punkte ist optional, jeder MUSS in der genannten Phase umgesetzt
+> werden.** Die Entstehungsgeschichte der Gates (wann welches Gate aus welchem
+> Review/Audit kam) steht als Protokoll-Absatz im Entscheidungsregister
+> (Anhang 1, dorthin verschoben in Umbau-Etappe 2).
 >
 > **NORMATIVE QUELLE (Regel seit 2026-07-13, behebt Plananalyse S1/S2):** Diese
-> Tabelle und die Nachtragstabelle G13-G35 direkt darunter sind zusammen die
+> Tabelle (seit Umbau-Etappe 2 die eine, aus den früheren zwei B.9-Tabellen
+> zusammengeführte Gate-Tabelle) ist die
 > **einzige normative Quelle** für alle Sicherheits-Gates. Definition, Status,
 > Stand (Datum) und Prüfweg eines Gates stehen nur hier und werden nur hier
 > gepflegt. Nennt eine Zeile ausdrücklich einen Volltext-Anker (G27: Phase 9,
@@ -792,46 +796,6 @@ monotonen Uhr, unabhängig von Fensterfokus und Windows-Sitzungszustand.
 > | **🔴 G9** | **8** | offen | seit 2026-06-08 | `grep DEV_AES_KEY` über `Code/` liefert 0 Treffer; `db.connect()` ohne passphrase-abgeleiteten Schlüssel schlägt fehl. | **`DEV_AES_KEY` & jeden statischen Schlüssel-Default ersatzlos entfernen.** Es darf **keinen** Code-Pfad geben, der die DB ohne passphrase-abgeleiteten Schlüssel öffnet. Sonst öffnet die „verschlüsselte" DB mit einem öffentlich im Quellcode stehenden String → **effektiv null Verschlüsselung**, während der Status fälschlich „AES-256 + ChaCha20" meldet. Wichtigstes Gate der Phase 8. Dazu gehören der saubere Erst-Einrichtungs-Flow (Passphrase anlegen) und die Migration der bestehenden Dev-DB auf den echten Schlüssel. |
 > | **G11** | **0 / 9 (Build)** | ✅ erfüllt über `requirements.lock.txt`; Rest (Hash-Checking im Build) offen für Phase 9 | 2026-07-13 | Jede Zeile in `requirements.lock.txt` trägt eine feste `==`-Version; der Release-Build (Phase 9) installiert ausschliesslich aus der Lock-Datei mit `--require-hashes`; die Ziel-Python-Version ist auf **3.11.x** festgeschrieben (Doku und Build-Umgebung), und der Release-Build laeuft nachweislich unter 3.11.x. | **Abhängigkeiten pinnen.** Die verbindliche gepinnte Menge ist `requirements.lock.txt` (liegt vor; `requirements.txt` bleibt bewusst die lose Liste des Direktbedarfs; frühere Fassungen dieses Gates verlangten das Pinning fälschlich in `requirements.txt` selbst). Rest-Pflicht in Phase 9: der Release-Build installiert nur aus der Lock-Datei, mit `pip` Hash-Checking. Eine getauschte Lib = Totalkompromittierung der Tresor-App. **Auch der Interpreter ist eine gepinnte Abhaengigkeit (U25):** die Ziel-Python-Version ist **3.11.x** (heutiges Setup: Microsoft-Store-Python 3.11), festgehalten in der Doku und in der Build-Umgebung (Phase 9), weil `sqlcipher3-wheels` Wheels nur fuer bestimmte CPython-Versionen liefert (eine falsche Version = kein passendes Wheel = stiller Bruch) und die `.exe` gegen genau diesen Interpreter gebaut werden muss. Gilt laufend: bei jedem Dependency-Update bewusst prüfen. |
 > | **G12** | **vor 7 (vorgezogen aus 3/8)** | offen | festgestellt 2026-07-13 (kein Navigations-Handler in `main.py`) | Mit `NOATODO_DEBUG=1` in der DevTools-Konsole `window.location='https://example.com'` und `window.open('https://example.com')` ausführen: beides wird verweigert, die App bleibt auf der lokalen `index.html`. | **WebView-Navigation abriegeln.** Navigations-/New-Window-Events in PyWebView abfangen und jede **externe** Navigation (`window.location`/`window.open` zu externem `http`) verweigern. Die App ist rein lokal und navigiert nie woandershin. |
->
-> **Zwei Kleinigkeiten (Hinweis, kein Gate):**
-> - **Export/Clipboard:** `export_list` schreibt **unverschlüsselte** Dateien (by
->   design, der Nutzer exportiert bewusst Klartext). Das Kopieren ist seit dem
->   Nachtrag gehärtet und auf eine einzelne Aufgabe begrenzt, siehe G23.
-> - **`main.py` `emit()`:** `json.dumps(payload)` muss `ensure_ascii=True` (Default)
->   behalten, sonst können U+2028/U+2029 in Event-Daten den `evaluate_js`-Aufruf
->   brechen.
->
-> Die Phasen-Abschnitte wiederholen diese Gates **nicht** mehr im Wortlaut,
-> sondern listen nur die Gate-Nummern mit Stichwort und Verweis hierher
-> (Plananalyse S1: die früheren Wortlaut-Kopien sind mehrfach
-> auseinandergedriftet, siehe W3/W4/W8/W18).
-
-> ## 🔒 NACHTRAG: Gates G13 bis G35 (Code-Audit + Testlauf vom 2026-06-10, seither fortgeschrieben)
->
-> Ein vollständiges Code-Audit (Code-Review aller Module plus 23 automatisierte
-> Checks gegen die echte Bridge-API auf einer Wegwerf-DB) hat weitere
-> Pflichtpunkte ergeben. **Alle folgenden Gates sind verbindlich und vom Nutzer
-> bestätigt. KEINER dieser Punkte ist optional, jeder MUSS in der genannten
-> Phase umgesetzt werden.** Sie gelten zusätzlich zu den übrigen Gates; die
-> Phasen-Abschnitte listen nur noch die Gate-Nummern mit Stichwort und Verweis
-> auf diese Tabelle (normative Quelle, siehe Regel oben). Die Tabelle wird seit dem
-> Audit fortgeschrieben (behebt Plananalyse W18): G24 wurde mit der
-> Microsoft-Integration entfernt, G26 (Screenshot-Schutz, verworfen) und G27 kamen
-> später hinzu, G28 (Verschlüsselungs-Beweis) stammt aus N11.9 (2026-07-09)
-> und ist hier nur zusammengefasst (Volltext in N11.9). Am 2026-07-13 kamen aus
-> der Plananalyse dazu: G29 (Fehler-Hygiene, S6, Volltext in N11.12), G30
-> (Bedrohungsmodell, S4, Volltext in **B.10**) und G35 (gemeinsame
-> Sperr-/Beenden-Sequenz, S5, Volltext in N11.11). Am 2026-07-15 wurden die
-> Angriffsvektoren-Befunde A1 bis A7 der Plananalyse (Teil 5) entschieden und
-> eingearbeitet: **G31** (RAM-auf-Platte-Lecks, A1), **G32** (Tresor-Ort und
-> Cloud-Warnung, A2), **G33** (Dev-Altdaten, A3) und **G34** (Release-Härtung,
-> A4/A6) stehen jetzt als Gates in dieser Tabelle (die Zeile hier ist jeweils der
-> normative Volltext); A5 (Frontend-Integrität) ist als Ergänzung in G27
-> eingearbeitet, A7 (Fenstertitel) als verbindliche Regel in B.4 (bewusst kein
-> eigenes Gate, eine Zeile Regel genügt).
->
-> | Gate | Phase | Status | Stand | Prüfweg | Punkt |
-> |---|---|---|---|---|---|
 > | **🔴 G13** | **8** | offen | seit 2026-06-10 | Test iteriert gesperrt über ALLE Bridge-Methoden: alles ausserhalb der Allowlist liefert `{"error": "locked"}`, `get_state()` nur `{"locked": true}`, während `quit_app()`/`killswitch()` gesperrt funktionieren. | **Serverseitige Lock-Durchsetzung (als Allowlist).** Die Sperre existiert heute nur als Frontend-Overlay: Im Audit wurde nachgewiesen, dass nach `lock()` Aufrufe wie `add_task()` und `get_state()` weiterhin funktionieren und alle Daten liefern (ein einziger JS-Aufruf umgeht den Lock-Screen). Pflicht: Ein zentraler Check im `bridge`-Decorator prüft `self.locked` und arbeitet gegen eine **explizite Allowlist**, nicht gegen eine Ausnahmenliste: `ALLOWED_WHEN_LOCKED = {"unlock", "quit_app", "killswitch", "get_state", "get_boot_state", "choose_vault_dir", "create_vault", "reset_vault"}` (die letzten vier ergänzt mit dem U1-Entscheid 2026-07-13, N11.13: Onboarding und Reset laufen gerade **ohne** Schlüssel und wären sonst blockiert). Jede Methode, die **nicht** in dieser Menge steht, gibt gesperrt sofort `{"error": "locked"}` zurück, ohne die DB zu berühren. Das gilt ausdrücklich auch für `lock()` und `panic()` (gesperrt ohnehin sinnlos) und für jede künftig ergänzte Bridge-Methode: **neue Methoden sind per Default gesperrt** und müssen bewusst in die Allowlist aufgenommen werden (die Formulierung „jede ausser X" driftete in der Vergangenheit auseinander, siehe Plananalyse W4/V4). Zu den erlaubten Methoden: `get_state()` liefert gesperrt nur `{"locked": true}` ohne Listen/Settings; `get_boot_state()` liefert nur den dreiwertigen Zustand plus den Vault-Pfad (kein Geheimnis, N11.13); `quit_app()` (Off-Knopf im Lock-Screen) und `killswitch()` (Panik-Endschirm) sind bewusste Ausnahmen aus N10, weil beide nie Daten preisgeben und gerade **ohne** Passphrase funktionieren müssen; `choose_vault_dir()`/`create_vault()` sind der Onboarding-Weg (es gibt noch keinen Tresor, also nichts preiszugeben) und `reset_vault()` der Weg der vergessenen Passphrase (löscht nur, gibt nie Daten heraus, doppelt bestätigt, N11.13); `unlock(passphrase)` ist der einzige Weg zurück in die Daten. **Ausdrücklich NICHT in der Allowlist:** `change_passphrase()` (braucht die Schlüssel, also den entsperrten Zustand). Diese Zeile ist die normative Fassung von G13 (Regel oben: Phasen und Schnellübersicht führen nur noch die Nummer). |
 > | **G14** | **8 (Teile vorgezogen)** | teils erledigt: fester Profilordner + Altlasten-Wisch ✅, sicheres Wischen offen | 2026-06-20 | Nach normalem Betrieb liegen keine `%TEMP%\tmp*\EBWebView`-Altlasten; ab Phase 8: nach Lock/Panic/Quit (auch Fenster-X) ist `PROFILE_DIR` gewischt, und ein Neustart nach hartem Kill scheitert nicht mit `0x800700AA`. | **Keine WebView2-Datenspuren auf der Platte.** WebView2 legt einen User-Data-Ordner an (Cache, localStorage, GPU-Cache); dort können gerenderte Task-Texte an beiden Verschlüsselungsschichten vorbei landen. **Umgesetzter Stand (Pflicht, so bleiben):** **ein fester, benutzerprivater Profilordner** statt Privatmodus, d.h. `webview.start(..., private_mode=False, storage_path=PROFILE_DIR)` mit `PROFILE_DIR = %LOCALAPPDATA%\NoaToDo\webview`, **zwingend zusammen mit dem Single-Instance-Mutex aus G19** (zwei Instanzen würden den geteilten Ordner sperren/korrumpieren); `_cleanup_stale_webview_profiles()` räumt beim Start die alten Temp-Profile weg. **`private_mode=True` ist ersatzlos gestrichen und darf nicht wieder eingebaut werden:** der Privatmodus legte pro Start ein neues `%TEMP%\tmp...\EBWebView` an, das bei hartem Beenden liegen blieb (real bis 55 Altlasten) und zusammen mit verwaisten `msedgewebview2.exe` Starthänger über eine Minute verursachte. **Offen für Phase 8:** (a) `PROFILE_DIR` bei `lock()`/`panic()`/sauberem Beenden **sicher wischen**, wobei das native Fenster-X ausdrücklich als sauberes Beenden zählt und denselben Wisch-Pfad wie `quit_app()` durchlaufen muss; (b) verwaiste `msedgewebview2.exe` (überleben einen harten Kill und sperren den Ordner, nächster Start sonst `0x800700AA` ERROR_BUSY) vor dem Wischen beenden, dabei nur Prozesse mit `PROFILE_DIR` als Arbeitsverzeichnis, nicht pauschal alle (andere Apps nutzen WebView2 auch); (c) das Wischen mit Mutex und Lock-Lebenszyklus abstimmen (nicht wischen, solange WebView2 den Ordner offen hält). **Entwarnung zur Vertraulichkeit:** Aufgabentexte erreichen keine persistierbare WebView2-Fläche (kein localStorage/IndexedDB, keine Cookies, kein fetch/XHR; alle Daten kommen über die In-Memory-Bridge ins DOM), im Profil liegt nur nicht-sensibler UI-Cache; einziger Randfall ist ein WebView2-Crash-Dump mit DOM-Fragmenten, genau dagegen ist das Wischen Pflicht. Das Frontend darf localStorage/sessionStorage/IndexedDB **nie** für Aufgabendaten verwenden. **Store-Python-Redirect (V8, 2026-07-15; Volltext N11.15.5):** unter Microsoft-Store-Python wird `%LOCALAPPDATA%` real nach `...\Packages\PythonSoftwareFoundation...\LocalCache\Local\NoaToDo\...` umgeleitet. Der Wisch operiert deshalb **immer in-process auf dem effektiven Pfad** (die Python-API sieht die Umleitung automatisch); externe Werkzeuge oder Anleitungen mit dem literalen Pfad verfehlen die echten Daten. Und weil die Phase-9-`.exe` ohne Redirect läuft, bekommt Phase 9 einen **einmaligen Erststart-Schritt**, der die bekannten alten Redirect-Pfade entfernt (nur den umgeleiteten `NoaToDo\webview`-Ordner und eine dortige `config.json`; eine `tasks.db.enc` wird dabei **niemals** angefasst), sonst bleibt der alte umgeleitete Profilordner für immer liegen. |
 > | **G15** | **8** | offen | seit 2026-06-10 | Im `.enc`-Header existiert kein Hash-Feld; eine falsche Passphrase erzeugt einen AEAD-Fehler mit der Meldung "Passphrase falsch"; die getrennten HKDF-`info`-Labels stehen im Code. | **Schlüsselableitung mit Domain-Separation, KEIN gespeicherter Verifikations-Hash.** Argon2id erzeugt aus dem Pepper-gebundenen `ikm` (verbindliche Konstruktion in G18, V2a) + Salt **ein** 32-Byte-Master-Secret; daraus per HKDF-SHA256 mit getrennten `info`-Labels (`b"noatodo/aes-v1"`, `b"noatodo/chacha-v1"`) `aes_key` und `chacha_key` ableiten. Es wird **kein** Argon2-Hash der Passphrase gespeichert: Die Prüfung beim Entsperren ist der Erfolg oder Misserfolg der ChaCha20-Poly1305-Entschlüsselung (der Poly1305-Tag verifiziert die Passphrase implizit; falsche Passphrase = AEAD-Exception = Meldung "Passphrase falsch"). So liegt kein zusätzliches Orakel-Material für Offline-Angreifer auf der Platte. Ersetzt die ältere Formulierung in B.7 ("Argon2-Hash zum Prüfen speichern", "Teilstücke des KDF-Outputs"). |
@@ -854,6 +818,19 @@ monotonen Uhr, unabhängig von Fensterfokus und Windows-Sitzungszustand.
 > | **G33** | **8 (Erststart, `create_vault()`)** | offen | seit 2026-07-15 (Plananalyse A3) | Nach dem ersten `create_vault()` auf einem Rechner mit Dev-Bestand existieren `Code/data/tasks.db` samt `tasks.db-journal`/`-wal`/`-shm` nicht mehr (vorher bestmöglich überschrieben, nicht nur entlinkt); der Einmal-Hinweis mit der forensischen Restgrenze wurde angezeigt. | **Dev-Altdaten entsorgen.** `DEV_AES_KEY` steht im Repo-Quelltext; die heutige `data/tasks.db` mit den echten Aufgaben ist damit faktisch Klartext (im Git-Repo liegt sie dank `.gitignore` korrekt **nicht**, das wurde geprüft). N11.3 sagt nur "die alte Dev-DB wird verworfen"; dieses Gate legt das **Wie** fest: Der Phase-8-Erststart (im Zuge von `create_vault()`, bevor der neue Tresor in Betrieb geht) löscht `tasks.db` **samt** `tasks.db-journal`, `tasks.db-wal` und `tasks.db-shm` über den Secure-Delete-Pfad (bestmöglich überschreiben, dann entlinken; derselbe Pfad wie beim `.bak`-Wegräumen in N11.3 (c)), nie per blankem `os.remove` (ein `os.remove` hinterlässt auf SSD forensische Reste, dasselbe Argument, mit dem G6 die Temp-Kopien eliminiert). **Ehrliche Restgrenze, einmal sichtbar für den Nutzer:** Daten, die während der Dev-Phase geschrieben wurden, können auf einer SSD (Wear-Leveling) forensisch verbleiben, ebenso alte Export-Dateien aus der Dev-Zeit (eigene Dateien des Nutzers; die App sucht und löscht sie nicht, der Hinweis nennt sie); wer das ausschliessen muss, braucht ein frisches, vollverschlüsseltes System (BitLocker, G31/B.10.4). Dieser Hinweis wird beim Umstieg **einmal** angezeigt (nur wenn eine Dev-DB gefunden und entsorgt wurde), damit der Nutzer ihn bewusst gelesen hat. |
 > | **G34** | **9; Teilpunkt (b) SOFORT** | (b) `text_select=False` explizit gesetzt ✅ 2026-07-16 (`main.py` `create_window`); Rest offen für Phase 9: (a) DevTools/`NOATODO_DEBUG` im Release hart aus, (c) `AreBrowserAcceleratorKeysEnabled=false` (kein `Strg+P`) + `AreDefaultContextMenusEnabled=false`. Regressionstest für `text_select` folgt mit der Phase-9-Testliste (heute kein Test-Setup) | seit 2026-07-15 (Plananalyse A4/A6) | Release-`.exe` mit gesetztem `NOATODO_DEBUG=1` starten: keine DevTools erreichbar (F12 und Rechtsklick tot); `Strg+P` öffnet keinen Druckdialog; Rechtsklick zeigt kein WebView2-Kontextmenü; Task-/Listentext ist nicht selektierbar, Eingabefelder bleiben es (Regressionstest für `text_select=False`, läuft schon vor Phase 9). | **Release-Härtung: Debug-Schalter, DevTools, Kopier-/Auslass-Kanäle.** Zwei Befund-Gruppen: **(A4)** `NOATODO_DEBUG=1` aktiviert heute DevTools; respektierte die Phase-9-`.exe` dieselbe Env-Var, bekäme jeder mit kurzem Zugriff (K3) eine Konsole mit vollem `pywebview.api.*`-Zugriff auf die laufende App, inklusive `killswitch()` (Datenvernichtung ohne Passphrase, per G13 gesperrt erlaubt!). **(A6)** G23 härtet nur den Rail-Button-Pfad; daneben existieren Kopier-/Auslass-Kanäle: Textselektion plus natives `Strg+C` (PyWebView deaktiviert die Selektion nur per Default; `main.py` setzt `text_select` nicht explizit, der Schutz ist also unbeabsichtigt und ungetestet, und ein künftiges `text_select=True` "für Komfort" würde G23 lautlos aushebeln), Drag-out von markiertem Text in andere Apps, `Strg+P` (der WebView2-Browser-Accelerator öffnet den Druckdialog, "Als PDF drucken" exportiert die komplette Ansicht als Klartext-PDF an G21 vorbei) und das WebView2-Standard-Kontextmenü. Pflicht: **(a)** Der Release-Build ignoriert `NOATODO_DEBUG` hart (Build-Konstante: `_debug_enabled()` liefert im gefrorenen Build immer `False`), DevTools aus, zusätzlich `AreDevToolsEnabled=false` in den CoreWebView2-Settings, soweit über PyWebView erreichbar. **(b) SOFORT, nicht erst Phase 9:** `text_select=False` explizit in `create_window` setzen (aus dem unbeabsichtigten Default eine bewusste, getestete Entscheidung machen) plus Regressionstest. **(c)** Im Release `AreBrowserAcceleratorKeysEnabled=false` (tötet `Strg+P` und die übrigen Browser-Tasten; die App-Shortcuts aus B.5 laufen über den eigenen JS-Handler und bleiben unberührt) und `AreDefaultContextMenusEnabled=false`. **(d)** Der Rest wird nicht "gelöst", sondern steht ehrlich im Bedrohungsmodell (B.10.3 Punkt 8): Eingabefelder bleiben selektierbar (Phase 6.5 Punkt 3, akzeptiert), ihr natives `Strg+C` landet ungehärtet in Win+V-History und Cloud-Clipboard; das Foto vom Bildschirm bleibt Nicht-Ziel. |
 > | **🔴 G35** | **8** | offen | seit 2026-07-13 (N11.11, S5-Entscheid) | Es existiert im Code genau eine `teardown(reason)`-Routine, und für jeden der neun Ausgänge ist der N11.11-Nachweis einzeln erbracht (Debounce synchron geschrieben, Clipboard geleert, Schlüssel genullt, `PROFILE_DIR` gewischt, Funk nur auf Beenden-Wegen als letzter Schritt, Mutex frei). | **Gemeinsame Sperr-/Beenden-Sequenz.** Sperren, Beenden, Panik-Ende, Killswitch und Reset laufen durch genau **eine** Routine `teardown(reason)` in `security.py`, in der Reihenfolge aus N11.11.2: Idempotenz-Sperre, offene native Dialoge auflösen (U5), Eingaben einfrieren (G13), G17-Debounce abbrechen und ausstehende Änderungen synchron persistieren, Clipboard sofort leeren, wenn es noch App-Inhalt trägt (G23/V7), DB schließen, Schlüssel nullen (G25), erst dann (nur Killswitch/Reset) Dateien und Pepper löschen (U21), `PROFILE_DIR` wischen (G14), Funk-Zustand ganz zuletzt wiederherstellen (nur auf den Beenden-Wegen, N11.5/N11.10), Mutex freigeben. Jeder Ausgang (Lock-Button, `Ctrl+L`, Auto-Sperre, Off-Knopf, Panik-Finish, Killswitch, Reset, natives Fenster-X, `atexit`) ruft diese Routine; ein zweiter, handgeschriebener Beenden-/Sperr-Pfad ist ein Gate-Verstoss. Volltext in N11.11. |
+>
+> **Zwei Kleinigkeiten (Hinweis, kein Gate):**
+> - **Export/Clipboard:** `export_list` schreibt **unverschlüsselte** Dateien (by
+>   design, der Nutzer exportiert bewusst Klartext). Das Kopieren ist seit dem
+>   Nachtrag gehärtet und auf eine einzelne Aufgabe begrenzt, siehe G23.
+> - **`main.py` `emit()`:** `json.dumps(payload)` muss `ensure_ascii=True` (Default)
+>   behalten, sonst können U+2028/U+2029 in Event-Daten den `evaluate_js`-Aufruf
+>   brechen.
+>
+> Die Phasen-Abschnitte wiederholen diese Gates **nicht** mehr im Wortlaut,
+> sondern listen nur die Gate-Nummern mit Stichwort und Verweis hierher
+> (Plananalyse S1: die früheren Wortlaut-Kopien sind mehrfach
+> auseinandergedriftet, siehe W3/W4/W8/W18).
 >
 > **Zusätzlich vorgezogen:** G12 (externe WebView-Navigation verweigern) ist mit
 > wenigen Zeilen umsetzbar und wird **vor** Phase 7 umgesetzt, nicht erst in
@@ -3737,11 +3714,42 @@ N11.7. Fälligkeiten/Erinnerungen sind aus dem Kern-Scope gestrichen, siehe N11.
 
 ## ANHANG 1: Entscheidungsregister (N10 + N11 als Protokoll)
 
-> **Leere Hülle (Umbau-Etappe 1, 2026-07-16, siehe „Umbauplan - Struktur des
-> Bauplans.md", Abschnitt 8):** Noch ohne Inhalt. In Umbau-Etappe 3 entsteht hier das
+> **Hülle (Umbau-Etappe 1, 2026-07-16, siehe „Umbauplan - Struktur des
+> Bauplans.md", Abschnitt 8):** In Umbau-Etappe 3 entsteht hier das
 > Entscheidungsregister als eine Tabelle (Spalten: ID, Datum, Thema, „Norm jetzt in"),
 > das die Nachträge N10 und N11 als reines Änderungsprotokoll ablöst. Bis dahin bleiben
-> die Nachtrag-Blöcke die normativen Orte.
+> die Nachtrag-Blöcke die normativen Orte. Bereits hier (seit Umbau-Etappe 2,
+> 2026-07-16): der Historie-Absatz der früheren zwei B.9-Gate-Tabellen.
+
+### Herkunft der Sicherheits-Gates (Einleitungstexte der früheren zwei B.9-Tabellen)
+
+Bis Umbau-Etappe 2 (2026-07-16) standen die Gates in B.9 in zwei Tabellen: dem
+Grundset aus dem Security-Review und der Nachtragstabelle „NACHTRAG: Gates G13 bis
+G35 (Code-Audit + Testlauf vom 2026-06-10, seither fortgeschrieben)". Die beiden
+historischen Einleitungstexte (wann welches Gate kam), wortgleich hierher verschoben:
+
+Zur ersten Tabelle: Aus dem Security-Review (2026-06-08) ergab sich eine klare
+Trennung in „sofort erledigt" und „muss in der jeweiligen Phase erledigt werden".
+
+Zur Nachtragstabelle: Ein vollständiges Code-Audit (Code-Review aller Module plus
+23 automatisierte Checks gegen die echte Bridge-API auf einer Wegwerf-DB) hat
+weitere Pflichtpunkte ergeben. Sie gelten zusätzlich zu den übrigen Gates; die
+Phasen-Abschnitte listen nur noch die Gate-Nummern mit Stichwort und Verweis
+auf diese Tabelle (normative Quelle, siehe Regel oben). Die Tabelle wird seit dem
+Audit fortgeschrieben (behebt Plananalyse W18): G24 wurde mit der
+Microsoft-Integration entfernt, G26 (Screenshot-Schutz, verworfen) und G27 kamen
+später hinzu, G28 (Verschlüsselungs-Beweis) stammt aus N11.9 (2026-07-09)
+und ist hier nur zusammengefasst (Volltext in N11.9). Am 2026-07-13 kamen aus
+der Plananalyse dazu: G29 (Fehler-Hygiene, S6, Volltext in N11.12), G30
+(Bedrohungsmodell, S4, Volltext in **B.10**) und G35 (gemeinsame
+Sperr-/Beenden-Sequenz, S5, Volltext in N11.11). Am 2026-07-15 wurden die
+Angriffsvektoren-Befunde A1 bis A7 der Plananalyse (Teil 5) entschieden und
+eingearbeitet: **G31** (RAM-auf-Platte-Lecks, A1), **G32** (Tresor-Ort und
+Cloud-Warnung, A2), **G33** (Dev-Altdaten, A3) und **G34** (Release-Härtung,
+A4/A6) stehen jetzt als Gates in dieser Tabelle (die Zeile hier ist jeweils der
+normative Volltext); A5 (Frontend-Integrität) ist als Ergänzung in G27
+eingearbeitet, A7 (Fenstertitel) als verbindliche Regel in B.4 (bewusst kein
+eigenes Gate, eine Zeile Regel genügt).
 
 ## ANHANG 2: Audit-Status (Triage des UX/UI-Audits)
 

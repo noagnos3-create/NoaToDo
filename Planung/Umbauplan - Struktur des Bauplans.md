@@ -303,7 +303,17 @@ aufgeraeumten Ablage sitzen.
   Zielnamen. Kein Inhalt verschoben, verify_umbau.py gruen.
 - **Etappe 2, Gate-1.** Die zwei B.9-Tabellen zu einer zusammenfuehren (nur Umstellen,
   kein Wort). Ergebnis einmal prueft: Gate-Anzahl vorher/nachher gleich, jede
-  Gate-Nummer genau einmal vorhanden.
+  Gate-Nummer genau einmal vorhanden. **Erledigt 2026-07-16:** eine nach Gate-Nummer
+  sortierte Tabelle (ein Tabellenkopf, 28 Zeilen G6 bis G35, jede Nummer genau
+  einmal); die beiden Historie-Einleitungstexte wandern wortgleich als Absatz ins
+  Entscheidungsregister (Anhang 1, "Herkunft der Sicherheits-Gates"); die beiden
+  normativen Verbindlichkeits-Saetze bleiben im B.9-Kopf; einzige
+  Verweis-Anpassung: "Diese Tabelle und die Nachtragstabelle G13-G35 direkt
+  darunter sind zusammen" heisst jetzt "Diese Tabelle ... ist" (P1-Verweissatz);
+  "Zwei Kleinigkeiten" und der Phasen-Abschnitte-Absatz stehen unveraendert hinter
+  der Tabelle. verify_umbau.py: alle harten Pruefungen gruen (Gate-Anzahl 30
+  stabil), Wort-Diff nur der geloeschte Doppel-Tabellenkopf und der aufgeloeste
+  Zwei-Tabellen-Verweissatz.
 - **Etappe 3, Norm-Umzug nach Migrationskarte.** Block fuer Block aus Abschnitt 5
   abarbeiten. Pro Block: (a) normativen Wortlaut in den Zielvertrag **ausschneiden und
   einfuegen**, Etikett (ID) dranlassen; (b) im Nachtrag-Block nur noch die Protokollzeile
