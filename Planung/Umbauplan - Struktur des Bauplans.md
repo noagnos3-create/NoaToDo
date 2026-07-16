@@ -320,7 +320,24 @@ aufgeraeumten Ablage sitzen.
   fuer Anhang 1 zuruecklassen; (c) Checklisten-Haken. **Reihenfolge innerhalb der Etappe:**
   erst die Bloecke, deren Norm heute schon im Haupttext steht (nur Register ziehen: N11.13,
   N5, N11.10, Teile N11.12), dann die reinen Umzuege (N11.11, N11.15, N11.4.*, N6, N11.9).
-  So gewoehnt man sich am risikoarmen Teil die Mechanik an.
+  So gewoehnt man sich am risikoarmen Teil die Mechanik an. **Erledigt 2026-07-16:**
+  alle 38 Bloecke der Blockliste umgezogen (skriptgestuetzter Zeilen-Umzug, Wortlaut und
+  Reihenfolge erhalten). M-Bloecke wortgleich an ihre Zielvertraege (u.a. N11.11 nach
+  B.8.5, N11.11.5 nach B.8.6, N11.15 nach B.11, N11.4/.1/.2 nach B.8.3/B.8.4, N11.4.3 und
+  N11.9 nach B.7, N6/N11.2.1/N11.2.2/N11.3/N11.5/N11.12 nach B.2, N2/N4/N10.2/N10.3 und
+  die B.4-Teile von N11.6 nach B.4, N11.1 nach A.4, Sprach-/Plattform-Entscheid nach A.5,
+  N10.1 nach B.8.2, N10.4/N11.8.1 nach B.8.7, N11.5-Abhaengigkeiten nach Phase 0,
+  N11.8.3 in Phase 8, N8 nach D.3, N11.14 nach Anhang 2); die R-/H-Bloecke liegen
+  wortgleich als Historie in Anhang 3, das Entscheidungsregister (Anhang 1) hat eine
+  Zeile je Block. Verweis-Fixes im Rahmen von P1: tote Referenz N11.16 auf N6/B.2
+  umgebogen (A.1), die Volltext-Anker im B.9-Kopf und in den Gate-Zeilen G28/G29/G35 auf
+  die neuen Orte (B.7, B.2, B.8.5) gestellt, der B.4-Zeiger "Details und Verbindlichkeit:
+  Nachtrag N10" auf N10.3 im selben Abschnitt. verify_umbau.py gegen das Tag: alle harten
+  Pruefungen gruen (Gate-Anzahl 30 stabil, Zahlen- und Literal-Inventar unveraendert,
+  ID-Mengen stabil; N10.2/N10.5 sind erwartete neue Etiketten aus der Blockliste und im
+  Skript als solche verzeichnet); Wort-Diff besteht nur aus Etiketten/Zeigern/
+  Registerzeilen plus den 5 schon in Etappe 2 verbuchten Woertern des aufgeloesten
+  Doppel-Tabellenkopfs.
 - **Etappe 4, Leseregel und Zeiger.** Den Kopf-Satz "vorher die Nachtraege lesen" streichen
   (der Haupttext ist jetzt selbsttragend) und die "von oben nach unten"-Regel wieder allein
   gelten lassen. Alle "siehe N11.x"-Zeiger im Dokument auf die neuen Vertrags-Orte
@@ -516,13 +533,22 @@ Grenzwerte gefuehrt. Vor Etappe 3 einmal ziehen, nach Etappe 3 erneut, identisch
 - [x] Zahlen-Inventar vorher erfasst (2026-07-16: die Liste der harten Grenzwerte steht in
       Abschnitt 9, G-Erhalt-3).
 
-**Vorgefundener Defekt, bei Etappe 0 aufzunehmen (kein Inhalt, ein toter Zeiger):**
+**Vorgefundene Defekte, bei Etappe 0 aufzunehmen (kein Inhalt, tote/defekte Zeiger):**
 
-- [ ] **`N11.16` ist eine tote Referenz.** In N11.15.3 steht "die Vokabeln sind dieselben
+- [x] **`N11.16` ist eine tote Referenz.** In N11.15.3 steht "die Vokabeln sind dieselben
       wie in der Entsperr-Fehlerlogik **(N11.16)**", aber einen Abschnitt N11.16 **gibt es
       nicht**. Die gemeinte Entsperr-Fehlerlogik ist **N6**. Beim Umzug (N6 wandert nach
       B.2 `unlock()`) diesen Zeiger auf den neuen B.2-Ort umbiegen. Reiner Zeiger-Fix,
-      **kein** inhaltlicher Eingriff.
+      **kein** inhaltlicher Eingriff. Erledigt 2026-07-16 (Etappe 3): der Zeiger in
+      N11.15.3 (jetzt B.11) lautet "(N6, jetzt in B.2)".
+- [x] **Die N11.12-Ueberschrift fehlte (vorgefunden in Etappe 3, bestand schon im Tag
+      `bauplan-vor-umbau`).** Die Ueberschriftzeile "### N11.12 Fehler-Hygiene, ..." war
+      im Bauplan verloren gegangen; nur ihr Schluss "(2026-07-13, S6-Entscheid, Gate G29)
+      [Sec]" klebte am Ende des letzten N11.11.5.4-Aufzaehlungspunkts, der S6-Block folgte
+      ohne Titel. Beim Umzug nach B.2 wurde der Titel aus der Schnell-Checkliste
+      ("N11.12 Fehler-Hygiene + Fehlercode-Katalog + Logging-Politik + Gate G29")
+      rekonstruiert und der Fragment-Rest aus dem N11.11.5.4-Punkt entfernt. Reiner
+      Struktur-Fix, **kein** inhaltlicher Eingriff.
 
 ### A.2 Blockliste (eine Zeile pro Nachtrag-Block)
 
@@ -534,43 +560,43 @@ Register-Zeile geschrieben.
 
 | Block | Typ | Zielort | [N] | [R] |
 |---|---|---|---|---|
-| Kopf: Sprach-/Plattform-Entscheid | M | A.5 | [ ] | [ ] |
-| N2 Offline-Pille | M | B.4 | [ ] | [ ] |
-| N4 Lock-Screen-UX | M | B.4 | [ ] | [ ] |
-| N5 Panik nur Maus | R | B.5 | [ ] | [ ] |
-| N6 Entsperr-Fehlerlogik | M ! | B.2 + B.4 | [ ] | [ ] |
-| N7 move_task/reorder_lists | R | B.2 + Phase 7 | [ ] | [ ] |
-| N8 Roadmap | M | Teil D | [ ] | [ ] |
-| N9 Startverhalten (ueberholt) | H | Anhang 3 | [ ] | [ ] |
-| N10.1 verstaerkte Sperre | M | B.8.2 | [ ] | [ ] |
-| N10.2 Off-Knopf | R | B.4 + B.8.5 | [ ] | [ ] |
-| N10.3 Panik-Endschirm | R | B.4 | [ ] | [ ] |
-| N10.4 nach Killswitch | M | B.8.7 | [ ] | [ ] |
-| N10.5 Bridge quit/killswitch | R | B.2 | [ ] | [ ] |
-| N11.1.1-.6 gestrichene Features | M | A.4 (+ Einzeiler B.1/B.2/Phase 1) | [ ] | [ ] |
-| N11.2 Export/Undo | R | Phase 7 + B.2 | [ ] | [ ] |
-| N11.2.1 Undo-Architektur | M | B.2 + Phase 7 | [ ] | [ ] |
-| N11.2.2 reorder/move-Randfaelle | M | B.2 (bei G20) | [ ] | [ ] |
-| N11.3 Einrichtung/Passphrase/Reset | M | B.2 + B.4 + B.7 | [ ] | [ ] |
-| N11.4 Auto-Sperre/Rate-Limit | M | B.8.3 + B.8.4 | [ ] | [ ] |
-| N11.4.1 Rate-Limit persistiert | M ! | B.8.4 + B.11 | [ ] | [ ] |
-| N11.4.2 Inaktivitaets-Definition | M | B.8.3 | [ ] | [ ] |
-| N11.4.3 Argon2-Parameter/MemoryError | M ! | B.7 + B.2 | [ ] | [ ] |
-| N11.5 echter Flugmodus | M | B.2 + B.4 + Phase 0 | [ ] | [ ] |
-| N11.6 Theme/Header/Fenster/Ton | M | B.6 + B.4 + B.5 | [ ] | [ ] |
-| N11.7 Settings-Whitelist | R | B.6 + G20 | [ ] | [ ] |
-| N11.8.1 Killswitch = Datei-Op | M | B.8.7 | [ ] | [ ] |
-| N11.8.2 Start-Weiche | R | B.2 | [ ] | [ ] |
-| N11.8.3 Zweitprofil-Spike | Spezial | bleibt Phase 8 | [ ] | [ ] |
-| N11.8.4 Win+L sperrt nicht | R | B.8.1 | [ ] | [ ] |
-| N11.9 beide Krypto-Schichten | M ! | B.7 | [ ] | [ ] |
-| N11.10 Sperre nicht mehr offline | M | B.8.2 + B.5 | [ ] | [ ] |
-| N11.11.1-.4 teardown-Sequenz | M ! | B.8.5 | [ ] | [ ] |
-| N11.11.5.1-.4 native Dialoge | M ! | B.8.6 | [ ] | [ ] |
-| N11.12.1-.3 Fehler-Hygiene | M | B.2 + B.9/Phase 9 | [ ] | [ ] |
-| N11.13 Onboarding-Bridge/Boot | R | B.2 + B.4 | [ ] | [ ] |
-| N11.14 Audit-Triage | Spezial | Anhang 2 | [ ] | [ ] |
-| N11.15.1-.6 config.json | M ! | B.11 | [ ] | [ ] |
+| Kopf: Sprach-/Plattform-Entscheid | M | A.5 | [x] | [x] |
+| N2 Offline-Pille | M | B.4 | [x] | [x] |
+| N4 Lock-Screen-UX | M | B.4 | [x] | [x] |
+| N5 Panik nur Maus | R | B.5 | [x] | [x] |
+| N6 Entsperr-Fehlerlogik | M ! | B.2 + B.4 | [x] | [x] |
+| N7 move_task/reorder_lists | R | B.2 + Phase 7 | [x] | [x] |
+| N8 Roadmap | M | Teil D | [x] | [x] |
+| N9 Startverhalten (ueberholt) | H | Anhang 3 | [x] | [x] |
+| N10.1 verstaerkte Sperre | M | B.8.2 | [x] | [x] |
+| N10.2 Off-Knopf | R | B.4 + B.8.5 | [x] | [x] |
+| N10.3 Panik-Endschirm | R | B.4 | [x] | [x] |
+| N10.4 nach Killswitch | M | B.8.7 | [x] | [x] |
+| N10.5 Bridge quit/killswitch | R | B.2 | [x] | [x] |
+| N11.1.1-.6 gestrichene Features | M | A.4 (+ Einzeiler B.1/B.2/Phase 1) | [x] | [x] |
+| N11.2 Export/Undo | R | Phase 7 + B.2 | [x] | [x] |
+| N11.2.1 Undo-Architektur | M | B.2 + Phase 7 | [x] | [x] |
+| N11.2.2 reorder/move-Randfaelle | M | B.2 (bei G20) | [x] | [x] |
+| N11.3 Einrichtung/Passphrase/Reset | M | B.2 + B.4 + B.7 | [x] | [x] |
+| N11.4 Auto-Sperre/Rate-Limit | M | B.8.3 + B.8.4 | [x] | [x] |
+| N11.4.1 Rate-Limit persistiert | M ! | B.8.4 + B.11 | [x] | [x] |
+| N11.4.2 Inaktivitaets-Definition | M | B.8.3 | [x] | [x] |
+| N11.4.3 Argon2-Parameter/MemoryError | M ! | B.7 + B.2 | [x] | [x] |
+| N11.5 echter Flugmodus | M | B.2 + B.4 + Phase 0 | [x] | [x] |
+| N11.6 Theme/Header/Fenster/Ton | M | B.6 + B.4 + B.5 | [x] | [x] |
+| N11.7 Settings-Whitelist | R | B.6 + G20 | [x] | [x] |
+| N11.8.1 Killswitch = Datei-Op | M | B.8.7 | [x] | [x] |
+| N11.8.2 Start-Weiche | R | B.2 | [x] | [x] |
+| N11.8.3 Zweitprofil-Spike | Spezial | bleibt Phase 8 | [x] | [x] |
+| N11.8.4 Win+L sperrt nicht | R | B.8.1 | [x] | [x] |
+| N11.9 beide Krypto-Schichten | M ! | B.7 | [x] | [x] |
+| N11.10 Sperre nicht mehr offline | M | B.8.2 + B.5 | [x] | [x] |
+| N11.11.1-.4 teardown-Sequenz | M ! | B.8.5 | [x] | [x] |
+| N11.11.5.1-.4 native Dialoge | M ! | B.8.6 | [x] | [x] |
+| N11.12.1-.3 Fehler-Hygiene | M | B.2 + B.9/Phase 9 | [x] | [x] |
+| N11.13 Onboarding-Bridge/Boot | R | B.2 + B.4 | [x] | [x] |
+| N11.14 Audit-Triage | Spezial | Anhang 2 | [x] | [x] |
+| N11.15.1-.6 config.json | M ! | B.11 | [x] | [x] |
 
 **Ableitung fuer die Modell-/Budget-Frage:** Die Zeilen mit `!` (N6, N11.4.1, N11.4.3,
 N11.9, N11.11, N11.11.5, N11.15) sind der teure, riskante Kern (Opus, Gegenlesen). Alle

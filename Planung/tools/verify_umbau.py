@@ -54,6 +54,14 @@ EXPECTED_ID_REMOVALS = {
     "N11.16",
 }
 
+EXPECTED_ID_ADDITIONS = {
+    # Die Blockliste des Umbauplans (A.2) benennt die N10-Punkte 2 und 5 als
+    # N10.2 und N10.5; im alten Bauplan hiessen sie nur "**2.**"/"**5.**".
+    # Die Etappe-3-Etiketten und Register-Zeilen fuehren die Token neu ein,
+    # das ist gewollt und keine Inhaltsaenderung.
+    "N10.2", "N10.5",
+}
+
 # --- ID-Familien: Wortgrenzen auf beiden Seiten toeten Fehltreffer
 #     (SHA256 -> kein A256, A11y -> kein A11). ---
 ID_PATTERNS = {
@@ -151,13 +159,17 @@ def check_ids(before, after):
         removed = sorted(b - a)
         unexpected_removed = [x for x in removed if x not in EXPECTED_ID_REMOVALS]
         expected_removed = [x for x in removed if x in EXPECTED_ID_REMOVALS]
+        unexpected_added = [x for x in added if x not in EXPECTED_ID_ADDITIONS]
+        expected_added = [x for x in added if x in EXPECTED_ID_ADDITIONS]
 
-        status = OK if not added and not unexpected_removed else WARN
+        status = OK if not unexpected_added and not unexpected_removed else WARN
         if status == WARN:
             all_ok = False
         print(f"{status} {name:20s}  vorher={len(b):3d}  nachher={len(a):3d}")
-        if added:
-            print(f"        + hinzugekommen: {', '.join(added)}")
+        if unexpected_added:
+            print(f"        + HINZUGEKOMMEN (pruefen!): {', '.join(unexpected_added)}")
+        if expected_added:
+            print(f"        + hinzugekommen (erwartet, Etikett): {', '.join(expected_added)}")
         if unexpected_removed:
             print(f"        - ENTFERNT (pruefen!): {', '.join(unexpected_removed)}")
         if expected_removed:
