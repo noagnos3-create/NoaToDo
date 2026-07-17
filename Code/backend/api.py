@@ -294,6 +294,10 @@ class Api:
         # Schreiben redigiert (Pfade -> <path>, 200 Zeichen) und enthalten nie
         # Bridge-Argumente. Geleert bei Sperre/Panik/Killswitch/Quit.
         self._errors = deque(maxlen=50)
+        # Undo-Puffer der letzten geloeschten Liste (N11.2.1): genau EINE
+        # Loeschung, nur im RAM, verworfen bei Lock/Panik/Killswitch/Quit
+        # (zusammen mit dem Schluessel-Nullen, sobald Phase 8 teardown bringt).
+        self._undo_list = None
 
     def _log_error(self, method: str, code: str, exc: BaseException) -> str:
         """Fehler in den Ringpuffer schreiben; liefert die kurze ``ref``."""
@@ -339,7 +343,28 @@ class Api:
 
     @bridge(schema={"list_id": v_id})
     def delete_list(self, list_id: str) -> dict[str, Any]:
+        # Undo-Puffer (N11.2.1, U9): GENAU die letzte Loeschung wird samt allen
+        # Aufgaben im RAM gehalten; eine neue Loeschung ueberschreibt den
+        # Puffer und verwirft die vorige endgueltig. Kein Soft-Delete.
+        self._undo_list = self.db.get_list_snapshot(list_id)  # KeyError -> not_found
         return self.db.delete_list(list_id)
+
+    @bridge(schema={"list_id": v_id})
+    def undo_delete_list(self, list_id: str) -> dict[str, Any]:
+        """Letzte Listen-Loeschung rueckgaengig machen (N11.2.1).
+
+        Der 6-s-Toast ist reine Frontend-Anzeige; der Puffer hier hat keinen
+        eigenen Verfalls-Timer und lebt, bis er ueberschrieben oder beim
+        Austritt aus dem entsperrten Zustand verworfen wird. Ein spaetes Undo
+        nach dem Toast darf deshalb gelingen. Stimmt die ID nicht mit dem
+        Puffer ueberein (inzwischen ersetzt oder verfallen), kommt
+        ``not_found`` und es wird NIE eine zweite Kopie angelegt.
+        """
+        buf = self._undo_list
+        if buf is None or buf["list"]["id"] != list_id:
+            return _err("not_found")
+        self._undo_list = None
+        return self.db.restore_list(buf)
 
     # =====================================================================
     # Aufgaben
@@ -653,10 +678,13 @@ class Api:
     @bridge
     def lock(self) -> dict[str, Any]:
         self.locked = True
-        # G29/N11.12.1: der Fehler-Ringpuffer ist Sitzungs-Diagnose und wird bei
-        # jedem Austritt aus dem entsperrten Zustand geleert (bis Phase 8 die
-        # gemeinsame teardown(reason)-Sequenz uebernimmt, N11.11 Schritt 3).
+        # G29/N11.12.1 + N11.2.1: Fehler-Ringpuffer und Listen-Undo-Puffer
+        # sind Sitzungs-RAM und werden bei jedem Austritt aus dem entsperrten
+        # Zustand verworfen (bis Phase 8 die gemeinsame teardown(reason)-
+        # Sequenz uebernimmt, N11.11 Schritt 3/7): eine gesperrte App haelt
+        # keinen geloeschten Aufgabentext und keine Diagnose-Historie im RAM.
         self._errors.clear()
+        self._undo_list = None
         return {"locked": True}
 
     @bridge
@@ -670,6 +698,7 @@ class Api:
         self.locked = True
         self.online = False
         self._errors.clear()   # G29: keine Diagnose-Historie im gesperrten Zustand
+        self._undo_list = None  # N11.2.1: Undo-Puffer verfaellt bei Panik
         return {"locked": True}
 
     @bridge
@@ -682,6 +711,7 @@ class Api:
         Demo-Daten (Details in db.killswitch).
         """
         self._errors.clear()   # G29: Diagnose-Historie faellt mit den Daten
+        self._undo_list = None  # N11.2.1: auch der Undo-Puffer
         return self.db.killswitch()
 
     @bridge
@@ -694,7 +724,8 @@ class Api:
         hier könnte die Nachrichtenschleife verklemmen. Das sichere Wischen der
         Spuren (PROFILE_DIR, Gate G14) folgt in Phase 8 auf genau diesem Pfad.
         """
-        self._errors.clear()   # G29: Ringpuffer verlaesst die Sitzung nicht
+        self._errors.clear()    # G29: Ringpuffer verlaesst die Sitzung nicht
+        self._undo_list = None  # N11.2.1: Undo-Puffer verfaellt beim Beenden
         win = self._window
         if win is None:
             raise RuntimeError("window not ready")   # -> internal + ref (G29)

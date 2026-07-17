@@ -207,7 +207,8 @@ All frontend<->backend communication goes through these methods on the `Api` cla
 | `get_lists()` | (keine) | `[{ id, name, open:[task], done:[task] }]` |
 | `add_list(name)` | str | `{ id, name, ... }` |
 | `rename_list(id, name)` | str, str | `{ ok }` |
-| `delete_list(id)` | str | `{ ok }` |
+| `delete_list(id)` | str | `{ ok }` (keeps the deleted list in the single RAM undo buffer, N11.2.1) |
+| `undo_delete_list(id)` | str | `{ ok }` (restores the last deleted list at its old position, same ids; `not_found` if the buffer was replaced/discarded; buffer discarded on lock/panic/killswitch/quit) |
 | `add_task(list_id, text)` | str, str | `{ ...task }` (no meta field, N11.1.3) |
 | `toggle_task(id)` | str | `{ id, done }` |
 | `edit_task(id, fields)` | str, obj | `{ ...task }` (text only, no meta, N11.1.3) |

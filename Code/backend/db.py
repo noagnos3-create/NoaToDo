@@ -193,6 +193,58 @@ class Database:
         self.conn.commit()
         return {"ok": True}
 
+    # -- Undo beim Listen-Loeschen (N11.2.1) --------------------------------
+    def get_list_snapshot(self, list_id: str) -> dict[str, Any]:
+        """Vollabzug einer Liste samt Aufgaben fuer den RAM-Undo-Puffer.
+
+        Reiner Lesezugriff; das eigentliche Loeschen macht ``delete_list``.
+        Der Abzug enthaelt alle Spalten (inkl. ``position`` und Zeitstempeln),
+        damit ``restore_list`` die Liste bit-genau und an alter Stelle
+        wiederherstellen kann. Kein Soft-Delete, kein ``deleted_at``-Feld:
+        der Puffer lebt nur im RAM der entsperrten Sitzung (U9-Entscheid).
+        """
+        lrow = self.conn.execute(
+            "SELECT * FROM lists WHERE id = ?", (list_id,)
+        ).fetchone()
+        if lrow is None:
+            raise KeyError(list_id)
+        trows = self.conn.execute(
+            "SELECT * FROM tasks WHERE list_id = ?", (list_id,)
+        ).fetchall()
+        return {
+            "list": {k: lrow[k] for k in lrow.keys()},
+            "tasks": [{k: r[k] for k in r.keys()} for r in trows],
+        }
+
+    def restore_list(self, snap: dict[str, Any]) -> dict[str, Any]:
+        """Gepufferte Liste an ihrer alten Position wieder einfuegen (N11.2.1).
+
+        Nachfolgende Listen ruecken eine Position zurueck, die Aufgaben kommen
+        mit ihren alten Positionen und IDs zurueck. Existiert die ID wider
+        Erwarten schon (Puffer-Logik verletzt), schlaegt der INSERT fehl und
+        der ``@bridge``-Decorator liefert ``internal``; es entsteht nie eine
+        zweite Kopie.
+        """
+        lst = snap["list"]
+        self.conn.execute(
+            "UPDATE lists SET position = position + 1 WHERE position >= ?",
+            (lst["position"],),
+        )
+        self.conn.execute(
+            "INSERT INTO lists (id, name, position, created_at, updated_at)"
+            " VALUES (?, ?, ?, ?, ?)",
+            (lst["id"], lst["name"], lst["position"], lst["created_at"], lst["updated_at"]),
+        )
+        for t in snap["tasks"]:
+            self.conn.execute(
+                "INSERT INTO tasks (id, list_id, text, done, position,"
+                " created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
+                (t["id"], t["list_id"], t["text"], t["done"], t["position"],
+                 t["created_at"], t["updated_at"]),
+            )
+        self.conn.commit()
+        return {"ok": True}
+
     # -- Aufgaben schreiben ------------------------------------------------
     def add_task(self, list_id: str, text: str) -> dict[str, Any]:
         now = _now()

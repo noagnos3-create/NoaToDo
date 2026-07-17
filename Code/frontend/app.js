@@ -1188,7 +1188,15 @@ async function doDeleteList() {
   state.confirmDeleteId = null;
   state.listEditDock = false;
   render();
-  pushToast('List deleted', removed ? removed.name : '');
+  // Undo-Toast (N11.2.1): stellt die Liste samt Aufgaben an alter Position
+  // wieder her. not_found (Puffer inzwischen ersetzt/verfallen) laeuft still
+  // ueber handleError -> refreshState, es entsteht nie eine zweite Kopie.
+  pushUndoToast('List deleted', removed ? removed.name : '', async () => {
+    const undoRes = await api().undo_delete_list(id);
+    if (handleError(undoRes)) return;
+    await refreshState();
+    pushToast('List restored', removed ? removed.name : '');
+  });
 }
 
 async function setOnline(flag) {
@@ -1359,6 +1367,7 @@ function clearWorkspace() {
   state.settings.sidebar = 'closed';   // nur in-memory, wie beim Boot
   state.railPinned = false;
   state.online = false;
+  clearToasts();   // kein Undo-Knopf/Toast darf den Lock-Screen ueberlagern
 }
 
 async function doLock() {
@@ -1484,6 +1493,37 @@ function pushToast(text, mono) {
   node.innerHTML = Icons.Check + esc(text) + (mono ? `<span class="mono">${esc(mono)}</span>` : '');
   toastLayer.appendChild(node);
   setTimeout(() => { if (node.parentNode) node.parentNode.removeChild(node); }, 2400);
+}
+
+// Toast mit Undo-Knopf (N11.2.1, nur fuers Listen-Loeschen): steht ca. 6 s,
+// der Knopf ruft onUndo genau einmal und raeumt den Toast sofort weg. Der
+// 6-s-Timer gehoert der UI; der Backend-Puffer lebt unabhaengig davon weiter
+// (ein spaetes Undo ueber einen neuen Weg duerfte gelingen, das ist gewollt).
+function pushUndoToast(text, mono, onUndo) {
+  if (!toastLayer) {
+    toastLayer = document.createElement('div');
+    toastLayer.className = 'toast-wrap';
+    document.body.appendChild(toastLayer);
+  }
+  const node = document.createElement('div');
+  node.className = 'toast';
+  node.innerHTML = Icons.Trash + esc(text) + (mono ? `<span class="mono">${esc(mono)}</span>` : '');
+  const btn = document.createElement('button');
+  btn.className = 'toast-undo';
+  btn.textContent = 'Undo';
+  btn.addEventListener('click', () => {
+    if (node.parentNode) node.parentNode.removeChild(node);
+    onUndo();
+  });
+  node.appendChild(btn);
+  toastLayer.appendChild(node);
+  setTimeout(() => { if (node.parentNode) node.parentNode.removeChild(node); }, 6000);
+}
+
+// Alle sichtbaren Toasts sofort wegraeumen (beim Sperren/Panik: kein
+// Undo-Knopf und keine Meldung darf den Lock-Screen ueberlagern).
+function clearToasts() {
+  if (toastLayer) toastLayer.innerHTML = '';
 }
 
 // ===========================================================================
