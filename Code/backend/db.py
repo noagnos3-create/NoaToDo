@@ -30,6 +30,12 @@ def _new_id(prefix: str) -> str:
     return prefix + uuid.uuid4().hex
 
 
+class InvalidInput(ValueError):
+    """Semantische G20-Verletzung in der Datenschicht (z.B. `ordered_ids`
+    ist nicht exakt die Aufgabenmenge der Liste, N11.2.2). Der
+    ``@bridge``-Decorator macht daraus den Katalog-Code ``invalid``."""
+
+
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS lists (
   id          TEXT PRIMARY KEY,
@@ -254,12 +260,32 @@ class Database:
         return {"ok": True}
 
     def reorder(self, list_id: str, ordered_ids: list[str]) -> dict[str, Any]:
+        """Aufgaben-Reihenfolge speichern, alles oder nichts (G20/N11.2.2).
+
+        ``ordered_ids`` muss als Menge EXAKT alle Aufgaben-IDs dieser Liste
+        sein (offene und erledigte zusammen; keine fehlende, doppelte, fremde
+        oder listenfremde ID), sonst ``InvalidInput`` und es wird nichts
+        geschrieben. Bei gueltiger Eingabe wird ``position`` je Sektion (B.1,
+        U13: ``open`` und ``done`` haben eigene 0..n-Sequenzen) in der
+        uebergebenen Reihenfolge neu vergeben.
+        """
+        if self._get_list(list_id) is None:
+            raise KeyError(list_id)
+        rows = self.conn.execute(
+            "SELECT id, done FROM tasks WHERE list_id = ?", (list_id,)
+        ).fetchall()
+        done_by_id = {r["id"]: r["done"] for r in rows}
+        if len(ordered_ids) != len(set(ordered_ids)) or set(ordered_ids) != set(done_by_id):
+            raise InvalidInput("ordered_ids must match the list's task set")
         now = _now()
-        for pos, tid in enumerate(ordered_ids):
+        counters = {0: 0, 1: 0}
+        for tid in ordered_ids:
+            section = done_by_id[tid]
             self.conn.execute(
-                "UPDATE tasks SET position = ?, updated_at = ? WHERE id = ? AND list_id = ?",
-                (pos, now, tid, list_id),
+                "UPDATE tasks SET position = ?, updated_at = ? WHERE id = ?",
+                (counters[section], now, tid),
             )
+            counters[section] += 1
         self.conn.commit()
         return {"ok": True}
 

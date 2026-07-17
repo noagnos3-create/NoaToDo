@@ -1895,8 +1895,12 @@ async function onDrop(e) {
   const ids = [...listEl.querySelectorAll('.task')].map((el) => el.dataset.taskId);
   const list = activeList();
   list.open.sort((x, y) => ids.indexOf(x.id) - ids.indexOf(y.id));
-  await api().reorder(list.id, ids);
+  // G20/N11.2.2: ordered_ids muss EXAKT die gesamte Aufgabenmenge der Liste
+  // sein (offen + erledigt); die Sektionstrennung macht das Backend anhand
+  // von done. Die erledigten haengen in ihrer aktuellen Reihenfolge hinten an.
+  const res = await api().reorder(list.id, [...ids, ...list.done.map((t) => t.id)]);
   dragId = null;
+  if (handleError(res)) return;
   render();
 }
 function onDragEnd() {

@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import ctypes
 import functools
+import inspect
 import os
 import re
 import secrets
@@ -65,8 +66,144 @@ def _redact(text: str) -> str:
     return _PATH_RE.sub("<path>", str(text))[:200]
 
 
-def bridge(fn: Callable) -> Callable:
-    """Fängt Ausnahmen ab und liefert die Fehlerkonvention aus B.2 (Gate G29).
+# ---------------------------------------------------------------------------
+# Eingabe-Validierung an der Bridge (Gate G20 / Bauplan B.2, V5, N11.2.2).
+#
+# Jede Bridge-Methode traegt ihr kleines deklaratives Schema direkt am
+# @bridge-Decorator: Parametername -> Validator. Ein Validator prueft Typ und
+# Wert, normalisiert (Steuerzeichen strippen, Ueberlaenge abschneiden) und
+# wirft InvalidInput bei jedem Verstoss (-> Katalog-Code "invalid"). Das
+# Schema liegt introspektierbar an der Methode (wrapper._schema), damit die
+# Phase-9-Tests direkt gegen die Regeln testen koennen.
+# ---------------------------------------------------------------------------
+MAX_TASK_TEXT = 4096
+MAX_LIST_NAME = 256
+
+# Steuerzeichen U+0000-U+001F ausser Tab (09) und Newline (0A) entfernen (G20).
+_CTRL_RE = re.compile(r"[\x00-\x08\x0b-\x1f]")
+
+
+class InvalidInput(ValueError):
+    """Verletzung der G20-Validierung; wird im Decorator zu ``invalid``."""
+
+
+def v_text(max_len: int) -> Callable[[Any], str]:
+    """Pflicht-Freitext: String, Steuerzeichen raus, auf max_len gekappt."""
+
+    def check(value: Any) -> str:
+        if not isinstance(value, str):
+            raise InvalidInput("not a string")
+        value = _CTRL_RE.sub("", value)[:max_len].strip()
+        if not value:
+            raise InvalidInput("empty")
+        return value
+
+    return check
+
+
+def v_id(value: Any) -> str:
+    """Brauchbare ID: nicht-leerer String (Existenz prueft die DB, not_found)."""
+    if not isinstance(value, str) or not value:
+        raise InvalidInput("bad id")
+    return value
+
+
+def v_str_list(value: Any) -> list[str]:
+    """Echte Liste von Strings (kein String, kein Dict, keine Zahlen)."""
+    if not isinstance(value, list) or not all(isinstance(x, str) for x in value):
+        raise InvalidInput("not a list of strings")
+    return value
+
+
+def v_bool(value: Any) -> bool:
+    """Bool, auch als 'true'/'false'-String (JS data-Attribute liefern Strings)."""
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, str) and value.lower() in ("true", "false"):
+        return value.lower() == "true"
+    raise InvalidInput("not a bool")
+
+
+def v_task_fields(value: Any) -> dict[str, Any]:
+    """``edit_task.fields``: nur bekannte Felder, `text` String, `done` Bool (V5)."""
+    if not isinstance(value, dict) or not value:
+        raise InvalidInput("fields")
+    out: dict[str, Any] = {}
+    for key, val in value.items():
+        if key == "text":
+            out[key] = v_text(MAX_TASK_TEXT)(val)
+        elif key == "done":
+            if not isinstance(val, bool):
+                raise InvalidInput("done not bool")
+            out[key] = val
+        else:
+            raise InvalidInput("unknown field")
+    return out
+
+
+# Whitelist + Wert-Schema fuer set_setting (G20 c/d, V5, N11.7). Die sechs
+# Akzent-Hexwerte sind die festen Presets aus B.3/B.6: der Wert landet als
+# CSS-Variable im DOM, die Whitelist toetet CSS-Injection ueber Settings.
+# `dark` bleibt uebergangsweise erlaubt, bis N11.6 es durch `theme` ersetzt
+# (das heutige Frontend schaltet noch ueber `dark` um); `theme`/`sound`/
+# `autoLock` sind schon jetzt validiert, damit die Whitelist mit N11.6/N11.7
+# nicht erneut angefasst werden muss.
+ACCENT_PRESETS = ("#d97757", "#c75d3a", "#5a9d6b", "#4a86c5", "#d4a23c", "#a66a9c")
+SETTINGS_SCHEMA: dict[str, tuple] = {
+    "accent": ("enum", ACCENT_PRESETS),
+    "dark": ("bool",),  # uebergangsweise, faellt mit N11.6 zugunsten von theme
+    "theme": ("enum", ("auto", "light", "dark")),
+    "density": ("enum", ("comfortable", "compact")),
+    "sidebar": ("enum", ("open", "closed")),
+    "railPinned": ("bool",),
+    "sidebarWidth": ("int_clamp", 180, 520),
+    "sound": ("bool",),
+    "autoLock": ("int_enum", (0, 1, 5, 15, 30, 60)),
+}
+
+
+def _validate_setting(key: Any, value: Any) -> str:
+    """Prueft Key gegen die Whitelist und den Wert je Key (V5).
+
+    Liefert den normalisierten String, der in der settings-Tabelle landet
+    (Bools als 'true'/'false', Zahlen dezimal). ``sidebarWidth`` wird schon
+    beim SCHREIBEN auf 180-520 geklemmt, nicht erst beim Lesen geparst.
+    """
+    if not isinstance(key, str) or key not in SETTINGS_SCHEMA:
+        raise InvalidInput("unknown setting")
+    rule = SETTINGS_SCHEMA[key]
+    kind = rule[0]
+    if kind == "enum":
+        if not isinstance(value, str) or value not in rule[1]:
+            raise InvalidInput("bad enum value")
+        return value
+    if kind == "bool":
+        return "true" if v_bool(value) else "false"
+    if kind == "int_clamp":
+        try:
+            num = int(value)
+        except (TypeError, ValueError):
+            raise InvalidInput("not an int")
+        return str(max(rule[1], min(rule[2], num)))
+    if kind == "int_enum":
+        # Bewusst KEIN str->int-Cast von Floats; '15' (Frontend-String) ist ok.
+        try:
+            num = int(value) if not isinstance(value, bool) else None
+        except (TypeError, ValueError):
+            num = None
+        if num is None or num not in rule[1]:
+            raise InvalidInput("bad value")
+        return str(num)
+    raise InvalidInput("bad rule")  # pragma: no cover - Schema-Tippfehler
+
+
+def bridge(fn: Callable | None = None, *, schema: dict[str, Callable] | None = None) -> Callable:
+    """Fängt Ausnahmen ab und liefert die Fehlerkonvention aus B.2 (Gate G29),
+    und validiert Argumente gegen das deklarative Schema (Gate G20).
+
+    Nutzung: ``@bridge`` (ohne Validierung) oder
+    ``@bridge(schema={"text": v_text(4096)})``. Das Schema haengt als
+    ``wrapper._schema`` an der Methode (introspektierbar fuer Phase-9-Tests).
 
     Ans Frontend gehen nur Katalog-Codes mit statischem Text; bei ``internal``
     zusaetzlich eine kurze ``ref`` auf den Ringpuffer-Eintrag. Der Eintrag
@@ -74,23 +211,48 @@ def bridge(fn: Callable) -> Callable:
     RAM und ist nur ueber das Status-Modal einsehbar.
     """
 
-    @functools.wraps(fn)
-    def wrapper(self, *args, **kwargs):
-        try:
-            return fn(self, *args, **kwargs)
-        except KeyError as exc:
-            self._log_error(fn.__name__, "not_found", exc)
-            return _err("not_found")
-        except MemoryError as exc:
-            # N11.4.3: Speicher-Not ist weder "falsche Passphrase" noch ein
-            # anonymer interner Fehler; eigener Code, kein Absturz.
-            self._log_error(fn.__name__, "memory", exc)
-            return _err("memory")
-        except Exception as exc:  # pragma: no cover - defensiv
-            ref = self._log_error(fn.__name__, "internal", exc)
-            return _err("internal", ref=ref)
+    def deco(fn: Callable) -> Callable:
+        sig = inspect.signature(fn)
 
-    return wrapper
+        @functools.wraps(fn)
+        def wrapper(self, *args, **kwargs):
+            try:
+                if schema:
+                    bound = sig.bind(self, *args, **kwargs)
+                    for name, validator in schema.items():
+                        if name in bound.arguments:
+                            bound.arguments[name] = validator(bound.arguments[name])
+                    return fn(*bound.args, **bound.kwargs)
+                return fn(self, *args, **kwargs)
+            except InvalidInput:
+                return _err("invalid")
+            except db_module.InvalidInput:
+                return _err("invalid")
+            except TypeError as exc:
+                # Falsche Argument-Anzahl/-Form am Bind: unbrauchbarer Aufruf.
+                if "bind" in str(exc) or "argument" in str(exc):
+                    self._log_error(fn.__name__, "invalid", exc)
+                    return _err("invalid")
+                ref = self._log_error(fn.__name__, "internal", exc)
+                return _err("internal", ref=ref)
+            except KeyError as exc:
+                self._log_error(fn.__name__, "not_found", exc)
+                return _err("not_found")
+            except MemoryError as exc:
+                # N11.4.3: Speicher-Not ist weder "falsche Passphrase" noch ein
+                # anonymer interner Fehler; eigener Code, kein Absturz.
+                self._log_error(fn.__name__, "memory", exc)
+                return _err("memory")
+            except Exception as exc:  # pragma: no cover - defensiv
+                ref = self._log_error(fn.__name__, "internal", exc)
+                return _err("internal", ref=ref)
+
+        wrapper._schema = schema or {}
+        return wrapper
+
+    if fn is not None:
+        return deco(fn)
+    return deco
 
 
 # Typumwandlung beim Lesen der settings-Tabelle (dort liegt alles als String).
@@ -167,49 +329,40 @@ class Api:
     # =====================================================================
     # Listen
     # =====================================================================
-    @bridge
+    @bridge(schema={"name": v_text(MAX_LIST_NAME)})
     def add_list(self, name: str) -> dict[str, Any]:
-        name = (name or "").strip()
-        if not name:
-            return _err("invalid")
         return self.db.add_list(name)
 
-    @bridge
+    @bridge(schema={"list_id": v_id, "name": v_text(MAX_LIST_NAME)})
     def rename_list(self, list_id: str, name: str) -> dict[str, Any]:
-        name = (name or "").strip()
-        if not name:
-            return _err("invalid")
         return self.db.rename_list(list_id, name)
 
-    @bridge
+    @bridge(schema={"list_id": v_id})
     def delete_list(self, list_id: str) -> dict[str, Any]:
         return self.db.delete_list(list_id)
 
     # =====================================================================
     # Aufgaben
     # =====================================================================
-    @bridge
+    @bridge(schema={"list_id": v_id, "text": v_text(MAX_TASK_TEXT)})
     def add_task(self, list_id: str, text: str) -> dict[str, Any]:
-        text = (text or "").strip()
-        if not text:
-            return _err("invalid")
         return self.db.add_task(list_id, text)
 
-    @bridge
+    @bridge(schema={"task_id": v_id})
     def toggle_task(self, task_id: str) -> dict[str, Any]:
         return self.db.toggle_task(task_id)
 
-    @bridge
+    @bridge(schema={"task_id": v_id, "fields": v_task_fields})
     def edit_task(self, task_id: str, fields: dict[str, Any]) -> dict[str, Any]:
-        return self.db.edit_task(task_id, fields or {})
+        return self.db.edit_task(task_id, fields)
 
-    @bridge
+    @bridge(schema={"task_id": v_id})
     def delete_task(self, task_id: str) -> dict[str, Any]:
         return self.db.delete_task(task_id)
 
-    @bridge
+    @bridge(schema={"list_id": v_id, "ordered_ids": v_str_list})
     def reorder(self, list_id: str, ordered_ids: list[str]) -> dict[str, Any]:
-        return self.db.reorder(list_id, ordered_ids or [])
+        return self.db.reorder(list_id, ordered_ids)
 
     # =====================================================================
     # Export / Kopieren (Grundgerüst; Save-Dialog folgt in Phase 7)
@@ -251,7 +404,7 @@ class Api:
             ext = "txt"
         return {"filename": f"{safe}.{ext}", "content": "\n".join(lines)}
 
-    @bridge
+    @bridge(schema={"task_id": v_id})
     def copy_task(self, task_id: str) -> dict[str, Any]:
         """Kopiert genau EINE Aufgabe gehärtet in die Zwischenablage (Gate G23).
 
@@ -303,15 +456,18 @@ class Api:
     # =====================================================================
     @bridge
     def set_setting(self, key: str, value: Any) -> dict[str, Any]:
-        result = self.db.set_setting(key, value)
+        # G20 (c)/(d): Key-Whitelist + Wert-/Typ-Pruefung je Key (V5). Der
+        # normalisierte String landet in der DB; alles andere ist "invalid".
+        normalized = _validate_setting(key, value)
+        result = self.db.set_setting(key, normalized)
         if self._on_setting_change:
-            self._on_setting_change(key, value)
+            self._on_setting_change(key, normalized)
         return result
 
     # =====================================================================
     # Fenster (Mini-/Kompaktmodus)
     # =====================================================================
-    @bridge
+    @bridge(schema={"flag": v_bool})
     def set_mini(self, flag: bool) -> dict[str, Any]:
         """Schaltet den kompakten Mini-Fenster-Modus um.
 
@@ -448,9 +604,9 @@ class Api:
     # Datenschutz-/Flugmodus-Umschalter (keine Cloud, kein Sync); ``online`` und
     # das WLAN-Symbol sind nur kosmetische Statusanzeigen.
     # =====================================================================
-    @bridge
+    @bridge(schema={"flag": v_bool})
     def set_online(self, flag: bool) -> dict[str, Any]:
-        self.online = bool(flag)
+        self.online = flag
         return {"online": self.online}
 
     @bridge
