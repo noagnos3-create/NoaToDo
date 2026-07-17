@@ -808,12 +808,18 @@ function renderPanic() {
       // in-place um, damit die CSS-Transition sichtbar laeuft (ein Re-Render
       // wuerde den Knopf neu erzeugen und die Animation verschlucken).
       const killArmed = !!p.killArmed;
+      // Gate G22 (bis Phase 8): der Endschirm behauptet KEINEN sicheren Wipe,
+      // den es nicht gab. Ehrlicher Stand: Workspace/Cache verworfen, offline;
+      // die Datenbank existiert weiter (wirklich loeschen kann nur der
+      // Killswitch darunter). Die bewusste Aussendarstellung "All data
+      // securely wiped" (B.10.5) kehrt erst mit dem realen Phase-8-Wipe-Pfad
+      // (G14/G25) zurueck.
       return `
         <div class="panic-screen done">
           <div class="panic-screen-card">
             <div class="panic-screen-ring ok">${I.Shield}</div>
-            <h2>All data securely wiped</h2>
-            <p class="panic-screen-sub">The workspace, the in-memory cache and the cached keys were destroyed and the app went offline. Nothing readable remains on this machine.</p>
+            <h2>Workspace cleared</h2>
+            <p class="panic-screen-sub">The visible workspace and the in-memory cache were discarded and the app went offline. The database itself is still on this machine; use Killswitch to erase it for real.</p>
             <div class="panic-exit-row">
               <button class="btn btn-primary panic-finish" data-act="panic-finish">Finish</button>
               <button class="kill-btn${killArmed ? ' armed' : ''}" data-act="${killArmed ? 'kill-ok' : 'kill-arm'}" title="Irreversibly erase the database">
@@ -829,10 +835,10 @@ function renderPanic() {
       <div class="panic-screen">
         <div class="panic-screen-card">
           <div class="panic-screen-ring">${I.Alert}</div>
-          <h2>${killing ? 'Erasing user data' : 'Wiping all data'}</h2>
+          <h2>${killing ? 'Erasing user data' : 'Clearing workspace'}</h2>
           <div class="panic-bar"><div class="panic-bar-fill" id="panic-fill"></div></div>
           <div class="panic-wipe-row">
-            <span class="mono" id="panic-step">${killing ? 'Deleting user data' : 'Shredding tasks.db'}</span>
+            <span class="mono" id="panic-step">${killing ? 'Deleting user data' : 'Clearing workspace'}</span>
             <span class="mono panic-pct" id="panic-pct">0%</span>
           </div>
         </div>
@@ -885,12 +891,15 @@ function runPanicProgress(stage, steps, dur, onDone) {
 }
 
 // "Wipe"-Schirm nach dem Bestaetigen: die echte Bereinigung (Raum leeren,
-// offline, Backend-panic) ist beim Confirm schon passiert; der Balken hier ist
-// die Aussendarstellung. Danach der Endschirm mit Finish/Killswitch.
+// offline, Backend-panic) ist beim Confirm schon passiert; der Balken zeigt
+// genau das. Gate G22 (bis Phase 8): die Schritte nennen NUR, was wirklich
+// passiert (Workspace/Cache/Toasts verwerfen, offline). Die fruehere
+// Aussendarstellung ("Shredding tasks.db", "Overwriting key material") ist
+// erst ab Phase 8 zulaessig, wenn der reale Wipe-Pfad existiert (B.10.5).
 function startPanicWipe() {
   runPanicProgress(
     'wiping',
-    ['Shredding tasks.db', 'Overwriting key material', 'Clearing memory cache', 'Zeroing free space'],
+    ['Clearing workspace', 'Discarding in-memory cache', 'Closing menus and dialogs', 'Going offline'],
     2600,
     () => { state.panic.stage = 'done'; render(); }
   );
