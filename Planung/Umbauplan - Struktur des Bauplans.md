@@ -405,7 +405,22 @@ aufgeraeumten Ablage sitzen.
   hinzugekommenen Ueberschriften-, Etikett- und Anker-Vokabeln.
 - **Etappe 7, Abnahme.** Abschnitt 9 durchpruefen. Dann CLAUDE.md dort nachziehen, wo sie
   auf Struktur zeigt (nicht auf IDs, die bleiben ja): die "Bridge API"-Tabelle und die
-  Abschnitts-Namen. Inhaltlich aendert sich auch in CLAUDE.md nichts.
+  Abschnitts-Namen. Inhaltlich aendert sich auch in CLAUDE.md nichts. **Erledigt
+  2026-07-17:** verify_umbau.py gegen das Tag: alle harten Pruefungen gruen (Gate-Anzahl
+  30 stabil, ID-Mengen U/W/V/S/A unveraendert, N nur um die erwarteten Etiketten
+  N10.2/N10.5 ergaenzt, Zahlen- und Literal-Inventar identisch); Wort-Diff besteht
+  ausschliesslich aus den je Etappe verbuchten Ueberschriften-/Etikett-/Zeiger-Vokabeln.
+  G-Erhalt-6-Gegenlesen per unabhaengigem Wort-Sequenz-Diff (Skript) fuer N11.11 (B.8.5),
+  N11.11.5 (B.8.6), N11.15 (B.11) und N6 (B.2 + B.4): Wortlaut und Reihenfolge der Norm
+  unveraendert, Abweichungen nur Ueberschriften, Umzugs-Notizen, der G14-Anbau aus
+  Etappe 6 und die dokumentierten Zeiger-Fixes (N11.16, N11.12-Titel). Abnahme-Liste
+  (Abschnitt 12) Punkt fuer Punkt geprueft und abgehakt; die zwei offenen
+  A.1-Baseline-Haken gesetzt. CLAUDE.md an zwei Struktur-Stellen nachgezogen (die
+  "Security gates"-Beschreibung auf die eine Gate-Tabelle samt Volltext-Anker-Liste und
+  Anhang-1-Herkunft; der "einzige Wahrheit"-Punkt 3 nennt statt der N-Nachtraege das
+  Entscheidungsregister); die "Bridge API"-Tabelle und alle uebrigen Verweise zeigen auf
+  IDs oder weiterbestehende Abschnitts-Namen und blieben unveraendert. Kein inhaltlicher
+  Eingriff. Der Umbau ist damit abgeschlossen.
 
 ---
 
@@ -518,25 +533,36 @@ jede Regel steht dort, wo man sie beim Bauen sucht, und jede traegt weiter ihr E
 
 ## 12. Abnahme (Definition of Done)
 
-Der Umbau gilt als fertig, wenn **alle** folgenden Punkte zutreffen:
+Der Umbau gilt als fertig, wenn **alle** folgenden Punkte zutreffen (Abnahme in Etappe 7
+am 2026-07-17 durchgefuehrt):
 
-- [ ] Teil A bis C ist **selbsttragend**: kein "Volltext in N11.x", keine Norm liegt mehr
-      ausschliesslich in einem Nachtrag-Block.
-- [ ] Der Kopf-Hinweis "vorher die Nachtraege lesen" ist entfernt; es gilt nur noch "von
+- [x] Teil A bis C ist **selbsttragend**: kein "Volltext in N11.x", keine Norm liegt mehr
+      ausschliesslich in einem Nachtrag-Block. (Einziger Rest-Treffer im Baupfad nennt den
+      B-Ort mit: "Volltext in N11.15.5, B.11"; die Treffer in Anhang 1 sind bewusst
+      belassener Historie-Wortlaut.)
+- [x] Der Kopf-Hinweis "vorher die Nachtraege lesen" ist entfernt; es gilt nur noch "von
       oben nach unten".
-- [ ] Jede N10-/N11-ID hat eine Zeile im **Entscheidungsregister (Anhang 1)** mit Zeiger
-      auf ihren normativen Ort.
-- [ ] B.9 hat **eine** Gate-Tabelle; jede Gate-Nummer kommt genau einmal vor; Zahl und
-      Nummern gleich wie vorher (G-Erhalt-5).
-- [ ] B.8 traegt die vollstaendige Sperr-/Auto-Sperr-/Beenden-Politik (inkl. teardown-
+- [x] Jede N10-/N11-ID hat eine Zeile im **Entscheidungsregister (Anhang 1)** mit Zeiger
+      auf ihren normativen Ort. (Gegen die A.2-Blockliste geprueft: alle 38 Bloecke.)
+- [x] B.9 hat **eine** Gate-Tabelle; jede Gate-Nummer kommt genau einmal vor; Zahl und
+      Nummern gleich wie vorher (G-Erhalt-5). (28 Zeilen G6 bis G35; G10/G24/G26 nur als
+      historische Erwaehnung, wie in A.1 festgelegt.)
+- [x] B.8 traegt die vollstaendige Sperr-/Auto-Sperr-/Beenden-Politik (inkl. teardown-
       Sequenztabelle und Dialog-Regel); B.11 traegt das vollstaendige config.json-Schema.
-- [ ] Zahlen-/Grenzwert-Inventar vorher = nachher (G-Erhalt-3); ID-Menge vorher = nachher
-      (G-Erhalt-2).
-- [ ] Hinfaelliges (Seed, durchgestrichene Reste) liegt gebuendelt in **Anhang 3**, nicht
-      mehr im Baupfad.
-- [ ] CLAUDE.md-Struktur-Verweise nachgezogen; **kein** inhaltlicher Eingriff dort.
-- [ ] Ein Gegenleser bestaetigt fuer N11.11, N11.15 und N6, dass die **Reihenfolge** der
-      Schritte unveraendert ist (G-Erhalt-6).
+      (B.8.1 bis B.8.7 gefuellt, B.11 mit N11.15.1 bis N11.15.6.)
+- [x] Zahlen-/Grenzwert-Inventar vorher = nachher (G-Erhalt-3); ID-Menge vorher = nachher
+      (G-Erhalt-2). (verify_umbau.py gegen Tag `bauplan-vor-umbau`: alle harten
+      Pruefungen gruen.)
+- [x] Hinfaelliges (Seed, durchgestrichene Reste) liegt gebuendelt in **Anhang 3**, nicht
+      mehr im Baupfad. (Alle `~~`-Passagen liegen in Anhang 3.)
+- [x] CLAUDE.md-Struktur-Verweise nachgezogen; **kein** inhaltlicher Eingriff dort.
+      (Zwei Stellen: "Security gates"-Absatz auf die eine Gate-Tabelle, Punkt 3 der
+      "einzige Wahrheit"-Regel auf das Entscheidungsregister.)
+- [x] Ein Gegenleser bestaetigt fuer N11.11, N11.15 und N6, dass die **Reihenfolge** der
+      Schritte unveraendert ist (G-Erhalt-6). (2026-07-17 per unabhaengigem
+      Wort-Sequenz-Diff Tag gegen Arbeitsstand, je Block einzeln: Norm-Wortlaut und
+      -Reihenfolge identisch, Abweichungen nur Ueberschriften/Etiketten/dokumentierte
+      Zeiger-Fixes.)
 
 Wenn diese Liste steht, ist der Bauplan so uebersichtlich wie moeglich, **ohne dass sich
 ein einziger Fachinhalt geaendert hat**, und die Redaktionsregel des Plans ist zum ersten
@@ -566,9 +592,10 @@ G6 G7 G8 G9 G10 G11 G12 G13 G14 G15 G16 G17 G18 G19 G20 G21 G22 G23
 G24 G25 G26 G27 G28 G29 G30 G31 G32 G33 G34 G35
 ```
 
-- [ ] Nach dem Umbau muss dieselbe Menge (30 Nummern) auftauchen. Hinweis: **G10 und G24**
+- [x] Nach dem Umbau muss dieselbe Menge (30 Nummern) auftauchen. Hinweis: **G10 und G24**
       sind entfernte Sync-Gates (nur historisch erwaehnt), **G26** ist verworfen; diese
       drei bleiben als Erwaehnung, werden aber nicht zu aktiven Gates. Aktiv-Gates unveraendert.
+      Geprueft 2026-07-17 (Etappe 7, verify_umbau.py: 30 Nummern stabil).
 
 **Entscheid-/Befund-ID-Baseline (G-Erhalt-2).** Jede dieser IDs muss nach dem Umbau ueber
 das Register (Anhang 1) auf genau einen Ort aufloesen:
@@ -580,7 +607,9 @@ das Register (Anhang 1) auf genau einen Ort aufloesen:
 - W: `W1 W3 W4 W5 W6 W8 W15 W18`
 - S: `S1..S7` | V: `V1..V12` (Teilmenge referenziert) | A: `A1..A7`
 
-- [ ] ID-Menge vorher = ID-Menge im Register nachher.
+- [x] ID-Menge vorher = ID-Menge im Register nachher. Geprueft 2026-07-17 (Etappe 7,
+      verify_umbau.py: U/W/V/S/A unveraendert, N nur um die erwarteten Etiketten
+      N10.2/N10.5 ergaenzt; jede Blocklisten-ID hat eine Registerzeile in Anhang 1).
 
 **Zahlen-Inventar (G-Erhalt-3):** siehe Abschnitt 9, dort ist die Liste der harten
 Grenzwerte gefuehrt. Vor Etappe 3 einmal ziehen, nach Etappe 3 erneut, identisch.
