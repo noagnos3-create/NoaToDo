@@ -12,30 +12,358 @@ from __future__ import annotations
 
 import ctypes
 import functools
+import inspect
 import os
+import re
+import secrets
 import threading
+import time
+from collections import deque
+from datetime import datetime
 from typing import Any, Callable
 
 from . import db as db_module
 
+# ---------------------------------------------------------------------------
+# Fehler-Hygiene (Gate G29 / Bauplan N11.12).
+#
+# Der kanonische Fehlercode-Katalog steht in Bauplan B.2 und ist die einzige
+# Wahrheit: ans Frontend geht IMMER nur ein Code aus dieser Tabelle plus der
+# statische englische Text, nie str(exc), nie Pfade, Tracebacks, SQL-Fragmente
+# oder Nutzertext. Details landen ausschliesslich im redigierten
+# In-Memory-Ringpuffer (Api._errors, einsehbar im Status-Modal, geleert bei
+# Sperre/Panik/Killswitch/Quit). Im Release existiert kein persistentes Logfile.
+# ---------------------------------------------------------------------------
+ERROR_MESSAGES = {
+    "not_found": "Item not found.",
+    "invalid": "Invalid input.",
+    "locked": "App is locked.",
+    "passphrase": "Wrong passphrase.",
+    "rate_limited": "Too many attempts.",
+    "vault": "Vault cannot be opened.",
+    "canceled": "Canceled.",
+    "busy": "A dialog is already open.",
+    "memory": "Not enough memory. Close other apps and try again.",
+    "internal": "Something went wrong.",
+}
 
-def bridge(fn: Callable) -> Callable:
-    """Fängt Ausnahmen ab und liefert die Fehlerkonvention aus B.2."""
 
-    @functools.wraps(fn)
-    def wrapper(self, *args, **kwargs):
+def _err(code: str, **extra: Any) -> dict[str, Any]:
+    """Fehlerobjekt nach B.2: Code + statischer Katalogtext (+ Zusatzfelder)."""
+    out: dict[str, Any] = {"error": code, "message": ERROR_MESSAGES[code]}
+    out.update(extra)
+    return out
+
+
+# Alles, was wie ein Windows-/UNC-/POSIX-Pfad aussieht, wird im Ringpuffer
+# durch <path> ersetzt (N11.12.1). Bewusst grosszuegig: lieber ein Wort zu viel
+# redigiert als ein Benutzername zu wenig.
+_PATH_RE = re.compile(r"(?:[A-Za-z]:[\\/]|\\\\|~[\\/]|/(?=[\w.]))[^\s'\",;|]*")
+
+
+def _redact(text: str) -> str:
+    """Pfade maskieren und auf 200 Zeichen kappen (Ringpuffer-Redaktion)."""
+    return _PATH_RE.sub("<path>", str(text))[:200]
+
+
+# ---------------------------------------------------------------------------
+# Eingabe-Validierung an der Bridge (Gate G20 / Bauplan B.2, V5, N11.2.2).
+#
+# Jede Bridge-Methode traegt ihr kleines deklaratives Schema direkt am
+# @bridge-Decorator: Parametername -> Validator. Ein Validator prueft Typ und
+# Wert, normalisiert (Steuerzeichen strippen, Ueberlaenge abschneiden) und
+# wirft InvalidInput bei jedem Verstoss (-> Katalog-Code "invalid"). Das
+# Schema liegt introspektierbar an der Methode (wrapper._schema), damit die
+# Phase-9-Tests direkt gegen die Regeln testen koennen.
+# ---------------------------------------------------------------------------
+MAX_TASK_TEXT = 4096
+MAX_LIST_NAME = 256
+
+# Steuerzeichen U+0000-U+001F ausser Tab (09) und Newline (0A) entfernen (G20).
+_CTRL_RE = re.compile(r"[\x00-\x08\x0b-\x1f]")
+
+
+class InvalidInput(ValueError):
+    """Verletzung der G20-Validierung; wird im Decorator zu ``invalid``."""
+
+
+def v_text(max_len: int) -> Callable[[Any], str]:
+    """Pflicht-Freitext: String, Steuerzeichen raus, auf max_len gekappt."""
+
+    def check(value: Any) -> str:
+        if not isinstance(value, str):
+            raise InvalidInput("not a string")
+        value = _CTRL_RE.sub("", value)[:max_len].strip()
+        if not value:
+            raise InvalidInput("empty")
+        return value
+
+    return check
+
+
+def v_id(value: Any) -> str:
+    """Brauchbare ID: nicht-leerer String (Existenz prueft die DB, not_found)."""
+    if not isinstance(value, str) or not value:
+        raise InvalidInput("bad id")
+    return value
+
+
+def v_str_list(value: Any) -> list[str]:
+    """Echte Liste von Strings (kein String, kein Dict, keine Zahlen)."""
+    if not isinstance(value, list) or not all(isinstance(x, str) for x in value):
+        raise InvalidInput("not a list of strings")
+    return value
+
+
+def v_bool(value: Any) -> bool:
+    """Bool, auch als 'true'/'false'-String (JS data-Attribute liefern Strings)."""
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, str) and value.lower() in ("true", "false"):
+        return value.lower() == "true"
+    raise InvalidInput("not a bool")
+
+
+def v_fmt(value: Any) -> str:
+    """Exportformat: nur ``md`` oder ``txt`` (JSON ist gestrichen, N11.1.5)."""
+    if value not in ("md", "txt"):
+        raise InvalidInput("bad format")
+    return value
+
+
+def v_task_fields(value: Any) -> dict[str, Any]:
+    """``edit_task.fields``: nur bekannte Felder, `text` String, `done` Bool (V5)."""
+    if not isinstance(value, dict) or not value:
+        raise InvalidInput("fields")
+    out: dict[str, Any] = {}
+    for key, val in value.items():
+        if key == "text":
+            out[key] = v_text(MAX_TASK_TEXT)(val)
+        elif key == "done":
+            if not isinstance(val, bool):
+                raise InvalidInput("done not bool")
+            out[key] = val
+        else:
+            raise InvalidInput("unknown field")
+    return out
+
+
+# Whitelist + Wert-Schema fuer set_setting (G20 c/d, V5, N11.7). Die sechs
+# Akzent-Hexwerte sind die festen Presets aus B.3/B.6: der Wert landet als
+# CSS-Variable im DOM, die Whitelist toetet CSS-Injection ueber Settings.
+# `dark` bleibt uebergangsweise erlaubt, bis N11.6 es durch `theme` ersetzt
+# (das heutige Frontend schaltet noch ueber `dark` um); `theme`/`sound`/
+# `autoLock` sind schon jetzt validiert, damit die Whitelist mit N11.6/N11.7
+# nicht erneut angefasst werden muss.
+ACCENT_PRESETS = ("#d97757", "#c75d3a", "#5a9d6b", "#4a86c5", "#d4a23c", "#a66a9c")
+SETTINGS_SCHEMA: dict[str, tuple] = {
+    "accent": ("enum", ACCENT_PRESETS),
+    "dark": ("bool",),  # uebergangsweise, faellt mit N11.6 zugunsten von theme
+    "theme": ("enum", ("auto", "light", "dark")),
+    "density": ("enum", ("comfortable", "compact")),
+    "sidebar": ("enum", ("open", "closed")),
+    "railPinned": ("bool",),
+    "sidebarWidth": ("int_clamp", 180, 520),
+    "sound": ("bool",),
+    "autoLock": ("int_enum", (0, 1, 5, 15, 30, 60)),
+    "exportDone": ("bool",),  # erledigte Aufgaben in den Export aufnehmen (Default an)
+}
+
+
+def _validate_setting(key: Any, value: Any) -> str:
+    """Prueft Key gegen die Whitelist und den Wert je Key (V5).
+
+    Liefert den normalisierten String, der in der settings-Tabelle landet
+    (Bools als 'true'/'false', Zahlen dezimal). ``sidebarWidth`` wird schon
+    beim SCHREIBEN auf 180-520 geklemmt, nicht erst beim Lesen geparst.
+    """
+    if not isinstance(key, str) or key not in SETTINGS_SCHEMA:
+        raise InvalidInput("unknown setting")
+    rule = SETTINGS_SCHEMA[key]
+    kind = rule[0]
+    if kind == "enum":
+        if not isinstance(value, str) or value not in rule[1]:
+            raise InvalidInput("bad enum value")
+        return value
+    if kind == "bool":
+        return "true" if v_bool(value) else "false"
+    if kind == "int_clamp":
         try:
-            return fn(self, *args, **kwargs)
-        except KeyError as exc:
-            return {"error": "not_found", "message": f"Unbekannte ID: {exc}"}
-        except Exception as exc:  # pragma: no cover - defensiv
-            return {"error": "internal", "message": str(exc)}
+            num = int(value)
+        except (TypeError, ValueError):
+            raise InvalidInput("not an int")
+        return str(max(rule[1], min(rule[2], num)))
+    if kind == "int_enum":
+        # Bewusst KEIN str->int-Cast von Floats; '15' (Frontend-String) ist ok.
+        try:
+            num = int(value) if not isinstance(value, bool) else None
+        except (TypeError, ValueError):
+            num = None
+        if num is None or num not in rule[1]:
+            raise InvalidInput("bad value")
+        return str(num)
+    raise InvalidInput("bad rule")  # pragma: no cover - Schema-Tippfehler
 
-    return wrapper
+
+# ---------------------------------------------------------------------------
+# Export-Härtung (Gate G21, V6, U10 / Bauplan Phase 7).
+#
+# Der vorgeschlagene Dateiname entsteht IMMER über _sanitize_export_name:
+# Listennamen sind Freitext und dürfen weder reservierte Windows-Gerätenamen
+# noch verbotene Zeichen, Pfadtrenner, `..`-Sequenzen oder Steuerzeichen in
+# den Save-Dialog tragen. Reihenfolge nach G21: erst Zeichen ersetzen, dann
+# auf ca. 120 Zeichen kürzen, dann die Gerätenamen-Prüfung.
+# ---------------------------------------------------------------------------
+_WIN_FORBIDDEN_RE = re.compile(r'[<>:"/\\|?*]')
+_RESERVED_DEVICE_NAMES = (
+    {"CON", "PRN", "AUX", "NUL"}
+    | {f"COM{i}" for i in range(1, 10)}
+    | {f"LPT{i}" for i in range(1, 10)}
+)
+EXPORT_NAME_MAX = 120
+EXPORT_NAME_FALLBACK = "NoaToDo-Liste"  # U10 Punkt 1: sanitisiert-leerer Name
+
+
+def _sanitize_export_name(name: str) -> str:
+    """Listenname -> sicherer Dateinamens-Stamm (ohne Endung), Gate G21/V6."""
+    # Steuerzeichen inkl. Zeilenumbrüchen und Tab durch Leerzeichen ersetzen.
+    name = re.sub(r"[\x00-\x1f]", " ", str(name))
+    # (a2/V6) Unter Windows verbotene Zeichen und ..-Sequenzen -> "_".
+    name = _WIN_FORBIDDEN_RE.sub("_", name)
+    name = re.sub(r"\.{2,}", "_", name)
+    # (V6) Dann auf ca. 120 Zeichen kappen.
+    name = name[:EXPORT_NAME_MAX]
+    # (a) Führende/abschliessende Punkte und Leerzeichen entfernen.
+    name = name.strip(" .")
+    # (a) Reservierte Gerätenamen entschärfen (case-insensitive; geprüft wird
+    # der Stamm vor dem ersten Punkt, damit auch "CON.backup" -> "_CON.backup";
+    # die Format-Endung kommt erst danach dazu und ändert daran nichts).
+    if name and name.split(".", 1)[0].upper() in _RESERVED_DEVICE_NAMES:
+        name = "_" + name
+    return name or EXPORT_NAME_FALLBACK
+
+
+def _one_line(text: str) -> str:
+    """G21 (b): Zeilenumbrüche im Task-Text/Listennamen -> ein Leerzeichen."""
+    return re.sub(r"[\r\n]+", " ", str(text))
+
+
+def _export_md(lists: list[dict[str, Any]], include_done: bool = True) -> list[str]:
+    """md-Zeilen (U10): `#`-Überschrift je Liste, `- [ ]`/`- [x]` je Aufgabe.
+
+    ``include_done`` (Setting ``exportDone``): erledigte Aufgaben nur ausgeben,
+    wenn wahr (Default an). Bei aus bleibt die `#`-Überschrift der Liste stehen,
+    nur die `- [x]`-Zeilen entfallen.
+    """
+    lines: list[str] = []
+    for lst in lists:
+        if lines:
+            lines.append("")
+        lines.append(f"# {_one_line(lst['name'])}")
+        lines.append("")
+        for t in lst["open"]:
+            lines.append(f"- [ ] {_one_line(t['text'])}")
+        if include_done:
+            for t in lst["done"]:
+                lines.append(f"- [x] {_one_line(t['text'])}")
+    return lines
+
+
+def _export_txt(lists: list[dict[str, Any]], include_done: bool = True) -> list[str]:
+    """txt-Zeilen (U10 Punkt 2): Name, `=`-Zeile, `[ ] `/`[x] ` ohne
+    Einrückung; bei mehreren Listen trennt eine Leerzeile.
+
+    ``include_done`` (Setting ``exportDone``): erledigte Aufgaben nur ausgeben,
+    wenn wahr (Default an).
+    """
+    lines: list[str] = []
+    for lst in lists:
+        if lines:
+            lines.append("")
+        name = _one_line(lst["name"])
+        lines.append(name)
+        lines.append("=" * max(1, len(name)))
+        for t in lst["open"]:
+            lines.append(f"[ ] {_one_line(t['text'])}")
+        if include_done:
+            for t in lst["done"]:
+                lines.append(f"[x] {_one_line(t['text'])}")
+    return lines
+
+
+def _crlf(lines: list[str]) -> str:
+    """U10 Punkt 3: CRLF-Zeilenenden (Notepad-tauglich), Abschluss-Newline."""
+    return "\r\n".join(lines) + "\r\n"
+
+
+class _NativeDialogBusy(Exception):
+    """Zweiter nativer Dialog, während schon einer offen ist (N11.11.5)."""
+
+
+def bridge(fn: Callable | None = None, *, schema: dict[str, Callable] | None = None) -> Callable:
+    """Fängt Ausnahmen ab und liefert die Fehlerkonvention aus B.2 (Gate G29),
+    und validiert Argumente gegen das deklarative Schema (Gate G20).
+
+    Nutzung: ``@bridge`` (ohne Validierung) oder
+    ``@bridge(schema={"text": v_text(4096)})``. Das Schema haengt als
+    ``wrapper._schema`` an der Methode (introspektierbar fuer Phase-9-Tests).
+
+    Ans Frontend gehen nur Katalog-Codes mit statischem Text; bei ``internal``
+    zusaetzlich eine kurze ``ref`` auf den Ringpuffer-Eintrag. Der Eintrag
+    selbst (Methodenname, Exception-Klasse, redigierte Kurzmeldung) bleibt im
+    RAM und ist nur ueber das Status-Modal einsehbar.
+    """
+
+    def deco(fn: Callable) -> Callable:
+        sig = inspect.signature(fn)
+
+        @functools.wraps(fn)
+        def wrapper(self, *args, **kwargs):
+            try:
+                if schema:
+                    bound = sig.bind(self, *args, **kwargs)
+                    for name, validator in schema.items():
+                        if name in bound.arguments:
+                            bound.arguments[name] = validator(bound.arguments[name])
+                    return fn(*bound.args, **bound.kwargs)
+                return fn(self, *args, **kwargs)
+            except InvalidInput:
+                return _err("invalid")
+            except db_module.InvalidInput:
+                return _err("invalid")
+            except _NativeDialogBusy:
+                # N11.11.5: höchstens ein nativer Dialog gleichzeitig; der
+                # zweite Aufruf bekommt den Katalog-Code busy, kein Fehler.
+                return _err("busy")
+            except TypeError as exc:
+                # Falsche Argument-Anzahl/-Form am Bind: unbrauchbarer Aufruf.
+                if "bind" in str(exc) or "argument" in str(exc):
+                    self._log_error(fn.__name__, "invalid", exc)
+                    return _err("invalid")
+                ref = self._log_error(fn.__name__, "internal", exc)
+                return _err("internal", ref=ref)
+            except KeyError as exc:
+                self._log_error(fn.__name__, "not_found", exc)
+                return _err("not_found")
+            except MemoryError as exc:
+                # N11.4.3: Speicher-Not ist weder "falsche Passphrase" noch ein
+                # anonymer interner Fehler; eigener Code, kein Absturz.
+                self._log_error(fn.__name__, "memory", exc)
+                return _err("memory")
+            except Exception as exc:  # pragma: no cover - defensiv
+                ref = self._log_error(fn.__name__, "internal", exc)
+                return _err("internal", ref=ref)
+
+        wrapper._schema = schema or {}
+        return wrapper
+
+    if fn is not None:
+        return deco(fn)
+    return deco
 
 
 # Typumwandlung beim Lesen der settings-Tabelle (dort liegt alles als String).
-_BOOL_SETTINGS = {"dark"}
+_BOOL_SETTINGS = {"dark", "exportDone"}
 
 
 def _typed_settings(raw: dict[str, str]) -> dict[str, Any]:
@@ -68,6 +396,34 @@ class Api:
                                        # (Handle wird neu erzeugt: Titelleisten-Theme
                                        # muss neu gesetzt werden)
         self._clip_timer = None   # Timer für das Auto-Leeren der Zwischenablage
+        # Höchstens EIN nativer Dialog gleichzeitig (N11.11.5): alle
+        # create_file_dialog-Aufrufe laufen über _native_dialog(); ein zweiter
+        # Aufruf bei offenem Dialog liefert den Katalog-Code busy.
+        self._dialog_lock = threading.Lock()
+        # Redigierter Fehler-Ringpuffer (Gate G29 / N11.12.1): die letzten 50
+        # Fehler, NUR im RAM, nie auf der Platte. Eintraege sind bereits beim
+        # Schreiben redigiert (Pfade -> <path>, 200 Zeichen) und enthalten nie
+        # Bridge-Argumente. Geleert bei Sperre/Panik/Killswitch/Quit.
+        self._errors = deque(maxlen=50)
+        # Undo-Puffer der letzten geloeschten Liste (N11.2.1): genau EINE
+        # Loeschung, nur im RAM, verworfen bei Lock/Panik/Killswitch/Quit
+        # (zusammen mit dem Schluessel-Nullen, sobald Phase 8 teardown bringt).
+        self._undo_list = None
+
+    def _log_error(self, method: str, code: str, exc: BaseException) -> str:
+        """Fehler in den Ringpuffer schreiben; liefert die kurze ``ref``."""
+        ref = secrets.token_hex(2).upper()
+        self._errors.appendleft(
+            {
+                "ts": datetime.now().strftime("%H:%M:%S"),
+                "method": method,
+                "code": code,
+                "exc": type(exc).__name__,
+                "ref": ref,
+                "msg": _redact(exc),
+            }
+        )
+        return ref
 
     # =====================================================================
     # Gesamtzustand
@@ -88,52 +444,83 @@ class Api:
     # =====================================================================
     # Listen
     # =====================================================================
-    @bridge
+    @bridge(schema={"name": v_text(MAX_LIST_NAME)})
     def add_list(self, name: str) -> dict[str, Any]:
-        name = (name or "").strip()
-        if not name:
-            return {"error": "invalid", "message": "Listenname darf nicht leer sein."}
         return self.db.add_list(name)
 
-    @bridge
+    @bridge(schema={"list_id": v_id, "name": v_text(MAX_LIST_NAME)})
     def rename_list(self, list_id: str, name: str) -> dict[str, Any]:
-        name = (name or "").strip()
-        if not name:
-            return {"error": "invalid", "message": "Listenname darf nicht leer sein."}
         return self.db.rename_list(list_id, name)
 
-    @bridge
+    @bridge(schema={"list_id": v_id})
     def delete_list(self, list_id: str) -> dict[str, Any]:
+        # Undo-Puffer (N11.2.1, U9): GENAU die letzte Loeschung wird samt allen
+        # Aufgaben im RAM gehalten; eine neue Loeschung ueberschreibt den
+        # Puffer und verwirft die vorige endgueltig. Kein Soft-Delete.
+        self._undo_list = self.db.get_list_snapshot(list_id)  # KeyError -> not_found
         return self.db.delete_list(list_id)
+
+    @bridge(schema={"list_id": v_id})
+    def undo_delete_list(self, list_id: str) -> dict[str, Any]:
+        """Letzte Listen-Loeschung rueckgaengig machen (N11.2.1).
+
+        Der 6-s-Toast ist reine Frontend-Anzeige; der Puffer hier hat keinen
+        eigenen Verfalls-Timer und lebt, bis er ueberschrieben oder beim
+        Austritt aus dem entsperrten Zustand verworfen wird. Ein spaetes Undo
+        nach dem Toast darf deshalb gelingen. Stimmt die ID nicht mit dem
+        Puffer ueberein (inzwischen ersetzt oder verfallen), kommt
+        ``not_found`` und es wird NIE eine zweite Kopie angelegt.
+        """
+        buf = self._undo_list
+        if buf is None or buf["list"]["id"] != list_id:
+            return _err("not_found")
+        self._undo_list = None
+        return self.db.restore_list(buf)
 
     # =====================================================================
     # Aufgaben
     # =====================================================================
-    @bridge
-    def add_task(self, list_id: str, text: str, meta: str | None = None) -> dict[str, Any]:
-        text = (text or "").strip()
-        if not text:
-            return {"error": "invalid", "message": "Aufgabentext darf nicht leer sein."}
-        return self.db.add_task(list_id, text, meta)
+    @bridge(schema={"list_id": v_id, "text": v_text(MAX_TASK_TEXT)})
+    def add_task(self, list_id: str, text: str) -> dict[str, Any]:
+        return self.db.add_task(list_id, text)
 
-    @bridge
+    @bridge(schema={"task_id": v_id})
     def toggle_task(self, task_id: str) -> dict[str, Any]:
         return self.db.toggle_task(task_id)
 
-    @bridge
+    @bridge(schema={"task_id": v_id, "fields": v_task_fields})
     def edit_task(self, task_id: str, fields: dict[str, Any]) -> dict[str, Any]:
-        return self.db.edit_task(task_id, fields or {})
+        return self.db.edit_task(task_id, fields)
 
-    @bridge
+    @bridge(schema={"task_id": v_id})
     def delete_task(self, task_id: str) -> dict[str, Any]:
         return self.db.delete_task(task_id)
 
-    @bridge
+    @bridge(schema={"list_id": v_id, "ordered_ids": v_str_list})
     def reorder(self, list_id: str, ordered_ids: list[str]) -> dict[str, Any]:
-        return self.db.reorder(list_id, ordered_ids or [])
+        return self.db.reorder(list_id, ordered_ids)
+
+    @bridge(schema={"task_id": v_id, "target_list_id": v_id})
+    def move_task(self, task_id: str, target_list_id: str) -> dict[str, Any]:
+        """Aufgabe in eine andere Liste verschieben (N7/N11.2, Phase 7).
+
+        Randfaelle nach N11.2.2 (U11): fehlende Aufgabe/Zielliste ->
+        ``not_found``, Ziel = aktuelle Liste -> ``invalid``; ``done`` bleibt
+        erhalten, die Aufgabe haengt ans Ende ihrer Sektion in der Zielliste.
+        """
+        return self.db.move_task(task_id, target_list_id)
+
+    @bridge(schema={"ordered_ids": v_str_list})
+    def reorder_lists(self, ordered_ids: list[str]) -> dict[str, Any]:
+        """Sidebar-Reihenfolge der Listen speichern (N7/N11.2, Phase 7).
+
+        Validierung nach N11.2.2 (U11): exakt die volle Listenmenge, sonst
+        ``invalid`` und nichts wird geschrieben (alles oder nichts).
+        """
+        return self.db.reorder_lists(ordered_ids)
 
     # =====================================================================
-    # Export / Kopieren (Grundgerüst; Save-Dialog folgt in Phase 7)
+    # Export (Phase 7 / Gate G21: Härtung + echter Save-Dialog)
     # =====================================================================
     def _list_or_none(self, list_id: str) -> dict[str, Any] | None:
         for lst in self.db.get_lists_with_tasks():
@@ -141,42 +528,89 @@ class Api:
                 return lst
         return None
 
-    @bridge
+    def _native_dialog(self):
+        """Kontext für native Dialoge (N11.11.5): höchstens einer gleichzeitig.
+
+        Flag im ``finally`` freigegeben; ein zweiter Aufruf bei offenem Dialog
+        wirft ``_NativeDialogBusy`` (-> Katalog-Code ``busy`` im Decorator).
+        Ein offener Dialog zählt NICHT als Aktivität (Auto-Lock, Phase 8).
+        """
+        import contextlib
+
+        @contextlib.contextmanager
+        def guard():
+            if not self._dialog_lock.acquire(blocking=False):
+                raise _NativeDialogBusy()
+            try:
+                yield
+            finally:
+                self._dialog_lock.release()
+
+        return guard()
+
+    def _export_via_dialog(self, filename: str, lines: list[str]) -> dict[str, Any]:
+        """Save-Dialog zeigen und die Datei wirklich schreiben (G21 c).
+
+        UTF-8 ohne BOM, CRLF-Zeilenenden (U10 Punkt 3). Dialog-Abbruch: keine
+        Datei, kein Nebeneffekt, Rückgabe ``canceled`` (nach B.2 bewusst
+        still, U10 Punkt 4).
+        """
+        win = self._window
+        if win is None:
+            raise RuntimeError("window not ready")   # -> internal + ref (G29)
+        import webview
+
+        with self._native_dialog():
+            result = win.create_file_dialog(webview.SAVE_DIALOG, save_filename=filename)
+        # PyWebView liefert je nach Version einen String oder eine Sequenz.
+        if isinstance(result, (list, tuple)):
+            result = result[0] if result else None
+        if not result:
+            return _err("canceled")
+        with open(result, "w", encoding="utf-8", newline="") as fh:
+            fh.write(_crlf(lines))
+        return {"ok": True, "filename": os.path.basename(str(result))}
+
+    def _export_include_done(self) -> bool:
+        """Setting ``exportDone`` (Default an): sollen erledigte Aufgaben mit in
+        den Export? Gilt für ``export_list`` und ``export_all`` gleichermaßen."""
+        return self.db.get_setting("exportDone", "true") != "false"
+
+    @bridge(schema={"list_id": v_id, "fmt": v_fmt})
     def export_list(self, list_id: str, fmt: str = "md") -> dict[str, Any]:
+        """Eine Liste als md/txt exportieren (zweistufiger Export, Schritt
+        "aktuelle Liste"; N11.2, kein JSON mehr, N11.1.5).
+
+        Der Dateinamens-Vorschlag ist der über G21/V6 sanitisierte Listenname;
+        die Endung setzt das gewählte Format, nie der Nutzer-Text (U10).
+        Erledigte Aufgaben nur, wenn das Setting ``exportDone`` an ist.
+        """
         lst = self._list_or_none(list_id)
         if lst is None:
-            return {"error": "not_found", "message": "Liste nicht gefunden."}
-        safe = "".join(c if c.isalnum() or c in " -_" else "_" for c in lst["name"]).strip()
-        if fmt == "json":
-            import json
+            return _err("not_found")
+        done = self._export_include_done()
+        lines = _export_md([lst], done) if fmt == "md" else _export_txt([lst], done)
+        return self._export_via_dialog(
+            f"{_sanitize_export_name(lst['name'])}.{fmt}", lines
+        )
 
-            content = json.dumps(lst, ensure_ascii=False, indent=2)
-            return {"filename": f"{safe}.json", "content": content}
-        # md / txt
-        lines: list[str] = []
-        if fmt == "md":
-            lines.append(f"# {lst['name']}")
-            lines.append("")
-            for t in lst["open"]:
-                meta = f" ({t['meta']})" if t.get("meta") else ""
-                lines.append(f"- [ ] {t['text']}{meta}")
-            for t in lst["done"]:
-                meta = f" ({t['meta']})" if t.get("meta") else ""
-                lines.append(f"- [x] {t['text']}{meta}")
-            ext = "md"
-        else:  # txt
-            lines.append(lst["name"])
-            lines.append("=" * len(lst["name"]))
-            for t in lst["open"]:
-                meta = f", {t['meta']}" if t.get("meta") else ""
-                lines.append(f"[ ] {t['text']}{meta}")
-            for t in lst["done"]:
-                meta = f", {t['meta']}" if t.get("meta") else ""
-                lines.append(f"[x] {t['text']}{meta}")
-            ext = "txt"
-        return {"filename": f"{safe}.{ext}", "content": "\n".join(lines)}
+    @bridge(schema={"fmt": v_fmt})
+    def export_all(self, fmt: str = "md") -> dict[str, Any]:
+        """Alle Listen in EINE Datei exportieren (N11.2, Schritt "alle Listen").
 
-    @bridge
+        Reihenfolge = Sidebar-Reihenfolge (``lists.position``, U10 Punkt 5);
+        Listennamen stehen wörtlich und dürfen doppelt vorkommen (U12), je
+        Liste als größere Überschrift. Dateinamens-Vorschlag:
+        ``NoaToDo-Export-YYYY-MM-DD.<fmt>`` (lokales Datum, U10 Punkt 1).
+        Erledigte Aufgaben nur, wenn das Setting ``exportDone`` an ist.
+        """
+        lists = self.db.get_lists_with_tasks()
+        done = self._export_include_done()
+        lines = _export_md(lists, done) if fmt == "md" else _export_txt(lists, done)
+        date = datetime.now().strftime("%Y-%m-%d")
+        return self._export_via_dialog(f"NoaToDo-Export-{date}.{fmt}", lines)
+
+    @bridge(schema={"task_id": v_id})
     def copy_task(self, task_id: str) -> dict[str, Any]:
         """Kopiert genau EINE Aufgabe gehärtet in die Zwischenablage (Gate G23).
 
@@ -188,10 +622,15 @@ class Api:
         """
         task = self.db.get_task(task_id)
         if task is None:
-            return {"error": "not_found", "message": "Aufgabe nicht gefunden."}
-        text = task["text"] + (f" ({task['meta']})" if task.get("meta") else "")
+            return _err("not_found")
+        return self._copy_secure(task["text"])
+
+    def _copy_secure(self, text: str) -> dict[str, Any]:
+        """Gemeinsamer gehaerteter Clipboard-Pfad (G23) inkl. Auto-Clear-Timer."""
         if not _set_clipboard_secure(text):
-            return {"error": "clipboard", "message": "Zwischenablage nicht verfügbar."}
+            # Kein eigener Katalog-Code: Clipboard-Ausfall ist ein interner
+            # Fehler; der @bridge-Decorator macht daraus internal + ref.
+            raise RuntimeError("clipboard unavailable")
         if self._clip_timer is not None:
             self._clip_timer.cancel()
         self._clip_timer = threading.Timer(
@@ -201,20 +640,40 @@ class Api:
         self._clip_timer.start()
         return {"ok": True, "clears_in": CLIPBOARD_CLEAR_SECONDS}
 
+    @bridge
+    def copy_errors(self) -> dict[str, Any]:
+        """Kopiert den redigierten Fehler-Ringpuffer (G29) als Text.
+
+        Nutzt denselben gehaerteten Backend-Clipboard-Pfad wie ``copy_task``
+        (Gate G23: keine Win+V-History, kein Cloud-Clipboard, Auto-Clear).
+        Der Puffer ist bereits redigiert (Pfade -> <path>, keine Argumente),
+        es verlaesst also nichts Sensibles die App.
+        """
+        if not self._errors:
+            return {"ok": True, "clears_in": 0}
+        lines = [
+            f"{e['ts']} {e['method']} {e['code']} {e['exc']} ref={e['ref']} {e['msg']}"
+            for e in self._errors
+        ]
+        return self._copy_secure("\n".join(lines))
+
     # =====================================================================
     # Einstellungen
     # =====================================================================
     @bridge
     def set_setting(self, key: str, value: Any) -> dict[str, Any]:
-        result = self.db.set_setting(key, value)
+        # G20 (c)/(d): Key-Whitelist + Wert-/Typ-Pruefung je Key (V5). Der
+        # normalisierte String landet in der DB; alles andere ist "invalid".
+        normalized = _validate_setting(key, value)
+        result = self.db.set_setting(key, normalized)
         if self._on_setting_change:
-            self._on_setting_change(key, value)
+            self._on_setting_change(key, normalized)
         return result
 
     # =====================================================================
     # Fenster (Mini-/Kompaktmodus)
     # =====================================================================
-    @bridge
+    @bridge(schema={"flag": v_bool})
     def set_mini(self, flag: bool) -> dict[str, Any]:
         """Schaltet den kompakten Mini-Fenster-Modus um.
 
@@ -235,12 +694,12 @@ class Api:
         """
         win = self._window
         if win is None:
-            return {"error": "no_window", "message": "Kein Fenster verfügbar."}
+            raise RuntimeError("window not ready")   # -> internal + ref (G29)
         flag = bool(flag)
         if flag == self._mini:
             return {"mini": self._mini}
         if not self._apply_mini_window(win, flag):
-            return {"error": "window", "message": "Fensterumschaltung fehlgeschlagen."}
+            raise RuntimeError("mini switch failed")  # -> internal + ref (G29)
         self._mini = flag
         # Der FormBorderStyle-Wechsel hat das Fensterhandle neu erzeugt. main.py
         # passt ueber diesen Callback beim Verlassen des Mini-Modus die
@@ -338,6 +797,10 @@ class Api:
             },
             "encryption": encryption,
             "runtime": {"webview2": _webview2_version()},
+            # Redigierter Fehler-Ringpuffer (G29): neueste zuerst, nur fuer die
+            # "Recent errors"-Sektion des Status-Modals. Eintraege sind schon
+            # beim Schreiben redigiert (<path>, 200 Zeichen, keine Argumente).
+            "errors": list(self._errors),
         }
 
     # =====================================================================
@@ -347,9 +810,9 @@ class Api:
     # Datenschutz-/Flugmodus-Umschalter (keine Cloud, kein Sync); ``online`` und
     # das WLAN-Symbol sind nur kosmetische Statusanzeigen.
     # =====================================================================
-    @bridge
+    @bridge(schema={"flag": v_bool})
     def set_online(self, flag: bool) -> dict[str, Any]:
-        self.online = bool(flag)
+        self.online = flag
         return {"online": self.online}
 
     @bridge
@@ -396,6 +859,13 @@ class Api:
     @bridge
     def lock(self) -> dict[str, Any]:
         self.locked = True
+        # G29/N11.12.1 + N11.2.1: Fehler-Ringpuffer und Listen-Undo-Puffer
+        # sind Sitzungs-RAM und werden bei jedem Austritt aus dem entsperrten
+        # Zustand verworfen (bis Phase 8 die gemeinsame teardown(reason)-
+        # Sequenz uebernimmt, N11.11 Schritt 3/7): eine gesperrte App haelt
+        # keinen geloeschten Aufgabentext und keine Diagnose-Historie im RAM.
+        self._errors.clear()
+        self._undo_list = None
         return {"locked": True}
 
     @bridge
@@ -408,6 +878,8 @@ class Api:
     def panic(self) -> dict[str, Any]:
         self.locked = True
         self.online = False
+        self._errors.clear()   # G29: keine Diagnose-Historie im gesperrten Zustand
+        self._undo_list = None  # N11.2.1: Undo-Puffer verfaellt bei Panik
         return {"locked": True}
 
     @bridge
@@ -419,6 +891,8 @@ class Api:
         Programm; der nächste Start verhält sich wie ein Erststart ohne
         Demo-Daten (Details in db.killswitch).
         """
+        self._errors.clear()   # G29: Diagnose-Historie faellt mit den Daten
+        self._undo_list = None  # N11.2.1: auch der Undo-Puffer
         return self.db.killswitch()
 
     @bridge
@@ -431,9 +905,11 @@ class Api:
         hier könnte die Nachrichtenschleife verklemmen. Das sichere Wischen der
         Spuren (PROFILE_DIR, Gate G14) folgt in Phase 8 auf genau diesem Pfad.
         """
+        self._errors.clear()    # G29: Ringpuffer verlaesst die Sitzung nicht
+        self._undo_list = None  # N11.2.1: Undo-Puffer verfaellt beim Beenden
         win = self._window
         if win is None:
-            return {"error": "no_window", "message": "Kein Fenster verfügbar."}
+            raise RuntimeError("window not ready")   # -> internal + ref (G29)
         form = getattr(win, "native", None)
         if form is not None:
             try:

@@ -582,7 +582,10 @@ input { font: inherit; }
   background: var(--surface);
   border: 1px solid var(--accent-line); box-shadow: var(--shadow-lg);
 }
-.list-pill.confirm { border-color: color-mix(in oklab, var(--danger) 45%, var(--border)); }
+/* Loeschbestaetigung: Papierkorb links (wie zuvor), Abbrechen-X rechts, klar
+   getrennt (nicht direkt nebeneinander), damit man nicht versehentlich loescht. */
+.list-pill.confirm { border-color: color-mix(in oklab, var(--danger) 45%, var(--border));
+  justify-content: space-between; gap: 18px; }
 .list-pill input {
   flex: 1; min-width: 0;
   background: none; border: none; outline: none;
@@ -617,25 +620,14 @@ input { font: inherit; }
   min-height: 100%; display: flex; flex-direction: column;
 }
 
-.title-row { display: flex; align-items: flex-start; gap: 16px; margin-bottom: 4px; }
+/* .title-row entfernt (Phase 7, Audit 1.6: nie gerendert). */
 .list-title { font-size: 32px; font-weight: 700; letter-spacing: -.025em; line-height: 1.1; }
 .title-meta { display: flex; align-items: center; gap: 10px; margin: 10px 0 6px; color: var(--text-faint); }
 .title-meta .tag { color: var(--text-faint); }
 .title-meta .sep { width: 3px; height: 3px; border-radius: 50%; background: var(--text-faint); }
 
-/* airplane / offline banner */
-.airplane-pill {
-  display: inline-flex; align-items: center; gap: 9px;
-  padding: 7px 13px 7px 11px; border-radius: 999px;
-  background: var(--accent-wash);
-  border: 1px solid var(--accent-line);
-  color: color-mix(in oklab, var(--accent) 70%, var(--text));
-  font-family: var(--font-mono); font-size: 12px; font-weight: 600;
-  cursor: pointer; transition: transform .12s;
-}
-.airplane-pill:hover { transform: translateY(-1px); }
-.airplane-pill svg { width: 16px; height: 16px; }
-.airplane-pill.online { background: var(--secure-wash); border-color: color-mix(in oklab, var(--secure) 35%, transparent); color: var(--secure); }
+/* .airplane-pill entfernt (Phase 7, Audit 1.6: nie gerendert; der Online/
+   Offline-Umschalter ist der Netz-Knopf der Tool-Rail). */
 
 .banner-row { display: flex; justify-content: flex-end; margin-bottom: 18px; }
 
@@ -680,10 +672,8 @@ input { font: inherit; }
 .task .check:hover { border-color: var(--accent); }
 .task .check svg { width: 12px; height: 12px; }
 .task .t-text { flex: 1; font-size: var(--task-fs); font-weight: 500; }
-.task .t-meta { font-family: var(--font-mono); font-size: 10.5px; color: var(--text-faint); }
-.task .t-grip { color: var(--text-faint); opacity: 0; transition: opacity .14s; }
-.task:hover .t-grip { opacity: .6; }
-.task .t-grip svg { width: 15px; height: 15px; }
+/* .t-grip entfernt (Phase 7, Audit 1.6: nie gerendert, Drag geht ueber die
+   ganze Karte). */
 
 .task.done { background: transparent; border-style: dashed; }
 .task.done .check { background: var(--secure); border-color: var(--secure); color: #fff; }
@@ -811,7 +801,9 @@ input { font: inherit; }
   -webkit-backdrop-filter: blur(12px) saturate(1.25);
   backdrop-filter: blur(12px) saturate(1.25);
 }
-.dock-edit-pill.confirm { border-color: color-mix(in oklab, var(--danger) 45%, var(--border)); }
+/* wie oben: Papierkorb links, Abbrechen-X rechts, klar getrennt. */
+.dock-edit-pill.confirm { border-color: color-mix(in oklab, var(--danger) 45%, var(--border));
+  justify-content: space-between; gap: 40px; }
 .dock-edit-pill input {
   flex: 1; min-width: 240px; max-width: 44vw;
   background: none; border: none; outline: none;
@@ -1312,18 +1304,64 @@ input { font: inherit; }
 .kill-btn.armed .kill-ok { transform: translate(0, -50%); opacity: 1; }
 .kill-btn.armed:hover { background: color-mix(in oklab, var(--danger) 20%, var(--surface-3)); }
 
-/* toast */
-/* bottom angehoben, damit Toasts ueber dem fest verankerten .list-dock stehen. */
-.toast-wrap { position: fixed; bottom: 92px; left: 50%; transform: translateX(-50%); z-index: 70; display: flex; flex-direction: column; gap: 8px; align-items: center; }
-.toast {
-  display: flex; align-items: center; gap: 10px;
-  padding: 11px 16px; border-radius: 11px;
-  background: var(--text); color: var(--bg);
-  font-size: 13px; font-weight: 500; box-shadow: var(--shadow-lg);
-  animation: rise .2s ease;
+/* Der generische Erfolgs-/Fehler-Toast (.toast-wrap/.toast) ist mit N11.16
+   entfernt (Nutzerwunsch: keine Benachrichtigungen). Es bleibt nur der
+   Undo-Toast unten. */
+
+/* Undo-Toast fuers Listen-Loeschen (N11.2.1): eigener Layer, unten links neben
+   der Sidebar verankert (--content-left = Sidebar-Breite, 0 wenn geschlossen). */
+.undo-wrap {
+  position: fixed; left: calc(var(--content-left, 0px) + 18px);
+  bottom: 20px; z-index: 71;
 }
-.toast svg { width: 16px; height: 16px; color: var(--accent); }
-.toast .mono { font-family: var(--font-mono); font-size: 11.5px; opacity: .7; }
+.undo-toast {
+  position: relative; overflow: hidden;
+  display: flex; align-items: center; gap: 10px;
+  padding: 10px 12px 10px 16px; border-radius: 999px;
+  /* WICHTIG: Der Undo-Layer haengt an <body>, AUSSERHALB von .app#root (sonst
+     wuerde ihn render() ueber root.innerHTML verwerfen). Die Theme-Tokens
+     (--surface/--text/--border ...) sitzen aber nur auf .app[data-theme] und
+     werden nicht an einen Geschwister-Knoten vererbt. `var(--surface)` waere
+     hier also ungueltig -> transparenter Grund + schwarzer Erbtext, im Darkmode
+     praktisch unsichtbar. Darum feste Farbwerte (aus den Design-Tokens): hell
+     als Standard, dunkel per Geschwister-Kombinator vom .app-Element unten. */
+  background: #faf6ee; color: #2c2519;
+  border: 1px solid #cdbfa4; box-shadow: 0 12px 48px rgba(50,38,20,.18);
+  font-size: 13px; font-weight: 500;
+  animation: undo-in .22s cubic-bezier(.2,.9,.3,1);
+}
+/* Darkmode: Pille hebt sich klar vom fast schwarzen Hintergrund ab (--surface-3
+   auf --bg, kraeftiger Rand, weil der Schatten auf Dunkel kaum traegt). */
+.app[data-theme="dark"] ~ .undo-wrap .undo-toast {
+  background: #322b20; color: #ece3d2;
+  border-color: #4a4231; box-shadow: 0 16px 60px rgba(0,0,0,.6);
+}
+.undo-toast.leaving { animation: undo-out .18s ease forwards; }
+.undo-toast svg { width: 16px; height: 16px; color: #cf5638; flex: none; }
+.app[data-theme="dark"] ~ .undo-wrap .undo-toast svg { color: #e0623e; }
+.undo-toast .undo-name {
+  font-family: var(--font-mono); font-size: 11.5px; opacity: .65;
+  max-width: 180px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.undo-toast .toast-undo {
+  margin-left: 4px; padding: 5px 13px; border-radius: 999px;
+  background: var(--accent); color: #fff; border: none; cursor: pointer;
+  font-family: var(--font-mono); font-size: 11px; font-weight: 600;
+  letter-spacing: .04em; text-transform: uppercase; flex: none;
+}
+.undo-toast .toast-undo:hover { filter: brightness(1.08); }
+/* Ablaufbalken: schrumpft ueber die Anzeigedauer nach links weg. Seitlich
+   eingerueckt und selbst abgerundet, damit er in der runden Pille (border-radius
+   999px) nicht an den gerundeten Ecken abgeschnitten wirkt. */
+.undo-toast .undo-bar {
+  position: absolute; left: 16px; right: 16px; bottom: 4px; height: 2px;
+  border-radius: 2px;
+  background: var(--accent); transform-origin: left center;
+  animation: undo-countdown linear forwards;
+}
+@keyframes undo-in { from { opacity: 0; transform: translateY(10px) scale(.98); } }
+@keyframes undo-out { to { opacity: 0; transform: translateY(8px) scale(.98); } }
+@keyframes undo-countdown { from { transform: scaleX(1); } to { transform: scaleX(0); } }
 
 /* accent picker popover */
 .swatches { display: flex; gap: 9px; padding: 4px 4px 8px; }
@@ -1389,27 +1427,18 @@ input { font: inherit; }
    NoaToDo-Ergänzung Phase 6.5 (nicht aus dem Konzept): Inline-Bearbeiten
    und Einzel-Löschen von Aufgaben. Nutzt nur bestehende Tokens.
    =========================================================================== */
-.task .t-del {
-  appearance: none; border: 0; background: transparent; cursor: pointer;
-  flex-shrink: 0; display: grid; place-items: center;
-  width: 22px; height: 22px; border-radius: 6px; padding: 0;
-  color: var(--text-faint); opacity: 0;
-  transition: opacity .14s, color .14s, background .14s;
-}
-.task:hover .t-del { opacity: .55; }
-.task .t-del:hover { opacity: 1; color: var(--danger);
-  background: color-mix(in oklab, var(--danger) 12%, transparent); }
-.task .t-del svg { width: 14px; height: 14px; }
+/* .t-del entfernt (Phase 7, Audit 1.6 / Plananalyse S7: es gab NIE einen
+   Hover-Papierkorb auf der Karte; geloescht wird ueber die Rail. Entscheid
+   2026-07-17: es wird auch keiner nachgeruestet.) */
 
 .task.editing { border-color: var(--accent-line); box-shadow: var(--shadow); }
-.task.editing .edit-text, .task.editing .edit-meta {
+.task.editing .edit-text {
   background: var(--surface-2); border: 1px solid var(--accent-line);
   border-radius: 8px; color: var(--text); outline: none; padding: 6px 9px;
   min-width: 0;
+  flex: 1; font-size: var(--task-fs); font-weight: 500; font-family: inherit;
 }
-.task.editing .edit-text { flex: 1; font-size: var(--task-fs); font-weight: 500; font-family: inherit; }
-.task.editing .edit-meta { width: 132px; font-family: var(--font-mono); font-size: 10.5px; color: var(--text-dim); }
-.task.editing .edit-text:focus, .task.editing .edit-meta:focus { border-color: var(--accent); }
+.task.editing .edit-text:focus { border-color: var(--accent); }
 
 /* Auswahl einer Aufgabe (Klick auf die Karte): Ziel fuer "Copy task" und den
    Bleistift der Tool-Rail. Akzent-Rahmen + sanfter Wash + Akzent-Balken links,
@@ -1425,4 +1454,32 @@ input { font: inherit; }
   width: 3px; border-radius: 99px; background: var(--accent);
 }
 .task.selected .t-text { color: var(--text); }
-.task.selected .t-grip, .task.selected .t-del { opacity: .55; }
+
+/* --- Phase 7 (N7/N11.2): Drag & Drop fuer Listen + Aufgaben-Verschieben --- */
+/* Gezogener Sidebar-Eintrag (reorder_lists): halbtransparent, solange er
+   als DOM-Vorschau mitwandert. */
+.list-item.dragging { opacity: .45; }
+/* Sidebar-Eintrag als Drop-Ziel einer gezogenen Aufgabe (move_task). */
+.list-item.drop-target {
+  background: var(--accent-wash);
+  box-shadow: inset 0 0 0 1.5px var(--accent-line);
+  color: var(--text);
+}
+
+/* --- Phase 7 (N11.2): zweistufige Export-Pille links neben der Rail --- */
+.export-pill {
+  position: fixed; right: 80px; top: 50%; transform: translateY(-50%);
+  z-index: 45; width: 232px; padding: 6px;
+  background: var(--surface); overflow: hidden;
+  border: 1px solid var(--border-strong);
+  border-radius: 16px;
+  box-shadow: var(--shadow-lg);
+  animation: panic-slide .22s cubic-bezier(.2,.7,.3,1);
+}
+.export-head { display: flex; align-items: center; gap: 9px; padding: 7px 5px 8px 9px; }
+.export-head-icon { color: var(--accent); display: grid; place-items: center; }
+.export-head-icon svg { width: 17px; height: 17px; }
+.export-head-text { font-size: 13.5px; font-weight: 700; letter-spacing: -.01em; }
+/* Ausgegraute Umfang-Option (N11.2.3): sichtbar, nicht waehlbar, kein Toast. */
+.menu-item:disabled { opacity: .38; cursor: default; }
+.menu-item:disabled:hover { background: none; color: var(--text-dim); }

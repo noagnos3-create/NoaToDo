@@ -82,9 +82,10 @@ const ACCENTS = ['#d97757', '#c75d3a', '#5a9d6b', '#4a86c5', '#d4a23c', '#a66a9c
 // ===========================================================================
 let state = {
   lists: [], activeId: null, settings: {}, online: true, locked: false,
-  menu: null,        // 'profile'
-  modal: null,       // 'status' | 'rename' | 'delete' | 'shortcuts' | 'settings'
+  modal: null,       // 'status' | 'rename' | 'shortcuts' | 'settings'
   ctxList: null,     // Rechtsklick-Kontextmenue einer Liste: { id, x, y } | null
+  ctxTask: null,     // Rechtsklick-Kontextmenue einer Aufgabe ("Move to...", N11.2): { id, x, y } | null
+  exportPill: null,  // zweistufige Export-Pille (N11.2): { step:'scope'|'format', scope:'list'|'all' } | null
   renamingId: null,  // Liste, die gerade inline (Pille in der Sidebar) umbenannt wird
   confirmDeleteId: null, // Liste, fuer die die Inline-Loeschbestaetigung in der Sidebar offen ist
   listEditDock: false, // true: Inline-Umbenennen/Loeschen wird im unteren Dock gezeigt (Rechtsklick auf den grossen Namen) statt in der Sidebar
@@ -173,8 +174,11 @@ function renderSidebar() {
     if (!state.listEditDock && state.confirmDeleteId === l.id) return renderDeletePill(l);
     const count = l.open.length;
     const cls = 'list-item' + (l.id === state.activeId ? ' active' : '') + (count === 0 ? ' zero' : '');
+    // draggable (N7/N11.2): Listen lassen sich in der Sidebar umsortieren
+    // (reorder_lists); ausserdem ist jeder Eintrag Drop-Ziel fuer eine
+    // gezogene Aufgabe (move_task).
     return `
-      <button class="${cls}" data-act="select-list" data-id="${esc(l.id)}">
+      <button class="${cls}" data-act="select-list" data-id="${esc(l.id)}" draggable="true">
         <span class="li-dot"></span>
         <span class="li-name">${esc(l.name)}</span>
         <span class="li-count">${count}</span>
@@ -201,17 +205,16 @@ function renderSidebar() {
 
 function renderTask(t) {
   const I = Icons;
-  // Inline-Bearbeitung (Doppelklick): Text + Meta direkt in der Karte aendern.
+  // Inline-Bearbeitung (Doppelklick): Text direkt in der Karte aendern (eine
+  // Aufgabe ist nur noch text + done, N11.1.3).
   // Enter speichert (edit_task), Esc bricht ab, Klick daneben speichert.
   if (state.editingId === t.id) {
     return `
     <div class="task editing${t.done ? ' done' : ''}" data-task-id="${esc(t.id)}">
       <button class="check" data-act="toggle-task" data-id="${esc(t.id)}" aria-label="toggle">${I.Check}</button>
       <input class="edit-text" id="edit-task-text" value="${esc(t.text)}" />
-      <input class="edit-meta" id="edit-task-meta" value="${esc(t.meta || '')}" placeholder="meta" />
     </div>`;
   }
-  const meta = (t.meta && !t.done) ? `<span class="t-meta">${esc(t.meta)}</span>` : '';
   const draggable = t.done ? '' : 'draggable="true"';
   // Klick auf die Karte (ausserhalb der Buttons) waehlt sie aus: die Auswahl
   // ist das Ziel fuer "Copy task" und den Bleistift in der Tool-Rail.
@@ -221,7 +224,6 @@ function renderTask(t) {
          data-act="select-task" data-id="${esc(t.id)}" ${draggable}>
       <button class="check" data-act="toggle-task" data-id="${esc(t.id)}" aria-label="toggle">${I.Check}</button>
       <span class="t-text">${esc(t.text)}</span>
-      ${meta}
     </div>`;
 }
 
@@ -471,19 +473,12 @@ function renderNetBtn() {
     + `<span class="tip">${label}<span class="k">G</span></span></button>`;
 }
 
-function renderProfileMenu() {
-  const I = Icons;
-  return `
-    <div class="menu" style="right:6px" data-keep>
-      <div class="menu-head">
-        <span class="avatar" style="width:32px;height:32px">NA</span>
-        <span class="n-body"><b style="font-size:13px">Noa Andersen</b><small class="mono" style="color:var(--text-faint)">local</small></span>
-      </div>
-      <button class="menu-item">${I.User} Account</button>
-      <button class="menu-item">${I.Shield} Privacy &amp; data</button>
-      <button class="menu-item">${I.Download} Export database</button>
-    </div>`;
-}
+// Das fruehere Profil-Menue (hartkodierter Name "Noa Andersen", tote Eintraege
+// Account/Privacy/Export database) wurde in Phase 7 komplett entfernt: es war
+// unerreichbarer toter Code, im Header existiert kein Avatar/Trigger (Audit,
+// Phase 6.5 Pflichtpunkt "Profil-Menue aufraeumen"). Der Zielzustand, falls der
+// Header nach N11.6 einen Avatar bekommt, steht im Bauplan (N11.6, U24):
+// nur echte Funktionen ("Export database" = Alle-Listen-Export, Settings-Link).
 
 // Kontextmenue einer Liste (Rechtsklick in der Sidebar). Frei positioniert am
 // Cursor (position:fixed), data-keep schuetzt es vor dem Auto-Schliessen.
@@ -499,6 +494,57 @@ function renderListCtx() {
          style="position:fixed;left:${x}px;top:${y}px;min-width:180px${up}">
       <button class="menu-item" data-act="ctx-rename-list">${I.Pencil} Rename list</button>
       <button class="menu-item ctx-danger" data-act="ctx-delete-list">${I.Trash} Delete list</button>
+    </div>`;
+}
+
+// Kontextmenue einer Aufgabe (Rechtsklick auf die Karte): "Move to..." in eine
+// andere Liste (move_task, N7/N11.2). Gleiche Optik/Verankerung wie das
+// Listen-Kontextmenue; ohne zweite Liste steht ein stummer Hinweis drin.
+function renderTaskCtx() {
+  if (!state.ctxTask) return '';
+  const { x, y } = state.ctxTask;
+  const targets = state.lists.filter((l) => l.id !== state.activeId);
+  const items = targets.length
+    ? targets.map((l) => `
+      <button class="menu-item" data-act="ctx-move-task" data-id="${esc(l.id)}">${esc(l.name)}</button>`).join('')
+    : `<div class="empty-note" style="padding:8px 10px">// no other list</div>`;
+  return `
+    <div class="menu task-ctx" data-keep
+         style="position:fixed;left:${x}px;top:${y}px;min-width:180px;max-height:280px;overflow-y:auto">
+      <div class="menu-head" style="padding:8px 10px"><small class="mono" style="color:var(--text-faint)">Move to</small></div>
+      ${items}
+    </div>`;
+}
+
+// Zweistufige Export-Pille (Phase 7 / N11.2): schwebt links neben der rechten
+// Rail (gleiche Verankerung wie das Panik-Panel). Schritt 1 Umfang (aktuelle
+// Liste / alle Listen), Schritt 2 Format (md / txt), danach der Save-Dialog im
+// Backend. Ohne offene Liste ist "Current list" AUSGEGRAUT (sichtbar, nicht
+// waehlbar, kein Fehler-Toast, N11.2.3); nur "All lists" bleibt waehlbar.
+function renderExportPill() {
+  if (!state.exportPill) return '';
+  const I = Icons;
+  const step = state.exportPill.step;
+  const hasList = !!activeList();
+  const body = step === 'scope'
+    ? `
+      <button class="menu-item" data-act="export-scope" data-scope="list" ${hasList ? '' : 'disabled'}>
+        ${I.Note} Current list</button>
+      <button class="menu-item" data-act="export-scope" data-scope="all">
+        ${I.Copy} All lists</button>`
+    : `
+      <button class="menu-item" data-act="export-format" data-fmt="md">
+        ${I.Note} Markdown (.md)</button>
+      <button class="menu-item" data-act="export-format" data-fmt="txt">
+        ${I.Note} Plain text (.txt)</button>`;
+  return `
+    <div class="export-pill" data-keep>
+      <div class="export-head">
+        <span class="export-head-icon">${I.Share}</span>
+        <span class="export-head-text">${step === 'scope' ? 'Export: what?' : 'Export: format?'}</span>
+        <button class="panic-x" data-act="export-close" title="Close">${I.Close}</button>
+      </div>
+      ${body}
     </div>`;
 }
 
@@ -529,12 +575,36 @@ function renderModal() {
           <span class="mono" style="margin-left:auto;font-size:11px;color:var(--text-faint)">${r[1]}</span>
           ${r[3] ? `<span class="tag" style="color:${r[2]};min-width:64px;text-align:right">${r[3]}</span>` : ''}
         </div>`).join('');
+      // "Recent errors" (Gate G29 / N11.12.1): der redigierte Fehler-Ringpuffer
+      // des Backends, eingeklappt, mit Kopier-Knopf ueber den gehaerteten
+      // G23-Clipboard-Pfad (copy_errors). Jede Zeile ist bereits backendseitig
+      // redigiert (<path> statt Pfaden, keine Bridge-Argumente).
+      const errs = (statusData && statusData.errors) || [];
+      const errRows = errs.length
+        ? errs.map((er) => `
+          <div class="mono" style="font-size:10.5px;color:var(--text-dim);padding:3px 0;border-bottom:1px dashed var(--border);word-break:break-all">
+            ${esc(er.ts)} <b>${esc(er.method)}</b> ${esc(er.code)} ${esc(er.exc)}${er.ref ? ' ref=' + esc(er.ref) : ''}${er.msg ? ' &middot; ' + esc(er.msg) : ''}
+          </div>`).join('')
+        : `<div class="empty-note">// none</div>`;
+      const errSection = `
+        <div style="margin-top:14px">
+          <button class="section-head${errorsOpen ? ' open' : ' collapsed'}" data-act="toggle-errors" style="width:100%">
+            <span class="s-pill">
+              <span class="s-title">Recent errors</span>
+              <span class="s-count">${errs.length}</span>
+            </span>
+          </button>
+          ${errorsOpen ? `
+          <div style="max-height:180px;overflow-y:auto;margin-top:6px">${errRows}</div>
+          ${errs.length ? `<button class="btn" data-act="copy-errors" style="margin-top:8px">${I.Copy} Copy</button>` : ''}` : ''}
+        </div>`;
       return scrim(`
         <div class="modal">
           <div class="modal-body">
             <div class="modal-icon accent">${I.Diag}</div>
             <h3>App status</h3>
             <div style="margin-top:16px;display:flex;flex-direction:column;gap:2px">${body}</div>
+            ${errSection}
           </div>
           <div class="modal-actions"><button class="btn btn-primary" data-act="modal-close">Close</button></div>
         </div>`);
@@ -553,23 +623,6 @@ function renderModal() {
             <button class="btn btn-primary" data-act="do-rename">Save</button>
           </div>
         </div>`);
-    case 'delete': {
-      const selTask = state.selectedId && list
-        ? [...(list.open || []), ...(list.done || [])].find((t) => t.id === state.selectedId)
-        : null;
-      return scrim(`
-        <div class="modal">
-          <div class="modal-body">
-            <div class="modal-icon danger">${I.Trash}</div>
-            <h3>Delete task?</h3>
-            <p>${selTask ? `&ldquo;${esc(selTask.text)}&rdquo;` : 'No task selected.'}</p>
-          </div>
-          <div class="modal-actions">
-            <button class="btn" data-act="modal-close">Cancel</button>
-            ${selTask ? `<button class="btn btn-danger" data-act="do-delete">Delete</button>` : ''}
-          </div>
-        </div>`);
-    }
     case 'shortcuts': {
       // Anzeige-Vollstaendigkeit nach Bauplan B.5 (einzige Wahrheit): auch Esc und
       // ? selbst listen, Maus-Gesten als eigene Sektion, Rail-only-Hinweis unten.
@@ -580,7 +633,7 @@ function renderModal() {
         ['Switch list', ['Ctrl', '↑/↓']],
         ['Open list 1-9', ['Ctrl', '1-9']],
         ['Lock app', ['Ctrl', 'L']],
-        ['Export open list', ['Ctrl', 'E']],
+        ['Export', ['Ctrl', 'E']],
         ['Toggle theme', ['Ctrl', 'J']], ['Online / offline', ['G']],
         ['This help', ['?']],
         ['Close all / exit mini', ['Esc']],
@@ -589,6 +642,8 @@ function renderModal() {
         ['Select task', ['click']],
         ['Edit task', ['2× click']],
         ['Reorder tasks', ['drag']],
+        ['Reorder lists', ['drag']],
+        ['Move task to list', ['drag', 'right-click']],
       ];
       const row = (s) => `
         <div class="sc-row"><span>${s[0]}</span>
@@ -647,6 +702,8 @@ function renderSettings() {
           <div class="settings-col">
             ${head('Workspace')}
             ${row('Sidebar', seg('sidebar', [['open', 'Open'], ['closed', 'Closed']], s.sidebar))}
+            ${head('Export')}
+            ${row('Completed tasks', seg('exportDone', [['true', 'Include'], ['false', 'Exclude']], String(s.exportDone !== false)), 'Whether done tasks appear in exported files')}
           </div>
         </div>
       </div>
@@ -661,7 +718,7 @@ function syncSettingsUi() {
   const s = state.settings;
   document.querySelectorAll('.seg-btn[data-key]').forEach((b) => {
     const key = b.dataset.key;
-    const cur = key === 'dark' ? String(!!s.dark) : s[key];
+    const cur = BOOL_SETTINGS.has(key) ? String(!!s[key]) : s[key];
     b.classList.toggle('on', b.dataset.value === cur);
   });
   document.querySelectorAll('.swatch[data-color]').forEach((el) => {
@@ -698,6 +755,11 @@ function renderLock() {
 }
 // true, solange die Aufschliess-Animation nach richtigem Passwort laeuft.
 let lockUnlocking = false;
+// Frisch geholtes get_status()-Ergebnis fuer das Status-Modal (transient),
+// plus Auf/Zu-Zustand der "Recent errors"-Sektion (G29). Kein Teil von state:
+// rein praesentationsbezogen, verfaellt mit dem Modal.
+let statusData = null;
+let errorsOpen = false;
 
 // ===========================================================================
 // Panik-Flow (Nachtrag N10). Entsichert wie eine Cockpit-Waffenabdeckung,
@@ -723,12 +785,18 @@ function renderPanic() {
       // in-place um, damit die CSS-Transition sichtbar laeuft (ein Re-Render
       // wuerde den Knopf neu erzeugen und die Animation verschlucken).
       const killArmed = !!p.killArmed;
+      // Gate G22 (bis Phase 8): der Endschirm behauptet KEINEN sicheren Wipe,
+      // den es nicht gab. Ehrlicher Stand: Workspace/Cache verworfen, offline;
+      // die Datenbank existiert weiter (wirklich loeschen kann nur der
+      // Killswitch darunter). Die bewusste Aussendarstellung "All data
+      // securely wiped" (B.10.5) kehrt erst mit dem realen Phase-8-Wipe-Pfad
+      // (G14/G25) zurueck.
       return `
         <div class="panic-screen done">
           <div class="panic-screen-card">
             <div class="panic-screen-ring ok">${I.Shield}</div>
-            <h2>All data securely wiped</h2>
-            <p class="panic-screen-sub">The workspace, the in-memory cache and the cached keys were destroyed and the app went offline. Nothing readable remains on this machine.</p>
+            <h2>Workspace cleared</h2>
+            <p class="panic-screen-sub">The visible workspace and the in-memory cache were discarded and the app went offline. The database itself is still on this machine; use Killswitch to erase it for real.</p>
             <div class="panic-exit-row">
               <button class="btn btn-primary panic-finish" data-act="panic-finish">Finish</button>
               <button class="kill-btn${killArmed ? ' armed' : ''}" data-act="${killArmed ? 'kill-ok' : 'kill-arm'}" title="Irreversibly erase the database">
@@ -744,10 +812,10 @@ function renderPanic() {
       <div class="panic-screen">
         <div class="panic-screen-card">
           <div class="panic-screen-ring">${I.Alert}</div>
-          <h2>${killing ? 'Erasing user data' : 'Wiping all data'}</h2>
+          <h2>${killing ? 'Erasing user data' : 'Clearing workspace'}</h2>
           <div class="panic-bar"><div class="panic-bar-fill" id="panic-fill"></div></div>
           <div class="panic-wipe-row">
-            <span class="mono" id="panic-step">${killing ? 'Deleting user data' : 'Shredding tasks.db'}</span>
+            <span class="mono" id="panic-step">${killing ? 'Deleting user data' : 'Clearing workspace'}</span>
             <span class="mono panic-pct" id="panic-pct">0%</span>
           </div>
         </div>
@@ -800,12 +868,15 @@ function runPanicProgress(stage, steps, dur, onDone) {
 }
 
 // "Wipe"-Schirm nach dem Bestaetigen: die echte Bereinigung (Raum leeren,
-// offline, Backend-panic) ist beim Confirm schon passiert; der Balken hier ist
-// die Aussendarstellung. Danach der Endschirm mit Finish/Killswitch.
+// offline, Backend-panic) ist beim Confirm schon passiert; der Balken zeigt
+// genau das. Gate G22 (bis Phase 8): die Schritte nennen NUR, was wirklich
+// passiert (Workspace/Cache/Toasts verwerfen, offline). Die fruehere
+// Aussendarstellung ("Shredding tasks.db", "Overwriting key material") ist
+// erst ab Phase 8 zulaessig, wenn der reale Wipe-Pfad existiert (B.10.5).
 function startPanicWipe() {
   runPanicProgress(
     'wiping',
-    ['Shredding tasks.db', 'Overwriting key material', 'Clearing memory cache', 'Zeroing free space'],
+    ['Clearing workspace', 'Discarding in-memory cache', 'Closing menus and dialogs', 'Going offline'],
     2600,
     () => { state.panic.stage = 'done'; render(); }
   );
@@ -828,7 +899,7 @@ function startKillswitch() {
       const res = await req;
       if (res && res.error) {
         // Loeschen fehlgeschlagen: NICHT so tun, als waere es passiert.
-        pushToast(res.message || 'Killswitch failed');
+        handleError(res);
         return;
       }
       await api().quit_app();
@@ -851,6 +922,7 @@ function applyChrome() {
   applyRail();
   root.style.setProperty('--accent', state.settings.accent || '#d97757');
   root.style.setProperty('--sidebar-width', (state.sidebarWidth || 256) + 'px');
+  syncSidebarAnchor();
 }
 
 // Sichtbarkeit der rechten Tool-Rail (ausserhalb von Fokus/Mini):
@@ -882,7 +954,9 @@ function render() {
     return;
   }
   if (state.focus) {
-    root.innerHTML = renderFocus() + renderLock();
+    // Die Export-Pille funktioniert auch im Focus-Modus (Ctrl+E, B.5); sie ist
+    // fixed rechts verankert und braucht die Rail nicht.
+    root.innerHTML = renderFocus() + renderExportPill() + renderLock();
     wireInputs();
     return;
   }
@@ -893,6 +967,8 @@ function render() {
     renderToolbar() +
     renderRailPin() +
     renderListCtx() +
+    renderTaskCtx() +
+    renderExportPill() +
     renderModal() +
     renderPanic() +
     renderLock();
@@ -973,13 +1049,10 @@ function wireInputs() {
   const et = document.getElementById('edit-task-text');
   if (et) {
     et.focus(); et.select();
-    const em = document.getElementById('edit-task-meta');
-    const onEditKey = (e) => {
+    et.addEventListener('keydown', (e) => {
       if (e.key === 'Enter') { e.preventDefault(); commitTaskEdit(); }
       else if (e.key === 'Escape') { e.stopPropagation(); state.editingId = null; render(); }
-    };
-    et.addEventListener('keydown', onEditKey);
-    if (em) em.addEventListener('keydown', onEditKey);
+    });
   }
 }
 let refocusNewTask = false;
@@ -992,7 +1065,7 @@ async function submitNewTask(text) {
   if (!text) return;
   const list = activeList();
   const res = await api().add_task(list.id, text);
-  if (res && res.error) return pushToast(res.message || 'Error');
+  if (handleError(res)) return;
   list.open.push(res);
   // Pille nach dem Absenden wieder schliessen: zum Hinzufuegen einer weiteren
   // Aufgabe muss erneut auf das Plus gedrueckt werden.
@@ -1005,11 +1078,10 @@ async function commitNewList(name) {
   state.adding = false;
   if (!name) { render(); return; }
   const res = await api().add_list(name);
-  if (res && res.error) { render(); return pushToast(res.message || 'Error'); }
+  if (res && res.error) { render(); handleError(res); return; }
   state.lists.push(res);
   state.activeId = res.id;
   render();
-  pushToast('List created', name);
 }
 
 // ===========================================================================
@@ -1073,40 +1145,39 @@ async function toggleTask(id) {
   if (isChecking) playDoneSound();
 
   const res = await api().toggle_task(id);
-  if (res && res.error) return pushToast(res.message || 'Error');
-  // Aufgabe lokal zwischen open/done verschieben (wie im Konzept).
+  if (handleError(res)) return;
+  // Aufgabe lokal zwischen open/done verschieben. Positions-Invariante (B.1,
+  // U13): die Aufgabe haengt ans ENDE der Zielsektion, exakt wie im Backend
+  // (push in beide Richtungen, kein unshift).
   for (const l of state.lists) {
     let i = l.open.findIndex((x) => x.id === id);
-    if (i >= 0) { const [t] = l.open.splice(i, 1); t.done = true; l.done.unshift(t); break; }
+    if (i >= 0) { const [t] = l.open.splice(i, 1); t.done = true; l.done.push(t); break; }
     i = l.done.findIndex((x) => x.id === id);
     if (i >= 0) { const [t] = l.done.splice(i, 1); t.done = false; l.open.push(t); break; }
   }
   render();
 }
 
-// Inline-Bearbeitung speichern: Text ist Pflicht, Meta optional (leer = null).
+// Inline-Bearbeitung speichern: nur der Text (kein Meta mehr, N11.1.3).
 async function commitTaskEdit() {
   const id = state.editingId;
   const ti = document.getElementById('edit-task-text');
   if (!id || !ti) { state.editingId = null; return; }
   const text = ti.value.trim();
-  if (!text) return pushToast('Task text cannot be empty');
-  const mi = document.getElementById('edit-task-meta');
-  const meta = mi && mi.value.trim() ? mi.value.trim() : null;
-  const res = await api().edit_task(id, { text: text, meta: meta });
+  if (!text) return;   // leer: Bearbeitung bleibt offen, keine Meldung (N11.16)
+  const res = await api().edit_task(id, { text: text });
   state.editingId = null;
-  if (res && res.error) { render(); return pushToast(res.message || 'Error'); }
+  if (res && res.error) { render(); handleError(res); return; }
   for (const l of state.lists) {
     const t = l.open.find((x) => x.id === id) || l.done.find((x) => x.id === id);
-    if (t) { t.text = res.text; t.meta = res.meta; break; }
+    if (t) { t.text = res.text; break; }
   }
   render();
-  pushToast('Task updated');
 }
 
 async function deleteTask(id) {
   const res = await api().delete_task(id);
-  if (res && res.error) return pushToast(res.message || 'Error');
+  if (handleError(res)) return;
   for (const l of state.lists) {
     l.open = l.open.filter((t) => t.id !== id);
     l.done = l.done.filter((t) => t.id !== id);
@@ -1114,23 +1185,15 @@ async function deleteTask(id) {
   if (state.editingId === id) state.editingId = null;
   if (state.selectedId === id) state.selectedId = null;
   render();
-  pushToast('Task deleted');
 }
 
 async function doRename(name) {
   const list = activeList();
   const res = await api().rename_list(list.id, name);
-  if (res && res.error) return pushToast(res.message || 'Error');
+  if (handleError(res)) return;
   list.name = name;
   state.modal = null;
   render();
-  pushToast('List renamed', name);
-}
-
-async function doDelete() {
-  if (!state.selectedId) return;
-  state.modal = null;
-  await deleteTask(state.selectedId);
 }
 
 // Inline-Umbenennen committen (Pille in der Sidebar, Enter oder gueltige Eingabe).
@@ -1141,19 +1204,18 @@ async function doRenameList(id, name) {
   // Leer oder unveraendert: stillschweigend abbrechen.
   if (!trimmed || trimmed === list.name) { state.renamingId = null; state.listEditDock = false; render(); return; }
   const res = await api().rename_list(id, trimmed);
-  if (res && res.error) return pushToast(res.message || 'Error');
+  if (handleError(res)) return;
   list.name = trimmed;
   state.renamingId = null;
   state.listEditDock = false;
   render();
-  pushToast('List renamed', trimmed);
 }
 
 async function doDeleteList() {
   const id = state.confirmDeleteId;
   if (!id) return;
   const res = await api().delete_list(id);
-  if (res && res.error) return pushToast(res.message || 'Error');
+  if (handleError(res)) return;
   const removed = state.lists.find((l) => l.id === id);
   state.lists = state.lists.filter((l) => l.id !== id);
   // Aktive Liste neu setzen, falls die geloeschte ausgewaehlt war.
@@ -1164,7 +1226,26 @@ async function doDeleteList() {
   state.confirmDeleteId = null;
   state.listEditDock = false;
   render();
-  pushToast('List deleted', removed ? removed.name : '');
+  // Undo-Toast (N11.2.1): stellt die Liste samt Aufgaben an alter Position
+  // wieder her. not_found (Puffer inzwischen ersetzt/verfallen) laeuft still
+  // ueber handleError -> refreshState, es entsteht nie eine zweite Kopie.
+  pushUndoToast('List deleted', removed ? removed.name : '', async () => {
+    const undoRes = await api().undo_delete_list(id);
+    if (handleError(undoRes)) return;
+    await refreshState();
+  });
+}
+
+// Aufgabe in eine andere Liste verschieben (move_task, N7/N11.2): per Drag auf
+// einen Sidebar-Eintrag oder ueber das "Move to..."-Kontextmenue. done bleibt
+// erhalten, die Aufgabe haengt ans Ende ihrer Sektion in der Zielliste (U11).
+async function doMoveTask(taskId, targetListId) {
+  if (!taskId || !targetListId || targetListId === state.activeId) { render(); return; }
+  const res = await api().move_task(taskId, targetListId);
+  if (handleError(res)) return;
+  if (state.selectedId === taskId) state.selectedId = null;
+  if (state.editingId === taskId) state.editingId = null;
+  await refreshState();
 }
 
 async function setOnline(flag) {
@@ -1174,7 +1255,6 @@ async function setOnline(flag) {
   if (state.online) startWifiPoll();
   else stopWifiPoll();
   render();
-  pushToast(flag ? 'Back online' : 'Offline mode', flag ? 'network enabled' : 'working offline');
 }
 
 // Echte WLAN-Signalstaerke vom Backend holen und nur das Symbol aktualisieren
@@ -1201,10 +1281,22 @@ function stopWifiPoll() {
   if (wifiTimer) { clearInterval(wifiTimer); wifiTimer = null; }
 }
 
+// Settings, die als Bool in state.settings liegen (Backend liefert sie via
+// _BOOL_SETTINGS als echten Bool; die Seg-Buttons tragen 'true'/'false').
+const BOOL_SETTINGS = new Set(['dark', 'exportDone']);
+
+// Fehlende Bool-Settings auf ihren Default ziehen (als echten Bool), damit
+// renderSettings und syncSettingsUi denselben Zustand zeigen. `exportDone`
+// kann bei alten DBs fehlen (kein Re-Seed nach dem seeded-Marker); Default an.
+function normalizeSettings(s) {
+  s.exportDone = s.exportDone !== false;
+  return s;
+}
+
 async function setSetting(key, value) {
   // Typkonvertierung für die Anwendung im Frontend.
   let applied = value;
-  if (key === 'dark') applied = (value === true || value === 'true');
+  if (BOOL_SETTINGS.has(key)) applied = (value === true || value === 'true');
   state.settings[key] = applied;
   if (key === 'dark') flashThemeSwitch();
   // Bewusst KEIN render(): Theme/Density/Sidebar wirken ueber die Attribute
@@ -1225,28 +1317,42 @@ async function setAccent(color) {
 }
 
 
-async function doExport() {
-  const list = activeList();
-  if (!list) return;
-  const res = await api().export_list(list.id, 'md');
-  if (res && res.error) return pushToast(res.message || 'Error');
-  // Phase 7 ergänzt den echten Speicher-Dialog; vorerst Bestätigung.
-  pushToast('Exported list', res.filename);
+// Zweistufiger Export (Phase 7 / N11.2): Rail-Button und Ctrl+E oeffnen die
+// Pille (zweiter Druck schliesst sie). Auch OHNE offene Liste oeffnet sie sich
+// (N11.2.3); dort ist nur "All lists" waehlbar. Im Mini-Modus bewusst nicht
+// (reines Lesefenster, wie Modals).
+function toggleExportPill() {
+  if (state.mini) return;
+  state.exportPill = state.exportPill ? null : { step: 'scope' };
+  render();
+}
+
+// Schritt 2 abgeschlossen: Export ausfuehren. Das Backend zeigt den Save-
+// Dialog und schreibt die Datei (G21c). "canceled" (Dialog abgebrochen) und
+// "locked" bleiben nach B.2 bewusst still; ein echter Fehler laeuft ueber
+// handleError. Ein Erfolg wird nicht bestaetigt (der Nutzer hat Ort und Namen
+// im Save-Dialog selbst gewaehlt, sieht also, dass die Datei geschrieben wird).
+async function runExport(scope, fmt) {
+  state.exportPill = null;
+  render();
+  const res = scope === 'all'
+    ? await api().export_all(fmt)
+    : await api().export_list(state.activeId, fmt);
+  if (handleError(res)) return;
 }
 
 // Kopiert die AUSGEWAEHLTE Aufgabe. Das eigentliche Kopieren passiert im
 // Backend (gehaertete Clipboard-Formate, kein Win+V-Verlauf, kein
 // Cloud-Clipboard, Auto-Clear nach 60 s), siehe Bauplan Gate G23.
 async function doCopy() {
-  if (!state.selectedId) return pushToast('Select a task first');
+  if (!state.selectedId) return;   // ohne Auswahl: still nichts tun (N11.16)
   const res = await api().copy_task(state.selectedId);
-  if (res && res.error) return pushToast(res.message || 'Error');
-  pushToast('Task copied', 'clipboard clears in ' + (res.clears_in || 60) + 's');
+  if (handleError(res)) return;
 }
 
 async function doMini(flag) {
   const res = await api().set_mini(flag);
-  if (res && res.error) { pushToast(res.message || 'Mini window failed'); return; }
+  if (handleError(res)) return;
   state.mini = res && typeof res.mini === 'boolean' ? res.mini : flag;
   // Ein offenes "Neue Aufgabe"-Eingabefeld beim Moduswechsel IMMER schliessen
   // (in beide Richtungen): es soll nicht aus dem Mini- ins grosse Fenster oder
@@ -1254,8 +1360,8 @@ async function doMini(flag) {
   state.addingTask = false;
   if (state.mini) {
     // Im Mini-Modus alles Überlagernde schließen, damit nur die Liste bleibt.
-    state.focus = false; state.menu = null; state.modal = null;
-    state.adding = false;
+    state.focus = false; state.modal = null;
+    state.adding = false; state.exportPill = null;
   }
   render();
 }
@@ -1283,6 +1389,7 @@ function onSidebarResizeMove(e) {
   const w = Math.max(180, Math.min(520, _resizeStartW + (e.clientX - _resizeStartX)));
   state.sidebarWidth = w;
   root.style.setProperty('--sidebar-width', w + 'px');
+  syncSidebarAnchor();
 }
 
 function onSidebarResizeEnd() {
@@ -1327,7 +1434,8 @@ function onMouseMove(e) {
 function clearWorkspace() {
   state.lists = [];
   state.activeId = null;
-  state.menu = null; state.modal = null; state.ctxList = null;
+  state.modal = null; state.ctxList = null; state.ctxTask = null;
+  state.exportPill = null;
   state.renamingId = null; state.confirmDeleteId = null; state.listEditDock = false;
   state.adding = false; state.addingTask = false; state.doneOpen = false;
   state.editingId = null; state.selectedId = null;
@@ -1335,6 +1443,7 @@ function clearWorkspace() {
   state.settings.sidebar = 'closed';   // nur in-memory, wie beim Boot
   state.railPinned = false;
   state.online = false;
+  clearToasts();   // kein Undo-Knopf/Toast darf den Lock-Screen ueberlagern
 }
 
 async function doLock() {
@@ -1383,7 +1492,7 @@ async function lockSubmit(value) {
   setTimeout(() => {
     if (st && st.lists) {
       state.lists = st.lists;
-      state.settings = Object.assign({}, st.settings, { sidebar: 'closed' });
+      state.settings = normalizeSettings(Object.assign({}, st.settings, { sidebar: 'closed' }));
       state.online = !!st.online;
     }
     lockUnlocking = false;
@@ -1399,20 +1508,108 @@ function flashThemeSwitch() {
 }
 
 // ===========================================================================
-// Toasts (eigener Layer außerhalb von #root -> kein Re-Render/Fokusverlust)
+// Zentrale Fehlerbehandlung nach dem B.2-Fehlercode-Katalog (Gate G29).
+// Das Backend liefert nur noch Codes + statische Texte (nie str(exc), nie
+// Pfade). Seit N11.16 (Nutzerwunsch: keine Benachrichtigungen) zeigt das
+// Frontend zu KEINEM Fehlercode mehr einen Toast; sichtbar bleiben nur die
+// notwendigen Zustandswechsel: not_found laedt die (veraltete) Ansicht still
+// neu, locked zeigt den Lock-Screen. internal-Fehler bleiben ueber den
+// G29-Ringpuffer im Status-Modal ("Recent errors") einsehbar.
+// Liefert true, wenn res ein Fehler war (Aufrufer bricht dann ab).
 // ===========================================================================
-let toastLayer = null;
-function pushToast(text, mono) {
-  if (!toastLayer) {
-    toastLayer = document.createElement('div');
-    toastLayer.className = 'toast-wrap';
-    document.body.appendChild(toastLayer);
+function handleError(res) {
+  if (!res || !res.error) return false;
+  const code = res.error;
+  if (code === 'not_found') {
+    // Die Ansicht war veraltet: still frisch laden (B.2), keine Meldung.
+    refreshState();
+  } else if (code === 'locked') {
+    // Stumm (Renn-Fall, z.B. Auto-Lock waehrend einer laufenden Aktion):
+    // einfach den Lock-Screen zeigen.
+    state.locked = true;
+    render();
   }
+  // invalid/busy/internal/canceled und alles Uebrige: stumm, kein Toast.
+  return true;
+}
+
+// Gesamtzustand still neu vom Backend laden (nach not_found: die eigene
+// Ansicht war veraltet). UI-Zustand bleibt, eine verschwundene aktive Liste
+// wird geschlossen.
+async function refreshState() {
+  try {
+    const st = await api().get_state();
+    if (st && st.lists) {
+      state.lists = st.lists;
+      state.online = !!st.online;
+      if (state.activeId && !state.lists.some((l) => l.id === state.activeId)) {
+        state.activeId = null; state.selectedId = null; state.editingId = null;
+      }
+    }
+  } catch (e) { /* Backend nicht erreichbar: bestehende Ansicht behalten */ }
+  render();
+}
+
+// ===========================================================================
+// Toasts: Seit N11.16 (Nutzerwunsch: keine Benachrichtigungen) gibt es NUR
+// noch den Undo-Toast beim Listen-Loeschen. Es gibt bewusst keinen generischen
+// Erfolgs-/Fehler-Toast mehr (kein `pushToast`); Fehler laufen still oder ueber
+// das Status-Modal ("Recent errors", G29). Keinen wieder einfuehren.
+// ===========================================================================
+
+// Toast mit Undo-Knopf (N11.2.1, nur fuers Listen-Loeschen): eigener Layer,
+// unten links neben der Sidebar (nicht mittig wie die normalen Toasts). Steht
+// ca. 6 s mit sichtbarem Ablaufbalken, der Knopf ruft onUndo genau einmal und
+// raeumt den Toast sofort weg. Der 6-s-Timer gehoert der UI; der Backend-Puffer
+// lebt unabhaengig davon weiter (ein spaetes Undo ueber einen neuen Weg duerfte
+// gelingen, das ist gewollt).
+const UNDO_TOAST_MS = 6000;
+let undoLayer = null;
+function pushUndoToast(text, mono, onUndo) {
+  if (!undoLayer) {
+    undoLayer = document.createElement('div');
+    undoLayer.className = 'undo-wrap';
+    document.body.appendChild(undoLayer);
+  }
+  // Nur ein Undo-Toast zur Zeit (der Backend-Puffer haelt ohnehin nur die
+  // zuletzt geloeschte Liste): einen alten sofort ersetzen.
+  undoLayer.innerHTML = '';
+  syncSidebarAnchor();
+
   const node = document.createElement('div');
-  node.className = 'toast';
-  node.innerHTML = Icons.Check + esc(text) + (mono ? `<span class="mono">${esc(mono)}</span>` : '');
-  toastLayer.appendChild(node);
-  setTimeout(() => { if (node.parentNode) node.parentNode.removeChild(node); }, 2400);
+  node.className = 'undo-toast';
+  node.innerHTML = Icons.Trash + esc(text)
+    + (mono ? `<span class="undo-name">${esc(mono)}</span>` : '')
+    + `<button class="toast-undo">Undo</button>`
+    + `<span class="undo-bar" style="animation-duration:${UNDO_TOAST_MS}ms"></span>`;
+
+  let timer = null;
+  const dismiss = () => {
+    if (timer) { clearTimeout(timer); timer = null; }
+    if (!node.parentNode) return;
+    node.classList.add('leaving');
+    setTimeout(() => { if (node.parentNode) node.parentNode.removeChild(node); }, 180);
+  };
+  node.querySelector('.toast-undo').addEventListener('click', () => {
+    dismiss();
+    onUndo();
+  });
+  undoLayer.appendChild(node);
+  timer = setTimeout(dismiss, UNDO_TOAST_MS);
+}
+
+// Setzt die Ankerbreite fuer den unten-links verankerten Undo-Toast: Breite der
+// Sidebar, wenn offen, sonst 0. Auf documentElement, weil der Toast-Layer als
+// Kind von <body> die Variable von #root (=.app) nicht erben wuerde.
+function syncSidebarAnchor() {
+  const off = sidebarVisible() ? (state.sidebarWidth || 256) : 0;
+  document.documentElement.style.setProperty('--content-left', off + 'px');
+}
+
+// Alle sichtbaren Toasts sofort wegraeumen (beim Sperren/Panik: kein
+// Undo-Knopf und keine Meldung darf den Lock-Screen ueberlagern).
+function clearToasts() {
+  if (undoLayer) undoLayer.innerHTML = '';
 }
 
 // ===========================================================================
@@ -1421,11 +1618,16 @@ function pushToast(text, mono) {
 function closeMenusIfOutside(e, a) {
   let changed = false;
   const act = a ? a.dataset.act : null;
-  if (state.menu && !e.target.closest('[data-keep]') && act !== 'open-profile') {
-    state.menu = null; changed = true;
-  }
   if (state.ctxList && !e.target.closest('.list-ctx')) {
     state.ctxList = null; changed = true;
+  }
+  if (state.ctxTask && !e.target.closest('.task-ctx')) {
+    state.ctxTask = null; changed = true;
+  }
+  // Klick ausserhalb der Export-Pille schliesst sie (der eigene Rail-Knopf
+  // toggelt selbst und darf hier nicht doppelt schliessen).
+  if (state.exportPill && !e.target.closest('.export-pill') && act !== 'tb-export') {
+    state.exportPill = null; changed = true;
   }
   // Klick ausserhalb der Inline-Pillen (Sidebar .list-inline ODER Dock .dock-edit)
   // verwirft Umbenennen / Loeschbestaetigung.
@@ -1464,7 +1666,6 @@ async function onClick(e) {
       if (wasFocus) render(); else applyChrome();
       break;
     }
-    case 'open-profile': state.menu = state.menu === 'profile' ? null : 'profile'; render(); break;
     case 'select-list':
       // Klick auf die bereits ausgewaehlte Liste schliesst sie wieder (zurueck
       // zur leeren Arbeitsflaeche). Sonst die angeklickte Liste oeffnen.
@@ -1499,9 +1700,10 @@ async function onClick(e) {
       render(); break;
     }
     case 'new-list-show': state.adding = true; render(); break;
-    case 'settings': state.menu = null; state.modal = 'settings'; render(); break;
+    case 'settings': state.modal = 'settings'; render(); break;
     case 'toggle-task': await toggleTask(id); break;
-    case 'del-task': await deleteTask(id); break;
+    // 'del-task' entfernt (Phase 7, Audit 1.6/S7): es gab nie einen Hover-
+    // Papierkorb auf der Karte, geloescht wird ueber die Rail (tb-delete).
     case 'toggle-done': state.doneOpen = !state.doneOpen; render(); break;
     case 'focus-newtask': { const i = document.getElementById('new-task-input'); if (i) i.focus(); break; }
     case 'dock-toggle': {
@@ -1546,14 +1748,27 @@ async function onClick(e) {
     }
     case 'net': await setOnline(!state.online); break;
     // Alle Werkzeuge, die eine Liste brauchen (Mini, Fokus, Umbenennen, Copy,
-    // Loeschen, Export), tun ohne offene Liste einfach NICHTS: kein Modal,
-    // kein Toast. Verlassen von Mini/Fokus geht dagegen immer.
+    // Loeschen), tun ohne offene Liste einfach NICHTS: kein Modal, kein Toast.
+    // Verlassen von Mini/Fokus geht dagegen immer. Export ist die Ausnahme
+    // (N11.2.3): die Pille oeffnet sich auch ohne offene Liste, dort ist nur
+    // "All lists" waehlbar.
     case 'tb-mini': if (!state.mini && !activeList()) break; await doMini(!state.mini); break;
     case 'tb-focus':
       if (!state.focus && !activeList()) break;
-      state.focus = !state.focus; state.menu = null; render(); break;
+      state.focus = !state.focus; render(); break;
     case 'rail-pin': toggleRailPin(); break;
-    case 'tb-export': await doExport(); break;
+    case 'tb-export': toggleExportPill(); break;
+    case 'export-close': state.exportPill = null; render(); break;
+    case 'export-scope':
+      if (state.exportPill) {
+        state.exportPill.scope = a.dataset.scope;
+        state.exportPill.step = 'format';
+        render();
+      }
+      break;
+    case 'export-format':
+      if (state.exportPill) await runExport(state.exportPill.scope, a.dataset.fmt);
+      break;
     case 'tb-help': state.modal = 'shortcuts'; render(); break;
     case 'tb-lock': await doLock(); break;
     case 'tb-emergency': state.panic = state.panic ? null : { armed: false, stage: 'panel' }; render(); break;
@@ -1565,7 +1780,23 @@ async function onClick(e) {
       else { state.modal = 'rename'; render(); }
       break;
     case 'tb-delete': if (activeList() && state.selectedId) await deleteTask(state.selectedId); break;
-    case 'tb-status': state.modal = 'status'; render(); break;
+    case 'tb-status':
+      // Status-Modal sofort zeigen, die Backend-Daten (u.a. den G29-Fehler-
+      // Ringpuffer) asynchron nachladen und nur nachrendern, solange das
+      // Modal noch offen ist.
+      state.modal = 'status'; statusData = null; errorsOpen = false; render();
+      api().get_status().then((d) => {
+        if (!d || d.error) return;
+        statusData = d;
+        if (state.modal === 'status') render();
+      });
+      break;
+    case 'toggle-errors': errorsOpen = !errorsOpen; render(); break;
+    case 'copy-errors': {
+      const res = await api().copy_errors();
+      if (handleError(res)) break;
+      break;
+    }
     case 'exit-focus': state.focus = false; render(); break;
     case 'set-accent': await setAccent(a.dataset.color); break;
     case 'set': await setSetting(a.dataset.key, a.dataset.value); break;
@@ -1578,7 +1809,6 @@ async function onClick(e) {
       state.modal = null; render(); break;
     case 'modal-close': state.modal = null; render(); break;
     case 'do-rename': { const i = document.getElementById('rename-input'); if (i && i.value.trim()) await doRename(i.value.trim()); break; }
-    case 'do-delete': await doDelete(); break;
     case 'ctx-rename-list': {
       // Inline-Pille oeffnen: in der Sidebar an der Listenposition, oder (bei
       // Rechtsklick auf den Dock-Namen) unten im Dock (listEditDock).
@@ -1597,6 +1827,14 @@ async function onClick(e) {
       state.confirmDeleteId = cid;
       state.listEditDock = fromDock;
       render(); break;
+    }
+    case 'ctx-move-task': {
+      // "Move to..." aus dem Aufgaben-Kontextmenue (move_task, N7/N11.2).
+      const taskId = state.ctxTask && state.ctxTask.id;
+      state.ctxTask = null;
+      if (taskId && id) await doMoveTask(taskId, id);
+      else render();
+      break;
     }
     case 'cancel-rename-list': state.renamingId = null; state.listEditDock = false; render(); break;
     case 'cancel-delete-list': state.confirmDeleteId = null; state.listEditDock = false; render(); break;
@@ -1644,13 +1882,25 @@ function onContextMenu(e) {
   if (state.locked || state.mini) return;
   // In Eingabefeldern das native Menue (Kopieren/Einfuegen) erhalten.
   if (/^(INPUT|TEXTAREA)$/.test(e.target.tagName)) return;
+  // Rechtsklick auf eine Aufgaben-Karte: "Move to..."-Menue (move_task,
+  // N7/N11.2). Nicht waehrend der Inline-Bearbeitung dieser Karte.
+  const taskCard = e.target.closest('.task[data-task-id]');
+  if (taskCard && state.editingId !== taskCard.dataset.taskId) {
+    e.preventDefault();
+    const x = Math.min(e.clientX, window.innerWidth - 200);
+    const y = Math.min(e.clientY, window.innerHeight - 300);
+    state.ctxTask = { id: taskCard.dataset.taskId, x, y };
+    state.ctxList = null;
+    render();
+    return;
+  }
   const item = e.target.closest('.list-item[data-id]');
   if (item) {
     e.preventDefault();
     const x = Math.min(e.clientX, window.innerWidth - 190);
     const y = Math.min(e.clientY, window.innerHeight - 100);
     state.ctxList = { id: item.dataset.id, x, y };
-    state.menu = null;
+    state.ctxTask = null;
     render();
     return;
   }
@@ -1663,12 +1913,12 @@ function onContextMenu(e) {
     const x = Math.max(8, Math.min(r.left, window.innerWidth - 190));
     const y = r.top - 8;
     state.ctxList = { id: state.activeId, x, y, fromDock: true };
-    state.menu = null;
+    state.ctxTask = null;
     render();
     return;
   }
   e.preventDefault();
-  if (state.ctxList) { state.ctxList = null; render(); }
+  if (state.ctxList || state.ctxTask) { state.ctxList = null; state.ctxTask = null; render(); }
 }
 
 // ===========================================================================
@@ -1687,9 +1937,10 @@ function onKeyGlobal(e) {
   }
   if (e.key === 'Escape') {
     if (state.mini) { doMini(false); return; }
-    state.menu = null; state.modal = null;
+    state.modal = null;
     state.focus = false; state.adding = false; state.addingTask = false;
-    state.editingId = null; state.selectedId = null; state.ctxList = null;
+    state.editingId = null; state.selectedId = null; state.ctxList = null; state.ctxTask = null;
+    state.exportPill = null;
     state.renamingId = null; state.confirmDeleteId = null; state.listEditDock = false;
     // Panik-Panel schliessen, aber den laufenden/fertigen Wipe-Schirm stehen lassen.
     if (state.panic && state.panic.stage === 'panel') state.panic = null;
@@ -1705,7 +1956,7 @@ function onKeyGlobal(e) {
   if (meta && k === 'b') { e.preventDefault(); const wasFocus = state.focus; state.focus = false; state.settings.sidebar = sidebarVisible() ? 'closed' : 'open'; api().set_setting('sidebar', state.settings.sidebar); if (wasFocus) render(); else applyChrome(); }
   else if (meta && k === 'j') { e.preventDefault(); setSetting('dark', !state.settings.dark); }
   else if (meta && k === 'l') { e.preventDefault(); doLock(); }
-  else if (meta && k === 'e') { e.preventDefault(); doExport(); }
+  else if (meta && k === 'e') { e.preventDefault(); toggleExportPill(); }
   else if (meta && (e.key === 'ArrowUp' || e.key === 'ArrowDown')) {
     // Ctrl+Pfeil hoch/runter: durch die Listen der Sidebar wechseln. Nur wenn
     // die Sidebar offen UND bereits eine Liste geoeffnet ist; an den Enden
@@ -1779,17 +2030,68 @@ function onKeyGlobal(e) {
 let _lastTaskClick = { id: null, t: 0 };
 
 // ===========================================================================
-// Drag & Drop, Reihenfolge offener Aufgaben (Bridge: reorder)
+// Drag & Drop (Phase 7, N7/N11.2): drei Faelle an denselben vier globalen
+// Listenern, unterschieden ueber dragId (Aufgabe) vs. listDragId (Liste):
+//   1. Aufgabe innerhalb der offenen Sektion umsortieren (Bridge: reorder)
+//   2. Aufgabe auf einen Sidebar-Eintrag ziehen = verschieben (move_task)
+//   3. Listen-Eintrag in der Sidebar umsortieren (reorder_lists)
 // ===========================================================================
-let dragId = null;
+let dragId = null;      // gezogene Aufgabe (nur offene Karten sind draggable)
+let listDragId = null;  // gezogener Sidebar-Listeneintrag
+
+function clearDropTarget() {
+  document.querySelectorAll('.list-item.drop-target')
+    .forEach((el) => el.classList.remove('drop-target'));
+}
+
 function onDragStart(e) {
   const row = e.target.closest('.task[draggable="true"]');
-  if (!row) return;
-  dragId = row.dataset.taskId;
-  row.classList.add('dragging');
+  if (row) {
+    dragId = row.dataset.taskId;
+    row.classList.add('dragging');
+    e.dataTransfer.effectAllowed = 'move';
+    return;
+  }
+  const li = e.target.closest('.list-item[draggable="true"]');
+  if (!li) return;
+  listDragId = li.dataset.id;
+  li.classList.add('dragging');
   e.dataTransfer.effectAllowed = 'move';
+  // Offene Inline-Pillen (Umbenennen/Loeschen) verwerfen: sie ersetzen ihren
+  // Listeneintrag im DOM, und reorder_lists braucht die VOLLE Listenmenge.
+  if (state.renamingId || state.confirmDeleteId) {
+    state.renamingId = null; state.confirmDeleteId = null; state.listEditDock = false;
+    render();
+  }
 }
+
 function onDragOver(e) {
+  // Fall 2: Aufgabe schwebt ueber einem Sidebar-Eintrag -> Drop-Ziel markieren.
+  if (dragId != null) {
+    const li = e.target.closest('.list-item[data-id]');
+    clearDropTarget();
+    if (li && li.dataset.id !== state.activeId) {
+      e.preventDefault();
+      li.classList.add('drop-target');
+      return;
+    }
+  }
+  // Fall 3: Listen-Eintrag innerhalb der Sidebar sortieren (DOM-Vorschau).
+  if (listDragId != null) {
+    const scroll = e.target.closest('.list-scroll');
+    if (!scroll) return;
+    e.preventDefault();
+    const dragging = scroll.querySelector('.list-item.dragging');
+    if (!dragging) return;
+    const after = [...scroll.querySelectorAll('.list-item:not(.dragging)')].find((el) => {
+      const r = el.getBoundingClientRect();
+      return e.clientY < r.top + r.height / 2;
+    });
+    if (after) scroll.insertBefore(dragging, after);
+    else scroll.appendChild(dragging);
+    return;
+  }
+  // Fall 1: Aufgabe innerhalb der offenen Sektion sortieren (DOM-Vorschau).
   const listEl = e.target.closest('[data-tasklist="open"]');
   if (!listEl || dragId == null) return;
   e.preventDefault();
@@ -1802,20 +2104,57 @@ function onDragOver(e) {
   if (after) listEl.insertBefore(dragging, after);
   else listEl.appendChild(dragging);
 }
+
 async function onDrop(e) {
+  // Fall 2: Aufgabe auf einen Sidebar-Eintrag fallen lassen -> move_task.
+  if (dragId != null) {
+    const li = e.target.closest('.list-item[data-id]');
+    if (li) {
+      e.preventDefault();
+      const taskId = dragId;
+      dragId = null;
+      clearDropTarget();
+      if (li.dataset.id !== state.activeId) await doMoveTask(taskId, li.dataset.id);
+      return;
+    }
+  }
+  // Fall 3: Listen-Reihenfolge speichern -> reorder_lists (N11.2.2: exakt die
+  // volle Listenmenge, sonst lehnt das Backend ab und nichts wird geschrieben).
+  if (listDragId != null) {
+    const scroll = e.target.closest('.list-scroll');
+    if (!scroll) return;
+    e.preventDefault();
+    listDragId = null;
+    const ids = [...scroll.querySelectorAll('.list-item')].map((el) => el.dataset.id);
+    const res = await api().reorder_lists(ids);
+    if (handleError(res)) return;
+    state.lists.sort((x, y) => ids.indexOf(x.id) - ids.indexOf(y.id));
+    render();
+    return;
+  }
+  // Fall 1: Aufgaben-Reihenfolge speichern -> reorder.
   const listEl = e.target.closest('[data-tasklist="open"]');
   if (!listEl || dragId == null) return;
   e.preventDefault();
   const ids = [...listEl.querySelectorAll('.task')].map((el) => el.dataset.taskId);
   const list = activeList();
   list.open.sort((x, y) => ids.indexOf(x.id) - ids.indexOf(y.id));
-  await api().reorder(list.id, ids);
+  // G20/N11.2.2: ordered_ids muss EXAKT die gesamte Aufgabenmenge der Liste
+  // sein (offen + erledigt); die Sektionstrennung macht das Backend anhand
+  // von done. Die erledigten haengen in ihrer aktuellen Reihenfolge hinten an.
+  const res = await api().reorder(list.id, [...ids, ...list.done.map((t) => t.id)]);
   dragId = null;
+  if (handleError(res)) return;
   render();
 }
+
 function onDragEnd() {
-  const d = document.querySelector('.task.dragging');
+  const d = document.querySelector('.task.dragging, .list-item.dragging');
   if (d) d.classList.remove('dragging');
+  clearDropTarget();
+  // Wurde eine Listen-Sortierung abgebrochen (Drop ausserhalb der Sidebar),
+  // steht die DOM-Vorschau noch falsch: einmal frisch aus state rendern.
+  if (listDragId != null) { listDragId = null; render(); }
   dragId = null;
 }
 
@@ -1833,6 +2172,7 @@ async function boot() {
   try {
     const st = await api().get_state();
     Object.assign(state, st);
+    normalizeSettings(state.settings);
     // Pin-Zustand der Tool-Rail aus den Settings rekonstruieren (als String abgelegt).
     // Sidebar-Breite wiederherstellen (als String gespeichert).
     const sw = parseInt(state.settings.sidebarWidth || '256', 10);
