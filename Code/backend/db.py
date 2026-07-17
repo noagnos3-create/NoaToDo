@@ -197,8 +197,11 @@ class Database:
     def add_task(self, list_id: str, text: str) -> dict[str, Any]:
         now = _now()
         tid = _new_id("t")
+        # Positions-Invariante (B.1, U13): position wird JE SEKTION gefuehrt;
+        # eine neue Aufgabe haengt ans Ende von open (MAX+1 nur unter done=0).
         pos = self.conn.execute(
-            "SELECT COALESCE(MAX(position), -1) + 1 AS p FROM tasks WHERE list_id = ?",
+            "SELECT COALESCE(MAX(position), -1) + 1 AS p FROM tasks"
+            " WHERE list_id = ? AND done = 0",
             (list_id,),
         ).fetchone()["p"]
         self.conn.execute(
@@ -213,14 +216,23 @@ class Database:
 
     def toggle_task(self, task_id: str) -> dict[str, Any]:
         row = self.conn.execute(
-            "SELECT done FROM tasks WHERE id = ?", (task_id,)
+            "SELECT list_id, done FROM tasks WHERE id = ?", (task_id,)
         ).fetchone()
         if row is None:
             raise KeyError(task_id)
         new_done = 0 if row["done"] else 1
+        # Positions-Invariante (B.1, U13): die Aufgabe wechselt die Sektion und
+        # haengt ans ENDE der Zielsektion (Abhaken -> Ende von done,
+        # Wieder-Oeffnen -> Ende von open); ihre alte position gehoert zur
+        # alten Sektion und waere in der neuen bedeutungslos.
+        pos = self.conn.execute(
+            "SELECT COALESCE(MAX(position), -1) + 1 AS p FROM tasks"
+            " WHERE list_id = ? AND done = ?",
+            (row["list_id"], new_done),
+        ).fetchone()["p"]
         self.conn.execute(
-            "UPDATE tasks SET done = ?, updated_at = ? WHERE id = ?",
-            (new_done, _now(), task_id),
+            "UPDATE tasks SET done = ?, position = ?, updated_at = ? WHERE id = ?",
+            (new_done, pos, _now(), task_id),
         )
         self.conn.commit()
         return {"id": task_id, "done": bool(new_done)}

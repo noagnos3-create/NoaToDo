@@ -1098,10 +1098,12 @@ async function toggleTask(id) {
 
   const res = await api().toggle_task(id);
   if (handleError(res)) return;
-  // Aufgabe lokal zwischen open/done verschieben (wie im Konzept).
+  // Aufgabe lokal zwischen open/done verschieben. Positions-Invariante (B.1,
+  // U13): die Aufgabe haengt ans ENDE der Zielsektion, exakt wie im Backend
+  // (push in beide Richtungen, kein unshift).
   for (const l of state.lists) {
     let i = l.open.findIndex((x) => x.id === id);
-    if (i >= 0) { const [t] = l.open.splice(i, 1); t.done = true; l.done.unshift(t); break; }
+    if (i >= 0) { const [t] = l.open.splice(i, 1); t.done = true; l.done.push(t); break; }
     i = l.done.findIndex((x) => x.id === id);
     if (i >= 0) { const [t] = l.done.splice(i, 1); t.done = false; l.open.push(t); break; }
   }

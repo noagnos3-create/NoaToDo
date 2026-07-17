@@ -246,12 +246,12 @@ Liste vergleichbar (`open` und `done` haben je ihre eigene 0..n-Sequenz). Daraus
 
 Der Sinn: Die Reihenfolge ist damit ein fester Vertrag statt eines Nebenprodukts der
 Query, das der naechste Refactor stillschweigend kippt (genau die Sorge aus Befund U13).
-**Delta zum heutigen Code (offen, mit dem Vertrag umzusetzen):** heute fuehrt der Code
-**eine** gemeinsame `position`-Sequenz pro Liste und laesst `position` beim Abhaken
-unveraendert (eine abgehakte Aufgabe behaelt ihren alten Slot). Umzustellen sind
-`toggle_task` (setzt beim Umschalten die neue `position` ans Ende der Zielsektion) und
-`add_task` (`MAX(position) + 1` nur unter `done=0`). `get_lists` sortiert bereits nach
-`position` und teilt nach `done`, es bleibt unveraendert.
+**Im Code umgesetzt (2026-07-17, mit Phase 7):** `toggle_task` setzt beim Umschalten die
+neue `position` ans Ende der Zielsektion, `add_task` zaehlt `MAX(position) + 1` nur
+unter `done=0`, `reorder` nummeriert je Sektion 0..n-1 (Mengenpruefung nach N11.2.2),
+und der Frontend-Cache haengt eine abgehakte Aufgabe ebenfalls ans Ende von `done`
+(push statt unshift). `get_lists` sortierte bereits nach `(position, created_at)` und
+teilt nach `done`, es blieb unveraendert.
 
 ### B.2 Bridge-API (`pywebview.api.*`): der Vertrag zwischen vorne und hinten
 
