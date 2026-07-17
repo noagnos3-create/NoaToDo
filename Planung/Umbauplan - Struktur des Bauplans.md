@@ -295,30 +295,132 @@ aufgeraeumten Ablage sitzen.
 - **Etappe 1, Geruest ohne Umzug.** Die neuen leeren Huellen anlegen: A.4, A.5, die
   B.8-Unterstruktur (B.8.1 bis B.8.7), B.11, Anhang 1 (Register), Anhang 2 (Audit-Status),
   Anhang 3 (Historie). Noch **kein** Inhalt verschoben. Damit ist die Zielablage sichtbar,
-  bevor irgendetwas wandert.
+  bevor irgendetwas wandert. **Erledigt 2026-07-16:** alle Huellen angelegt (jeweils mit
+  Zeiger auf den heutigen normativen Ort und die fuellende Etappe); zur
+  Kollisionsvermeidung wurden die Alt-Anhaenge gemaess Zielskelett umbenannt (Seed nach
+  "ANHANG 1 alt", Icon-Set nach "ANHANG 4") und die drei Verweise darauf umgebogen
+  (Phase 1 Punkt 4, N11.1 Punkt 4, B.4-Icons-Zeile); die B.8-Ueberschrift traegt den
+  Zielnamen. Kein Inhalt verschoben, verify_umbau.py gruen.
 - **Etappe 2, Gate-1.** Die zwei B.9-Tabellen zu einer zusammenfuehren (nur Umstellen,
   kein Wort). Ergebnis einmal prueft: Gate-Anzahl vorher/nachher gleich, jede
-  Gate-Nummer genau einmal vorhanden.
+  Gate-Nummer genau einmal vorhanden. **Erledigt 2026-07-16:** eine nach Gate-Nummer
+  sortierte Tabelle (ein Tabellenkopf, 28 Zeilen G6 bis G35, jede Nummer genau
+  einmal); die beiden Historie-Einleitungstexte wandern wortgleich als Absatz ins
+  Entscheidungsregister (Anhang 1, "Herkunft der Sicherheits-Gates"); die beiden
+  normativen Verbindlichkeits-Saetze bleiben im B.9-Kopf; einzige
+  Verweis-Anpassung: "Diese Tabelle und die Nachtragstabelle G13-G35 direkt
+  darunter sind zusammen" heisst jetzt "Diese Tabelle ... ist" (P1-Verweissatz);
+  "Zwei Kleinigkeiten" und der Phasen-Abschnitte-Absatz stehen unveraendert hinter
+  der Tabelle. verify_umbau.py: alle harten Pruefungen gruen (Gate-Anzahl 30
+  stabil), Wort-Diff nur der geloeschte Doppel-Tabellenkopf und der aufgeloeste
+  Zwei-Tabellen-Verweissatz.
 - **Etappe 3, Norm-Umzug nach Migrationskarte.** Block fuer Block aus Abschnitt 5
   abarbeiten. Pro Block: (a) normativen Wortlaut in den Zielvertrag **ausschneiden und
   einfuegen**, Etikett (ID) dranlassen; (b) im Nachtrag-Block nur noch die Protokollzeile
   fuer Anhang 1 zuruecklassen; (c) Checklisten-Haken. **Reihenfolge innerhalb der Etappe:**
   erst die Bloecke, deren Norm heute schon im Haupttext steht (nur Register ziehen: N11.13,
   N5, N11.10, Teile N11.12), dann die reinen Umzuege (N11.11, N11.15, N11.4.*, N6, N11.9).
-  So gewoehnt man sich am risikoarmen Teil die Mechanik an.
+  So gewoehnt man sich am risikoarmen Teil die Mechanik an. **Erledigt 2026-07-16:**
+  alle 38 Bloecke der Blockliste umgezogen (skriptgestuetzter Zeilen-Umzug, Wortlaut und
+  Reihenfolge erhalten). M-Bloecke wortgleich an ihre Zielvertraege (u.a. N11.11 nach
+  B.8.5, N11.11.5 nach B.8.6, N11.15 nach B.11, N11.4/.1/.2 nach B.8.3/B.8.4, N11.4.3 und
+  N11.9 nach B.7, N6/N11.2.1/N11.2.2/N11.3/N11.5/N11.12 nach B.2, N2/N4/N10.2/N10.3 und
+  die B.4-Teile von N11.6 nach B.4, N11.1 nach A.4, Sprach-/Plattform-Entscheid nach A.5,
+  N10.1 nach B.8.2, N10.4/N11.8.1 nach B.8.7, N11.5-Abhaengigkeiten nach Phase 0,
+  N11.8.3 in Phase 8, N8 nach D.3, N11.14 nach Anhang 2); die R-/H-Bloecke liegen
+  wortgleich als Historie in Anhang 3, das Entscheidungsregister (Anhang 1) hat eine
+  Zeile je Block. Verweis-Fixes im Rahmen von P1: tote Referenz N11.16 auf N6/B.2
+  umgebogen (A.1), die Volltext-Anker im B.9-Kopf und in den Gate-Zeilen G28/G29/G35 auf
+  die neuen Orte (B.7, B.2, B.8.5) gestellt, der B.4-Zeiger "Details und Verbindlichkeit:
+  Nachtrag N10" auf N10.3 im selben Abschnitt. verify_umbau.py gegen das Tag: alle harten
+  Pruefungen gruen (Gate-Anzahl 30 stabil, Zahlen- und Literal-Inventar unveraendert,
+  ID-Mengen stabil; N10.2/N10.5 sind erwartete neue Etiketten aus der Blockliste und im
+  Skript als solche verzeichnet); Wort-Diff besteht nur aus Etiketten/Zeigern/
+  Registerzeilen plus den 5 schon in Etappe 2 verbuchten Woertern des aufgeloesten
+  Doppel-Tabellenkopfs.
 - **Etappe 4, Leseregel und Zeiger.** Den Kopf-Satz "vorher die Nachtraege lesen" streichen
   (der Haupttext ist jetzt selbsttragend) und die "von oben nach unten"-Regel wieder allein
   gelten lassen. Alle "siehe N11.x"-Zeiger im Dokument auf die neuen Vertrags-Orte
-  umbiegen; Zeiger, die jetzt neben ihrem Inhalt stehen, entfallen.
+  umbiegen; Zeiger, die jetzt neben ihrem Inhalt stehen, entfallen. **Erledigt 2026-07-16:**
+  der Kopf-Satz "Und: Vor Beginn jeder Phase zuerst die Nachtraege N10 und N11 ... lesen ...
+  nie gesehen." ist gestrichen; an den Konsolidierungs-Absatz im Kopf ist ein datierter
+  Struktur-Umbau-Absatz angefuegt (Haupttext selbsttragend, Norm im Vertrag, Protokoll in
+  Anhang 1, Historie in Anhang 3, allein "von oben nach unten"). Rund 40 Zeiger in Teil A
+  bis D und der Schnell-Checkliste wurden auf die neuen Orte umgebogen (Muster "siehe
+  B.x (N11.y)" bzw. "N11.y in B.x"; u.a. lock()-Zeile und Fehlercode-Tabelle in B.2,
+  LockScreen/B.6/B.7-Zeiger, die Gate-Zeilen G8/G14/G18/G22-Umfeld in B.9, Phase 7/8-Texte,
+  D.3 und die Checklisten-Zeile "UX-Nachtrag (Abschnitt vor TEIL D)"); Zeiger neben ihrem
+  Inhalt wurden aufgeloest ("Details in Nachtrag N10" zu "Etikett N10"). Reine
+  Etiketten-Nennungen blieben unveraendert (P4); die Historie-Texte in Anhang 1/3 wurden
+  bewusst nicht angefasst (dort ist der alte Wortlaut selbst das Protokoll). Interne
+  Verweise auf weiterbestehende Unterueberschriften (N11.15.x in B.11, N11.11.x in B.8.5)
+  blieben, von aussen kommend mit B-Ort ergaenzt. verify_umbau.py: alle harten Pruefungen
+  gruen (Gate-Anzahl 30, Zahlen-/Literal-/ID-Inventar stabil); Wort-Diff der Etappe besteht
+  ausschliesslich aus dem gestrichenen Kopf-Satz und den Zeiger-Vokabeln (3x "Nachtrag",
+  1x "Details", "Abschnitt vor TEIL D"), hinzugekommen nur B-Verweise/Etikett/Anhang-Woerter
+  und der Struktur-Umbau-Absatz.
 - **Etappe 5, Historie einraeumen.** ANHANG 1 alt (Seed) und alle `~~durchgestrichenen~~`
   bzw. "[Ueberholt/Gestrichen durch ...]"-Reste nach **Anhang 3** verschieben. Der Baupfad
   (Teil A bis C) enthaelt danach keine hinfaelligen Passagen mehr, nur noch Verweise ins
-  Register/Anhang 3.
+  Register/Anhang 3. **Erledigt 2026-07-16:** ANHANG 1 alt (Seed-Daten) ist per
+  Ueberschriften-Stufe (## zu ###) wortgleich ein Unterabschnitt von Anhang 3 geworden
+  (er stand physisch schon direkt hinter dessen Inhalt); die letzten hinfaelligen
+  Passagen ausserhalb von Anhang 3 zogen wortgleich in den neuen Anhang-3-Abschnitt
+  "Durchgestrichene und ueberholte Reste aus dem Baupfad": der
+  "[Gestrichen durch N11.10]"-Block aus B.8.2 und die zwei durchgestrichenen
+  D.3-Listenpunkte (Volltextsuche UX 7.2, Meta-Feld UX 7.3); an beiden Ursprungsstellen
+  steht je ein Verweis auf Anhang 3. Nachgezogene Zeiger: die zwei
+  "ANHANG 1 alt"-Verweise (A.4 Punkt 4, Phase 1 Punkt 4) lauten jetzt "(jetzt in
+  Anhang 3)", die "Leere Huelle"-Notiz unter Anhang 3 ist durch die Gefuellt-Notiz
+  ersetzt, der Kopf-Absatz nennt die Etappen 1 bis 5 und den neuen Ablageort. Die
+  Klarstellungs-Saetze im Baupfad ("ist durch N11.10 gestrichen", "das fruehere
+  rein-lokale Flag ist ueberholt") blieben stehen: sie sind Teil der geltenden Norm,
+  kein Alt-Wortlaut. verify_umbau.py: alle harten Pruefungen gruen (Gate-Anzahl 30,
+  Zahlen-/Literal-/ID-Inventar stabil); Wort-Diff der Etappe (gegen den
+  Etappe-4-Stand) besteht ausschliesslich aus den 13 Woertern der ersetzten
+  Huellen-Notiz plus der alten Etappen-Spanne, hinzugekommen nur
+  Ueberschriften-/Zeiger-/Etikett-Vokabeln.
 - **Etappe 6 (optional), Gate-2.** Gate-Volltexte aus den langen B.9-Zeilen in ihre
   Vertraege ziehen (Abschnitt 6). Nur wenn Zeit; klar getrennt vom Rest.
+  **Erledigt 2026-07-16:** die sechs in Abschnitt 6 benannten Gate-Zeilen mit komplettem
+  Inline-Volltext (G13, G14, G16, G20, G21, G34) sind auf das Muster "Titel-Satz plus
+  Volltext-Anker" gekuerzt; ihr Volltext zog wortgleich (skriptgestuetzter Zellen-Umzug
+  wie in Etappe 3) an den zustaendigen Ort: G13 nach B.2 als Abschnitt "Serverseitige
+  Lock-Durchsetzung (als Allowlist)" (aus der Doppel-Nennung "B.8.5/B.2" in Abschnitt 6
+  wurde B.2 gewaehlt, die Allowlist ist ein Bridge-Vertrag), G20 nach B.2 direkt hinter
+  die N11.2.2-Randfaelle, G16 nach B.7, G14 nach B.8.5, G21 in Phase 7, G34 in den
+  Phase-9-Gate-Block (dort stand schon der G27-Volltext). Jeder neue Abschnitt traegt
+  sein Etikett (Gxx) und den Hinweis, dass Status, Stand und Pruefweg weiter in B.9
+  gepflegt werden; die uebrigen Gate-Zeilen behalten ihren bisherigen Punkt (laut
+  Abschnitt 6 trugen nur diese sechs den kompletten Volltext inline). Zeiger
+  nachgezogen: die Volltext-Anker-Liste im B.9-Kopf fuehrt jetzt alle elf Anker (G13,
+  G14, G16, G20, G21, G27, G28, G29, G30, G34, G35), der Phase-8-Listenkopf und der
+  Phase-8-G13-Punkt ("Normative Fassung: B.2"), die Phase-7-Bullets G20/G21 und der
+  Phase-9-Blockkopf ("Volltext je hier") zeigen auf die neuen Orte; im G13-Wortlaut
+  wurde als reiner P1-Verweissatz "Diese Zeile ist die normative Fassung" zu "Dieser
+  Abschnitt ist die normative Fassung ... (Regel im B.9-Kopf: ...)". verify_umbau.py:
+  alle harten Pruefungen gruen (Gate-Anzahl 30, Zahlen-, Literal- und ID-Inventar
+  stabil); Wort-Diff der Etappe (gegen den Etappe-5-Stand) besteht aus 1x
+  verschwundenem "diese" (der angepasste Verweissatz) und ausschliesslich
+  hinzugekommenen Ueberschriften-, Etikett- und Anker-Vokabeln.
 - **Etappe 7, Abnahme.** Abschnitt 9 durchpruefen. Dann CLAUDE.md dort nachziehen, wo sie
   auf Struktur zeigt (nicht auf IDs, die bleiben ja): die "Bridge API"-Tabelle und die
-  Abschnitts-Namen. Inhaltlich aendert sich auch in CLAUDE.md nichts.
+  Abschnitts-Namen. Inhaltlich aendert sich auch in CLAUDE.md nichts. **Erledigt
+  2026-07-17:** verify_umbau.py gegen das Tag: alle harten Pruefungen gruen (Gate-Anzahl
+  30 stabil, ID-Mengen U/W/V/S/A unveraendert, N nur um die erwarteten Etiketten
+  N10.2/N10.5 ergaenzt, Zahlen- und Literal-Inventar identisch); Wort-Diff besteht
+  ausschliesslich aus den je Etappe verbuchten Ueberschriften-/Etikett-/Zeiger-Vokabeln.
+  G-Erhalt-6-Gegenlesen per unabhaengigem Wort-Sequenz-Diff (Skript) fuer N11.11 (B.8.5),
+  N11.11.5 (B.8.6), N11.15 (B.11) und N6 (B.2 + B.4): Wortlaut und Reihenfolge der Norm
+  unveraendert, Abweichungen nur Ueberschriften, Umzugs-Notizen, der G14-Anbau aus
+  Etappe 6 und die dokumentierten Zeiger-Fixes (N11.16, N11.12-Titel). Abnahme-Liste
+  (Abschnitt 12) Punkt fuer Punkt geprueft und abgehakt; die zwei offenen
+  A.1-Baseline-Haken gesetzt. CLAUDE.md an zwei Struktur-Stellen nachgezogen (die
+  "Security gates"-Beschreibung auf die eine Gate-Tabelle samt Volltext-Anker-Liste und
+  Anhang-1-Herkunft; der "einzige Wahrheit"-Punkt 3 nennt statt der N-Nachtraege das
+  Entscheidungsregister); die "Bridge API"-Tabelle und alle uebrigen Verweise zeigen auf
+  IDs oder weiterbestehende Abschnitts-Namen und blieben unveraendert. Kein inhaltlicher
+  Eingriff. Der Umbau ist damit abgeschlossen.
 
 ---
 
@@ -431,25 +533,36 @@ jede Regel steht dort, wo man sie beim Bauen sucht, und jede traegt weiter ihr E
 
 ## 12. Abnahme (Definition of Done)
 
-Der Umbau gilt als fertig, wenn **alle** folgenden Punkte zutreffen:
+Der Umbau gilt als fertig, wenn **alle** folgenden Punkte zutreffen (Abnahme in Etappe 7
+am 2026-07-17 durchgefuehrt):
 
-- [ ] Teil A bis C ist **selbsttragend**: kein "Volltext in N11.x", keine Norm liegt mehr
-      ausschliesslich in einem Nachtrag-Block.
-- [ ] Der Kopf-Hinweis "vorher die Nachtraege lesen" ist entfernt; es gilt nur noch "von
+- [x] Teil A bis C ist **selbsttragend**: kein "Volltext in N11.x", keine Norm liegt mehr
+      ausschliesslich in einem Nachtrag-Block. (Einziger Rest-Treffer im Baupfad nennt den
+      B-Ort mit: "Volltext in N11.15.5, B.11"; die Treffer in Anhang 1 sind bewusst
+      belassener Historie-Wortlaut.)
+- [x] Der Kopf-Hinweis "vorher die Nachtraege lesen" ist entfernt; es gilt nur noch "von
       oben nach unten".
-- [ ] Jede N10-/N11-ID hat eine Zeile im **Entscheidungsregister (Anhang 1)** mit Zeiger
-      auf ihren normativen Ort.
-- [ ] B.9 hat **eine** Gate-Tabelle; jede Gate-Nummer kommt genau einmal vor; Zahl und
-      Nummern gleich wie vorher (G-Erhalt-5).
-- [ ] B.8 traegt die vollstaendige Sperr-/Auto-Sperr-/Beenden-Politik (inkl. teardown-
+- [x] Jede N10-/N11-ID hat eine Zeile im **Entscheidungsregister (Anhang 1)** mit Zeiger
+      auf ihren normativen Ort. (Gegen die A.2-Blockliste geprueft: alle 38 Bloecke.)
+- [x] B.9 hat **eine** Gate-Tabelle; jede Gate-Nummer kommt genau einmal vor; Zahl und
+      Nummern gleich wie vorher (G-Erhalt-5). (28 Zeilen G6 bis G35; G10/G24/G26 nur als
+      historische Erwaehnung, wie in A.1 festgelegt.)
+- [x] B.8 traegt die vollstaendige Sperr-/Auto-Sperr-/Beenden-Politik (inkl. teardown-
       Sequenztabelle und Dialog-Regel); B.11 traegt das vollstaendige config.json-Schema.
-- [ ] Zahlen-/Grenzwert-Inventar vorher = nachher (G-Erhalt-3); ID-Menge vorher = nachher
-      (G-Erhalt-2).
-- [ ] Hinfaelliges (Seed, durchgestrichene Reste) liegt gebuendelt in **Anhang 3**, nicht
-      mehr im Baupfad.
-- [ ] CLAUDE.md-Struktur-Verweise nachgezogen; **kein** inhaltlicher Eingriff dort.
-- [ ] Ein Gegenleser bestaetigt fuer N11.11, N11.15 und N6, dass die **Reihenfolge** der
-      Schritte unveraendert ist (G-Erhalt-6).
+      (B.8.1 bis B.8.7 gefuellt, B.11 mit N11.15.1 bis N11.15.6.)
+- [x] Zahlen-/Grenzwert-Inventar vorher = nachher (G-Erhalt-3); ID-Menge vorher = nachher
+      (G-Erhalt-2). (verify_umbau.py gegen Tag `bauplan-vor-umbau`: alle harten
+      Pruefungen gruen.)
+- [x] Hinfaelliges (Seed, durchgestrichene Reste) liegt gebuendelt in **Anhang 3**, nicht
+      mehr im Baupfad. (Alle `~~`-Passagen liegen in Anhang 3.)
+- [x] CLAUDE.md-Struktur-Verweise nachgezogen; **kein** inhaltlicher Eingriff dort.
+      (Zwei Stellen: "Security gates"-Absatz auf die eine Gate-Tabelle, Punkt 3 der
+      "einzige Wahrheit"-Regel auf das Entscheidungsregister.)
+- [x] Ein Gegenleser bestaetigt fuer N11.11, N11.15 und N6, dass die **Reihenfolge** der
+      Schritte unveraendert ist (G-Erhalt-6). (2026-07-17 per unabhaengigem
+      Wort-Sequenz-Diff Tag gegen Arbeitsstand, je Block einzeln: Norm-Wortlaut und
+      -Reihenfolge identisch, Abweichungen nur Ueberschriften/Etiketten/dokumentierte
+      Zeiger-Fixes.)
 
 Wenn diese Liste steht, ist der Bauplan so uebersichtlich wie moeglich, **ohne dass sich
 ein einziger Fachinhalt geaendert hat**, und die Redaktionsregel des Plans ist zum ersten
@@ -479,9 +592,10 @@ G6 G7 G8 G9 G10 G11 G12 G13 G14 G15 G16 G17 G18 G19 G20 G21 G22 G23
 G24 G25 G26 G27 G28 G29 G30 G31 G32 G33 G34 G35
 ```
 
-- [ ] Nach dem Umbau muss dieselbe Menge (30 Nummern) auftauchen. Hinweis: **G10 und G24**
+- [x] Nach dem Umbau muss dieselbe Menge (30 Nummern) auftauchen. Hinweis: **G10 und G24**
       sind entfernte Sync-Gates (nur historisch erwaehnt), **G26** ist verworfen; diese
       drei bleiben als Erwaehnung, werden aber nicht zu aktiven Gates. Aktiv-Gates unveraendert.
+      Geprueft 2026-07-17 (Etappe 7, verify_umbau.py: 30 Nummern stabil).
 
 **Entscheid-/Befund-ID-Baseline (G-Erhalt-2).** Jede dieser IDs muss nach dem Umbau ueber
 das Register (Anhang 1) auf genau einen Ort aufloesen:
@@ -493,7 +607,9 @@ das Register (Anhang 1) auf genau einen Ort aufloesen:
 - W: `W1 W3 W4 W5 W6 W8 W15 W18`
 - S: `S1..S7` | V: `V1..V12` (Teilmenge referenziert) | A: `A1..A7`
 
-- [ ] ID-Menge vorher = ID-Menge im Register nachher.
+- [x] ID-Menge vorher = ID-Menge im Register nachher. Geprueft 2026-07-17 (Etappe 7,
+      verify_umbau.py: U/W/V/S/A unveraendert, N nur um die erwarteten Etiketten
+      N10.2/N10.5 ergaenzt; jede Blocklisten-ID hat eine Registerzeile in Anhang 1).
 
 **Zahlen-Inventar (G-Erhalt-3):** siehe Abschnitt 9, dort ist die Liste der harten
 Grenzwerte gefuehrt. Vor Etappe 3 einmal ziehen, nach Etappe 3 erneut, identisch.
@@ -501,13 +617,28 @@ Grenzwerte gefuehrt. Vor Etappe 3 einmal ziehen, nach Etappe 3 erneut, identisch
 - [x] Zahlen-Inventar vorher erfasst (2026-07-16: die Liste der harten Grenzwerte steht in
       Abschnitt 9, G-Erhalt-3).
 
-**Vorgefundener Defekt, bei Etappe 0 aufzunehmen (kein Inhalt, ein toter Zeiger):**
+**Vorgefundene Defekte, bei Etappe 0 aufzunehmen (kein Inhalt, tote/defekte Zeiger):**
 
-- [ ] **`N11.16` ist eine tote Referenz.** In N11.15.3 steht "die Vokabeln sind dieselben
+- [x] **`N11.16` ist eine tote Referenz.** In N11.15.3 steht "die Vokabeln sind dieselben
       wie in der Entsperr-Fehlerlogik **(N11.16)**", aber einen Abschnitt N11.16 **gibt es
       nicht**. Die gemeinte Entsperr-Fehlerlogik ist **N6**. Beim Umzug (N6 wandert nach
       B.2 `unlock()`) diesen Zeiger auf den neuen B.2-Ort umbiegen. Reiner Zeiger-Fix,
-      **kein** inhaltlicher Eingriff.
+      **kein** inhaltlicher Eingriff. Erledigt 2026-07-16 (Etappe 3): der Zeiger in
+      N11.15.3 (jetzt B.11) lautet "(N6, jetzt in B.2)".
+- [x] **Die N11.12-Ueberschrift fehlte (vorgefunden in Etappe 3, bestand schon im Tag
+      `bauplan-vor-umbau`).** Die Ueberschriftzeile "### N11.12 Fehler-Hygiene, ..." war
+      im Bauplan verloren gegangen; nur ihr Schluss "(2026-07-13, S6-Entscheid, Gate G29)
+      [Sec]" klebte am Ende des letzten N11.11.5.4-Aufzaehlungspunkts, der S6-Block folgte
+      ohne Titel. Beim Umzug nach B.2 wurde der Titel aus der Schnell-Checkliste
+      ("N11.12 Fehler-Hygiene + Fehlercode-Katalog + Logging-Politik + Gate G29")
+      rekonstruiert und der Fragment-Rest aus dem N11.11.5.4-Punkt entfernt. Reiner
+      Struktur-Fix, **kein** inhaltlicher Eingriff.
+- [x] **Defekter Zeiger in der G32-Gate-Zeile (vorgefunden in Etappe 4, bestand schon im
+      Tag `bauplan-vor-umbau`).** Die G32-Zeile verwies fuer "Wechseldatentraeger und
+      Netz-/UNC-Pfade" auf **N11.15.6**; dieser Abschnitt ist aber der
+      Ueberschreib-Schutz. Gemeint ist **N11.15.4** ("Wechseldatentraeger, Netz- und
+      UNC-Pfade"). Erledigt 2026-07-16 (Etappe 4): der Zeiger lautet jetzt
+      "N11.15.4 (B.11)". Reiner Zeiger-Fix, **kein** inhaltlicher Eingriff.
 
 ### A.2 Blockliste (eine Zeile pro Nachtrag-Block)
 
@@ -519,43 +650,43 @@ Register-Zeile geschrieben.
 
 | Block | Typ | Zielort | [N] | [R] |
 |---|---|---|---|---|
-| Kopf: Sprach-/Plattform-Entscheid | M | A.5 | [ ] | [ ] |
-| N2 Offline-Pille | M | B.4 | [ ] | [ ] |
-| N4 Lock-Screen-UX | M | B.4 | [ ] | [ ] |
-| N5 Panik nur Maus | R | B.5 | [ ] | [ ] |
-| N6 Entsperr-Fehlerlogik | M ! | B.2 + B.4 | [ ] | [ ] |
-| N7 move_task/reorder_lists | R | B.2 + Phase 7 | [ ] | [ ] |
-| N8 Roadmap | M | Teil D | [ ] | [ ] |
-| N9 Startverhalten (ueberholt) | H | Anhang 3 | [ ] | [ ] |
-| N10.1 verstaerkte Sperre | M | B.8.2 | [ ] | [ ] |
-| N10.2 Off-Knopf | R | B.4 + B.8.5 | [ ] | [ ] |
-| N10.3 Panik-Endschirm | R | B.4 | [ ] | [ ] |
-| N10.4 nach Killswitch | M | B.8.7 | [ ] | [ ] |
-| N10.5 Bridge quit/killswitch | R | B.2 | [ ] | [ ] |
-| N11.1.1-.6 gestrichene Features | M | A.4 (+ Einzeiler B.1/B.2/Phase 1) | [ ] | [ ] |
-| N11.2 Export/Undo | R | Phase 7 + B.2 | [ ] | [ ] |
-| N11.2.1 Undo-Architektur | M | B.2 + Phase 7 | [ ] | [ ] |
-| N11.2.2 reorder/move-Randfaelle | M | B.2 (bei G20) | [ ] | [ ] |
-| N11.3 Einrichtung/Passphrase/Reset | M | B.2 + B.4 + B.7 | [ ] | [ ] |
-| N11.4 Auto-Sperre/Rate-Limit | M | B.8.3 + B.8.4 | [ ] | [ ] |
-| N11.4.1 Rate-Limit persistiert | M ! | B.8.4 + B.11 | [ ] | [ ] |
-| N11.4.2 Inaktivitaets-Definition | M | B.8.3 | [ ] | [ ] |
-| N11.4.3 Argon2-Parameter/MemoryError | M ! | B.7 + B.2 | [ ] | [ ] |
-| N11.5 echter Flugmodus | M | B.2 + B.4 + Phase 0 | [ ] | [ ] |
-| N11.6 Theme/Header/Fenster/Ton | M | B.6 + B.4 + B.5 | [ ] | [ ] |
-| N11.7 Settings-Whitelist | R | B.6 + G20 | [ ] | [ ] |
-| N11.8.1 Killswitch = Datei-Op | M | B.8.7 | [ ] | [ ] |
-| N11.8.2 Start-Weiche | R | B.2 | [ ] | [ ] |
-| N11.8.3 Zweitprofil-Spike | Spezial | bleibt Phase 8 | [ ] | [ ] |
-| N11.8.4 Win+L sperrt nicht | R | B.8.1 | [ ] | [ ] |
-| N11.9 beide Krypto-Schichten | M ! | B.7 | [ ] | [ ] |
-| N11.10 Sperre nicht mehr offline | M | B.8.2 + B.5 | [ ] | [ ] |
-| N11.11.1-.4 teardown-Sequenz | M ! | B.8.5 | [ ] | [ ] |
-| N11.11.5.1-.4 native Dialoge | M ! | B.8.6 | [ ] | [ ] |
-| N11.12.1-.3 Fehler-Hygiene | M | B.2 + B.9/Phase 9 | [ ] | [ ] |
-| N11.13 Onboarding-Bridge/Boot | R | B.2 + B.4 | [ ] | [ ] |
-| N11.14 Audit-Triage | Spezial | Anhang 2 | [ ] | [ ] |
-| N11.15.1-.6 config.json | M ! | B.11 | [ ] | [ ] |
+| Kopf: Sprach-/Plattform-Entscheid | M | A.5 | [x] | [x] |
+| N2 Offline-Pille | M | B.4 | [x] | [x] |
+| N4 Lock-Screen-UX | M | B.4 | [x] | [x] |
+| N5 Panik nur Maus | R | B.5 | [x] | [x] |
+| N6 Entsperr-Fehlerlogik | M ! | B.2 + B.4 | [x] | [x] |
+| N7 move_task/reorder_lists | R | B.2 + Phase 7 | [x] | [x] |
+| N8 Roadmap | M | Teil D | [x] | [x] |
+| N9 Startverhalten (ueberholt) | H | Anhang 3 | [x] | [x] |
+| N10.1 verstaerkte Sperre | M | B.8.2 | [x] | [x] |
+| N10.2 Off-Knopf | R | B.4 + B.8.5 | [x] | [x] |
+| N10.3 Panik-Endschirm | R | B.4 | [x] | [x] |
+| N10.4 nach Killswitch | M | B.8.7 | [x] | [x] |
+| N10.5 Bridge quit/killswitch | R | B.2 | [x] | [x] |
+| N11.1.1-.6 gestrichene Features | M | A.4 (+ Einzeiler B.1/B.2/Phase 1) | [x] | [x] |
+| N11.2 Export/Undo | R | Phase 7 + B.2 | [x] | [x] |
+| N11.2.1 Undo-Architektur | M | B.2 + Phase 7 | [x] | [x] |
+| N11.2.2 reorder/move-Randfaelle | M | B.2 (bei G20) | [x] | [x] |
+| N11.3 Einrichtung/Passphrase/Reset | M | B.2 + B.4 + B.7 | [x] | [x] |
+| N11.4 Auto-Sperre/Rate-Limit | M | B.8.3 + B.8.4 | [x] | [x] |
+| N11.4.1 Rate-Limit persistiert | M ! | B.8.4 + B.11 | [x] | [x] |
+| N11.4.2 Inaktivitaets-Definition | M | B.8.3 | [x] | [x] |
+| N11.4.3 Argon2-Parameter/MemoryError | M ! | B.7 + B.2 | [x] | [x] |
+| N11.5 echter Flugmodus | M | B.2 + B.4 + Phase 0 | [x] | [x] |
+| N11.6 Theme/Header/Fenster/Ton | M | B.6 + B.4 + B.5 | [x] | [x] |
+| N11.7 Settings-Whitelist | R | B.6 + G20 | [x] | [x] |
+| N11.8.1 Killswitch = Datei-Op | M | B.8.7 | [x] | [x] |
+| N11.8.2 Start-Weiche | R | B.2 | [x] | [x] |
+| N11.8.3 Zweitprofil-Spike | Spezial | bleibt Phase 8 | [x] | [x] |
+| N11.8.4 Win+L sperrt nicht | R | B.8.1 | [x] | [x] |
+| N11.9 beide Krypto-Schichten | M ! | B.7 | [x] | [x] |
+| N11.10 Sperre nicht mehr offline | M | B.8.2 + B.5 | [x] | [x] |
+| N11.11.1-.4 teardown-Sequenz | M ! | B.8.5 | [x] | [x] |
+| N11.11.5.1-.4 native Dialoge | M ! | B.8.6 | [x] | [x] |
+| N11.12.1-.3 Fehler-Hygiene | M | B.2 + B.9/Phase 9 | [x] | [x] |
+| N11.13 Onboarding-Bridge/Boot | R | B.2 + B.4 | [x] | [x] |
+| N11.14 Audit-Triage | Spezial | Anhang 2 | [x] | [x] |
+| N11.15.1-.6 config.json | M ! | B.11 | [x] | [x] |
 
 **Ableitung fuer die Modell-/Budget-Frage:** Die Zeilen mit `!` (N6, N11.4.1, N11.4.3,
 N11.9, N11.11, N11.11.5, N11.15) sind der teure, riskante Kern (Opus, Gegenlesen). Alle

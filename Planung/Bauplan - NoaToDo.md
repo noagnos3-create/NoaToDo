@@ -21,10 +21,6 @@
 >
 > Regel für die ausführende KI: **Eine Phase nach der anderen.** Nicht
 > vorgreifen. Nach jeder Phase die Abnahme-Kriterien prüfen, dann erst weiter.
-> **Und: Vor Beginn jeder Phase zuerst die Nachträge N10 und N11 (das
-> Änderungsprotokoll am Ende von Teil C) lesen**, erst danach die Phase
-> abarbeiten. Wer nur von oben nach unten liest, hat die spätesten
-> Entscheidungen nie gesehen.
 >
 > **Konsolidierungs-Stand und Redaktionsregel (2026-07-13, löst Plananalyse S3).**
 > Dieses Dokument ist in Schichten gewachsen (Urtext, Audit-Nachtrag in B.9, N10,
@@ -37,6 +33,15 @@
 > Haupttext eingearbeitet (Verträge, Gates, Phasen), der Nachtrag hält nur noch
 > das Änderungsprotokoll fest (was entschieden wurde, wann, warum). Es werden
 > keine neuen Textschichten mehr angehängt, die den Haupttext überschreiben.
+>
+> **Struktur-Umbau (2026-07-16, Umbau-Etappen 1 bis 5):** Die Nachträge sind seither
+> vollständig in den Haupttext eingearbeitet: jede Norm steht in ihrem Vertrag (Teil B)
+> bzw. ihrer Phase (Teil C), das Änderungsprotokoll im Entscheidungsregister (Anhang 1),
+> Historisches in Anhang 3. Der Haupttext ist selbsttragend; es gilt allein die
+> Leserichtung von oben nach unten, und die frühere Kopf-Anweisung „vor jeder Phase
+> zuerst die Nachträge lesen" ist gestrichen.
+> Seit Etappe 5 liegen auch die früher als gestrichen/überholt markierten
+> Alt-Wortlaute und ANHANG 1 alt (Seed-Daten) gebündelt in Anhang 3.
 
 ---
 
@@ -101,6 +106,80 @@ weniger Angriffsfläche, passt zum local-first-Sicherheitsgedanken. Das ist
 > aus dem Konzept direkt verwenden, dann entfallen die Render-Funktionen, aber die
 > Bridge-Verträge (B.2) und das Backend (Phasen 1-3, 8-9) bleiben gleich. Default
 > dieses Plans = Vanilla.
+
+### A.4 Global gestrichene Features
+
+*(Wortgleich hierher umgezogen in Umbau-Etappe 3 aus „N11.1 Ersatzlos gestrichene Features“, Nachtrag N11 vom 2026-07-09. Etikett **N11.1**; Register: Anhang 1.)*
+
+1. **Benachrichtigungen komplett entfernt** (wie zuvor der Microsoft-Sync). Es gibt
+   keine Benachrichtigungen mehr, weder In-App noch Windows-Toasts: kein `notify.py`,
+   keine Abhaengigkeit `winotify`, kein `on_notification`-Event, keine Glocken-Pille im
+   Header, keine `notify`/`notifyInApp`/`notifyWindows`-Settings. Die eigene Phase dafuer
+   ist entfallen und die Phasen wurden auf 0 bis 9 umnummeriert. In dieser Doku-Fassung
+   bereits vollzogen; einzige verbleibende Konsequenz: die **Header-Mitte bleibt leer**
+   (Brand links, Avatar rechts).
+
+2. **Backups gestrichen.** Kein automatisches Backup, kein Restore, kein Backup-Ordner.
+   Datensicherung laeuft ausschliesslich ueber den manuellen Export (Phase 7).
+   Ueberschreibt: D.3 Punkt "Automatische lokale Backups" und alle "Backup written"-
+   Beispiele. Die `.bak`-Generation aus Gate G16 bleibt, sie ist reine Absturzsicherung
+   beim atomaren Schreiben, **kein** Nutzer-Backup.
+
+3. **Meta-Feld der Aufgabe entfernt.** Eine Aufgabe hat nur noch `text` und `done`.
+   Das Freitext-Feld `meta` (bisher z.B. Buch-Autor) faellt ueberall weg: Anzeige
+   (keine Meta-Zeile mehr), Inline-Edit (nur noch Textfeld), `add_task`/`edit_task`
+   (kein `meta`-Argument/Feld mehr), Export (keine Meta-Klammer). In der DB wird die
+   Spalte nicht mehr verwendet. Ueberschreibt: B.1 (`tasks.meta`), B.2
+   (`add_task(list_id, text, meta?)` wird `add_task(list_id, text)`; `edit_task` nur noch
+   Text), B.4 (Meta-Zeile in `renderMain`/`renderTask`), Phase 6.5 Punkt 1 (Meta-Eingabe),
+   Phase 7 Punkt 1 ("Meta in Klammern"), G20/G21 (Meta-Laenge/Meta-Newline entfallen),
+   N8 "Meta-Feld benennen".
+
+4. **Demo-Seed-Daten entfernt.** Ein frischer Tresor startet **immer leer** (Erststart,
+   nach Reset, nach Killswitch). Es werden keine Beispiel-Listen mehr eingespielt; nur
+   die Default-Settings werden geschrieben. Der leere Zustand bekommt einen freundlichen
+   Empty-State (Hinweis "Create your first list"). Ueberschreibt: Phase 1 Punkt 4,
+   `seed_if_empty`-Demoinhalt, ANHANG 1 alt (jetzt in Anhang 3).
+
+5. **JSON-Export entfernt.** Es gibt nur noch `txt` und `md`. Ueberschreibt: B.2
+   (`export_list(id, format)` Enum wird `'md'|'txt'`), Phase 7 Punkt 1.
+
+6. **Faelligkeiten und Erinnerungen ersatzlos gestrichen (Entscheid 2026-07-13, W15).**
+   Eine Aufgabe hat **kein** Faelligkeitsdatum, kein Start-/Enddatum, keine Uhrzeit,
+   keine Wiederholung, keine Erinnerung, keine Schlummerfunktion und keine
+   "heute/ueberfaellig"-Sicht. Das frueher vorhandene Feld `due_at` ist aus Schema und
+   Bridge entfernt und wird **nicht** wieder eingefuehrt. Eine Aufgabe ist genau `text`
+   + `done` (siehe Punkt 3).
+   - **Nicht gebaut werden:** DB-Spalte `due_at` (oder aehnlich benannt), ein
+     Datums-Argument in `add_task`/`edit_task`, ein Datumspicker oder Datums-Chip in der
+     Aufgabenzeile bzw. im Inline-Edit, Sortierung/Filter/Gruppierung nach Datum, eine
+     Faelligkeits-Spalte im Export, ein Hintergrund-Timer, der Termine prueft.
+   - **Warum:** Faelligkeiten sind ohne Benachrichtigungen (Punkt 1: ersatzlos gestrichen)
+     weitgehend zahnlos, und Benachrichtigungen kommen nicht zurueck. Die App ist eine
+     ruhige, lokale Liste, kein Terminplaner.
+   - **Ueberschreibt ausdruecklich das UX-Audit:** Dort stehen Faelligkeiten als
+     "Produktluecke Nummer 1". Dieser Punkt hat Vorrang. Wer das Audit abarbeitet,
+     ueberspringt diesen Befund und baut `due_at` **nicht** ein. Kein Spekulationsraum:
+     im Kern-Scope gibt es keine Termine.
+   - **Spaeter denkbar, aber nicht jetzt:** als reine Roadmap-Idee in D.3 notiert
+     (Anzeige-only, ohne Erinnerungen). Roadmap heisst: nicht Teil des Bauplans, kein
+     Schema-Platzhalter, keine Vorbereitung im Code. Erst wenn es einen neuen,
+     ausdruecklichen Entscheid gibt.
+
+
+### A.5 Sprach- und Plattform-Basis
+
+*(Wortgleich hierher umgezogen in Umbau-Etappe 3 aus dem Kopf des UX-Nachtrags vom 2026-06-13. Register: Anhang 1.)*
+
+**Sprach- und Plattform-Entscheidung (verbindlich, 2026-06-13):**
+- **UI-Sprache: durchgehend Englisch.** Die frühere Überlegung „Deutsch" wurde
+  verworfen. Alle sichtbaren UI-Strings sind englisch; die zuvor gemischten deutschen
+  Tooltips wurden am 2026-06-13 angeglichen (`frontend/app.js`, `index.html` jetzt
+  `lang="en"`). Code-Kommentare bleiben Deutsch (Entwickler-Sprache), das ist keine UI.
+- **Zielplattform: ausschließlich Windows.** In UI und Plan kommen **keine**
+  Mac-Tastensymbole (⌘, ⇧) mehr vor; Tastenkürzel werden als `Ctrl`/`Shift` dargestellt.
+  B.4, B.5 und B.8 wurden entsprechend bereinigt.
+
 
 ---
 
@@ -195,9 +274,9 @@ Das ist die **vollständige Methodenliste**, die `backend/api.py` bereitstellt u
 | `activity_ping()` | (keine) | `{ ok:true }` | Meldet Nutzer-Eingabe im App-Fenster und setzt den Auto-Sperr-Timer zurück (N11.4.2). Vom Frontend **gedrosselt** (führende Flanke, danach höchstens alle 30 s). Setzt **nur** `last_activity` auf die monotone Backend-Uhr, nimmt keinen Zeitwert entgegen und kann den Timer nicht abschalten. **Nicht** in `ALLOWED_WHEN_LOCKED`: gesperrt liefert sie `locked` und rührt den Timer nicht an (G13). Kein anderer Bridge-Aufruf zählt als Aktivität |
 | `choose_vault_dir()` | (keine) | `{ path:str, has_vault:bool }` oder `{ error:'canceled' }` | Onboarding-Schritt 1: öffnet den **nativen Ordner-Dialog** im Backend (`create_file_dialog`, FOLDER_DIALOG) und gibt den gewählten Ordner zurück. Prüft Schreibbarkeit und warnt bei Cloud-Sync-Pfaden (OneDrive/Dropbox, G32). **Liegt im gewählten Ordner schon eine `tasks.db.enc`, meldet er `has_vault:true`; das Onboarding bietet dann NICHT „neuen Tresor anlegen" an, sondern nur „diesen Tresor öffnen" (Pfad in `config.json` schreiben, dann Lock-Screen), damit ein bestehender Tresor nie überschrieben wird (N11.15.6).** Legt **nichts** an. Im Onboarding erlaubt |
 | `create_vault(path, passphrase)` | `str,str` | `{ ok:true }` | Onboarding-Schritt 2: legt den leeren Tresor an: Passphrase prüfen (**nur** Mindestlänge 12, N11.3, sonst `invalid`), 32-Byte-Pepper erzeugen und im Credential Manager ablegen (G18), Salt + Argon2-Parameter erzeugen, Schlüssel ableiten (G15), leere DB anlegen (nur Default-Settings, keine Demo-Daten, N11.1.4), als `tasks.db.enc` unter `path` schreiben (G16, atomar über `.tmp` + `os.replace`) und den Pfad in `config.json` speichern. **Bricht mit `invalid` ab, falls unter `path` schon eine `tasks.db.enc` liegt: ein bestehender Tresor wird NIE überschrieben (Datenverlust-Schutz, N11.15.6). Diesen Fall fängt regulär schon `choose_vault_dir()` ab (`has_vault:true`); der Backend-Riegel ist die letzte Sicherung gegen einen Aufruf an der UI vorbei.** Danach ist die App **entsperrt**. Im Onboarding erlaubt |
-| `change_passphrase(old, new)` | `str,str` | `{ ok:true }` | Passphrase in den Einstellungen ändern (N11.3). Falsches `old` → `passphrase` (Rate-Limit wie beim Entsperren, N11.4), zu kurzes `new` → `invalid`. Der Tresor wird mit **frischem Salt und frischer Nonce** neu verpackt; der Pepper bleibt (er ist konto-, nicht passphrase-gebunden). **Nur entsperrt aufrufbar.** Die Behandlung der `.bak`-Generation (sie trägt sonst weiter den mit der alten Passphrase lesbaren Stand) ist Befund U8 und noch offen |
+| `change_passphrase(old, new)` | `str,str` | `{ ok:true }` | Passphrase in den Einstellungen ändern (N11.3). Falsches `old` → `passphrase` (Rate-Limit wie beim Entsperren, N11.4), zu kurzes `new` → `invalid`. Der Tresor wird mit **frischem Salt und frischer Nonce** neu verpackt; der Pepper bleibt (er ist konto-, nicht passphrase-gebunden). **Nur entsperrt aufrufbar.** Die `.bak`-Generation (sie trägt sonst weiter den mit der alten Passphrase lesbaren Stand) wird im selben Zug mit dem **neuen** Schlüssel neu geschrieben oder über den Secure-Delete-Pfad entfernt; nach dem Wechsel ist keine Datei mehr mit der alten Passphrase lesbar, und die Argon2-Parameter werden auf den G8-Soll-Stand gehoben (Befund U8, entschieden 2026-07-13; die vier Details a bis d stehen im N11.3-Abschnitt unten in B.2) |
 | `reset_vault()` | (keine) | `{ ok:true }` | **Reset vom Lock-Screen** (N11.3): der Ausweg für die vergessene Passphrase. Läuft die gemeinsame Sequenz mit `reason='reset'` (N11.11): Tresor-Datei samt `.bak`, Vault-Metadaten und der DPAPI-Pepper werden gelöscht, danach startet das Onboarding neu (Ort wählen, neue Passphrase, frischer Pepper). **Wischt alle Daten unwiderruflich** und ist deshalb im UI wie der Killswitch abgesichert (Bestätigung, dann `RESET` tippen). Gesperrt erlaubt (G13-Allowlist), braucht keine Schlüssel |
-| `lock()` | (keine) | `{ locked:true }` | App sperren; seit 2026-07-08 verstärkt: erst Raum-Bereinigung wie bei Panik (Ansicht leeren; seit N11.10 OHNE offline zu schalten), dann Lock-Screen, nichts wird gelöscht (siehe N10, N11.10) |
+| `lock()` | (keine) | `{ locked:true }` | App sperren; seit 2026-07-08 verstärkt: erst Raum-Bereinigung wie bei Panik (Ansicht leeren; seit N11.10 OHNE offline zu schalten), dann Lock-Screen, nichts wird gelöscht (siehe B.8.2; Etiketten N10, N11.10) |
 | `unlock(passphrase)` | `str` | `{ ok:bool }` | Entsperren; danach wird der Zustand frisch per `get_state()` geladen (der Raum war geleert) |
 | `panic()` | (keine) | `{ locked:true }` | Emergency: Raum bereinigen + offline; der Flow endet im Endschirm mit Finish/Killswitch, zurück in die App führt kein Weg (N10) |
 | `quit_app()` | (keine) | `{ ok:true }` | App sauber beenden (Off-Knopf des Lock-Screens, „Finish" im Panik-Endschirm, Abschluss des Killswitch); Phase 8: auf diesem Pfad vorher Spuren sicher wischen (G14/G25) |
@@ -227,7 +306,7 @@ des Erfolgsobjekts `{ error: "code", message: "…", ref: "…" }` liefern.
 | `not_found` | Unbekannte ID (Liste/Aufgabe existiert nicht mehr) | „Item not found." | Toast, danach `get_state()` neu laden (die Ansicht war veraltet) |
 | `invalid` | Argument verletzt die Validierung aus G20 (falscher Typ, unbekannter Settings-Key, unbrauchbare ID) | „Invalid input." | Toast; die Eingabe bleibt stehen, damit sie korrigiert werden kann |
 | `locked` | App ist gesperrt, Methode steht nicht in `ALLOWED_WHEN_LOCKED` (G13) | „App is locked." | **stumm** (kein Toast): Frontend zeigt den Lock-Screen. Der Code ist im Normalbetrieb ein Renn-Fall (z.B. Auto-Lock während einer laufenden Aktion) und keine Nutzer-Fehlermeldung |
-| `passphrase` | `unlock()`: falsche Passphrase (AEAD-Tag schlägt fehl, G15) | „Wrong passphrase." | **kein Toast**, sondern die Fehleranzeige im Lock-Screen (N4/N6), plus Rate-Limit-Ladder aus N11.4 |
+| `passphrase` | `unlock()`: falsche Passphrase (AEAD-Tag schlägt fehl, G15) | „Wrong passphrase." | **kein Toast**, sondern die Fehleranzeige im Lock-Screen (N4/N6), plus Rate-Limit-Ladder aus B.8.4 (N11.4) |
 | `rate_limited` | `unlock()`: Sperrzeit der Ladder läuft noch; zusätzliches Feld `retry_in` (Sekunden) | „Too many attempts." | **kein Toast**, sondern Countdown im Lock-Screen; Eingabefeld deaktiviert |
 | `vault` | Tresor-Datei fehlt, ist beschädigt oder der Pepper aus dem Credential Manager ist weg (Windows-Konto verloren, N11.3) | „Vault cannot be opened." | **kein Toast**, sondern der Boot-/Entsperr-Fehlerbildschirm (N6) mit den Auswegen Wiederholen und Reset |
 | `canceled` | Nutzer hat einen nativen Dialog abgebrochen (Save-Dialog des Exports) | „Canceled." | **stumm** (kein Toast, kein Fehlerbild): ein Abbruch ist kein Fehler |
@@ -237,7 +316,9 @@ des Erfolgsobjekts `{ error: "code", message: "…", ref: "…" }` liefern.
 
 Diese Tabelle ist die einzige Wahrheit für Fehlercodes. Wer einen Code hinzufügt,
 ergänzt ihn hier **und** in der Frontend-Behandlung; ein Code ohne Zeile in dieser
-Tabelle darf nicht ans Frontend gehen. Ringpuffer und Logging-Politik: siehe N11.12.
+Tabelle darf nicht ans Frontend gehen. Ringpuffer und Logging-Politik: siehe den
+Abschnitt „Fehler-Hygiene, Fehlercode-Katalog und Logging-Politik" (Etikett N11.12)
+unten in B.2.
 
 **Toast-Politik auf einen Blick (löst U23, präzisiert den früheren Pauschalsatz „das
 Frontend zeigt das als Toast"):** Ein Toast erscheint **nur** bei `not_found`, `invalid`,
@@ -248,6 +329,425 @@ die haben ihre **eigene Darstellung im Lock-/Fehlerbildschirm** (N4/N6), nie ein
 Onboarding-**Boot-Zustand** aus `get_boot_state()` (N11.8.2, U7) und damit ebenfalls
 toastfrei. Ein fehlender oder beschädigter Tresor **zur Laufzeit** ist dagegen `vault`
 (Fehlerbildschirm N6).
+
+#### Serverseitige Lock-Durchsetzung (als Allowlist) (Etikett G13) [Sec]
+
+*(Wortgleich hierher gezogen in Umbau-Etappe 6 aus der G13-Zeile der B.9-Gate-Tabelle; Status, Stand und Pruefweg des Gates stehen weiter in B.9.)*
+
+**Serverseitige Lock-Durchsetzung (als Allowlist).** Die Sperre existiert heute nur als
+Frontend-Overlay: Im Audit wurde nachgewiesen, dass nach `lock()` Aufrufe wie `add_task()` und
+`get_state()` weiterhin funktionieren und alle Daten liefern (ein einziger JS-Aufruf umgeht den
+Lock-Screen). Pflicht: Ein zentraler Check im `bridge`-Decorator prüft `self.locked` und
+arbeitet gegen eine **explizite Allowlist**, nicht gegen eine Ausnahmenliste:
+`ALLOWED_WHEN_LOCKED = {"unlock", "quit_app", "killswitch", "get_state", "get_boot_state",
+"choose_vault_dir", "create_vault", "reset_vault"}` (die letzten vier ergänzt mit dem
+U1-Entscheid 2026-07-13, N11.13: Onboarding und Reset laufen gerade **ohne** Schlüssel und wären
+sonst blockiert). Jede Methode, die **nicht** in dieser Menge steht, gibt gesperrt sofort
+`{"error": "locked"}` zurück, ohne die DB zu berühren. Das gilt ausdrücklich auch für `lock()`
+und `panic()` (gesperrt ohnehin sinnlos) und für jede künftig ergänzte Bridge-Methode: **neue
+Methoden sind per Default gesperrt** und müssen bewusst in die Allowlist aufgenommen werden (die
+Formulierung „jede ausser X" driftete in der Vergangenheit auseinander, siehe Plananalyse
+W4/V4). Zu den erlaubten Methoden: `get_state()` liefert gesperrt nur `{"locked": true}` ohne
+Listen/Settings; `get_boot_state()` liefert nur den dreiwertigen Zustand plus den Vault-Pfad
+(kein Geheimnis, N11.13); `quit_app()` (Off-Knopf im Lock-Screen) und `killswitch()`
+(Panik-Endschirm) sind bewusste Ausnahmen aus N10, weil beide nie Daten preisgeben und gerade
+**ohne** Passphrase funktionieren müssen; `choose_vault_dir()`/`create_vault()` sind der
+Onboarding-Weg (es gibt noch keinen Tresor, also nichts preiszugeben) und `reset_vault()` der
+Weg der vergessenen Passphrase (löscht nur, gibt nie Daten heraus, doppelt bestätigt, N11.13);
+`unlock(passphrase)` ist der einzige Weg zurück in die Daten. **Ausdrücklich NICHT in der
+Allowlist:** `change_passphrase()` (braucht die Schlüssel, also den entsperrten Zustand). Dieser
+Abschnitt ist die normative Fassung von G13 (Regel im B.9-Kopf: Phasen und Schnellübersicht
+führen nur noch die Nummer).
+
+#### Entsperr-Fehlerlogik von `unlock()` (Etikett N6, U7-Entscheid 2026-07-15) [Sec]
+
+*(Wortgleich umgezogen in Umbau-Etappe 3 aus „N6. Phase 8: Entsperr-/Boot-Fehlerbildschirm (UX 6.3)“; der Screen-Teil von N6 steht in B.4. Register: Anhang 1.)*
+
+**Entscheidbare Fehlerlogik beim Entsperren (verbindlich, löst Plananalyse U7;
+entschieden 2026-07-15, im Zweifel pro Sicherheit).** Der AEAD-Tag allein kann „falsche
+Passphrase" und „manipulierte Datei" nicht trennen. Deshalb wird die Fehlerquelle **vor**
+der teuren Ableitung anhand des unverschlüsselten Container-Kopfs entschieden, in genau
+dieser Reihenfolge:
+1. **Datei fehlt am Entsperr-Pfad** (der Pfad aus `config.json` zeigt auf keine
+   `tasks.db.enc`): Rückgabe `vault`. **Kein** stilles Umschalten auf Onboarding.
+   Onboarding entscheidet ausschliesslich `get_boot_state()` beim Start (N11.8.2);
+   verschwindet die Datei zur Laufzeit, ist das ein Fehler (Fehlerbildschirm mit
+   Wiederholen und Reset), kein Freibrief, einen neuen Tresor anzulegen. Sicherheitsgrund:
+   sonst könnte das blosse Löschen der Datei den „neuen Tresor"-Weg erzwingen und den
+   alten Zustand verschleiern.
+2. **Kopf unlesbar** (Magic falsch, unbekannte Version, Länge/Struktur unplausibel,
+   Salt / Argon2-Parameter / Nonce fehlen oder sind fehlerhaft): Rückgabe `vault`,
+   Fehlerbildschirm „Vault cannot be opened" mit `.bak`-Angebot. Diese Prüfung liest
+   **nur** den bauartbedingt nicht geheimen Container-Kopf (Magic, Version, Salt,
+   KDF-Parameter, Nonce), nie Schlüsselmaterial, und läuft **ohne** Passphrase und
+   **ohne** Argon2.
+3. **Kopf lesbar, aber der AEAD-Tag schlägt fehl:** Rückgabe `passphrase`
+   („Wrong passphrase"). Nur dieser Fall ist ein Rateversuch.
+
+**Rückgabeformat: die kanonischen B.2-Codes, kein paralleles `reason`-Feld.** Der
+U7-Vorschlag `{ok:false, reason:'wrong_pass'|'locked_out'|'file_damaged'|'no_vault'}`
+wird **nicht** übernommen; er dupliziert die einzige Wahrheit aus B.2 und verletzt G29.
+Verbindliche Abbildung: falsche Passphrase -> `passphrase`; laufende Ladder ->
+`rate_limited` mit `retry_in`; fehlende oder beschädigte Datei bzw. fehlender Pepper ->
+`vault`; „kein Tresor" ist **kein** `unlock`-Ergebnis, sondern ein Boot-Zustand.
+`unlock()` liefert bei Erfolg `{ ok:true }`, sonst `{ error:<code>, retry_in?:<s> }`.
+
+**Sicherheitsregeln (im Zweifel pro Sicherheit):**
+- **Nur `passphrase` treibt die Rate-Limit-Ladder (N11.4) voran.** Ein `vault`-Ergebnis
+  ist kein Rateversuch und erhöht `fails`/`stage` nicht (bei kaputtem Kopf läuft die
+  AEAD-Prüfung gar nicht, es wird nichts geraten). So kann ein manipulierter Kopf die
+  Ladder weder zurücksetzen noch umgehen.
+- **Jede `passphrase`-Antwort trägt `retry_in: 2`** (die 2-s-Wartezeit aus N11.4); sind
+  die 3 Freiversuche verbraucht, werden weitere Versuche zu `rate_limited` mit der
+  Ladder-Dauer. Die Anzeige zeigt in beiden Fällen denselben Countdown.
+- **Die Meldung bleibt neutral (N4):** „Wrong passphrase" gibt nicht preis, wie nah die
+  Eingabe war; der Fehlerbildschirm gibt nicht preis, ob ein Tresor existiert (auf dem
+  Lock-Screen existiert er ohnehin).
+- **`.bak`-Wiederherstellung ist ein vollwertiger Entsperr-Versuch:** sie tauscht den
+  Container gegen die `.bak`-Generation (Gate G16) und ruft dieselbe Logik erneut auf,
+  **unter derselben Ladder** (kein Rate-Limit-Bypass). Die aktuelle (womöglich
+  beschädigte) Primärdatei wird dabei **erst überschrieben, wenn die `.bak` erfolgreich
+  entsperrt**, nie vorher, sonst zerstört ein Fehlversuch gegen `.bak` die letzte
+  vorhandene Datei.
+
+**Sekundärhinweis „vielleicht beschädigt" nach Schwelle.** Weil eine falsche Passphrase
+(Fall 3) und ein subtil manipulierter Inhalt (Kopf intakt, Body verfälscht) beide als
+`passphrase` erscheinen, blendet der Lock-Screen nach `DAMAGE_HINT_AFTER = 5`
+aufeinanderfolgenden `passphrase`-Ergebnissen zusätzlich den unaufdringlichen Hinweis ein:
+„Or the file may be damaged. Try a backup?" mit Verweis auf die `.bak`-Wiederherstellung.
+Der Hinweis ist rein informativ, ändert die neutrale Hauptmeldung nicht und schaltet
+keinen Weg an der Ladder vorbei.
+
+#### Undo beim Listen-Loeschen: die verbindliche Architektur (Etikett N11.2.1, U9-Entscheid 2026-07-13)
+
+*(Wortgleich umgezogen in Umbau-Etappe 3. Register: Anhang 1.)*
+
+**Die Ratestelle:** Der fruehere Plantext bot zwei Architekturen mit "oder" an ("im RAM des
+Backends **oder** als `deleted_at`-Soft-Delete"). Das war eine echte Ratestelle, dazu vier
+offene Detailfragen (wie viele Loeschungen gehalten, Wiederherstellung an welcher Position,
+wem gehoert der 6-s-Timer, was passiert beim Sperren/Beenden).
+
+**Entscheidung (verbindlich, Security first):**
+
+- **Genau RAM, kein Soft-Delete.** Die "oder Soft-Delete"-Variante ist **gestrichen**. B.1
+  bekommt **kein** `deleted_at`-Feld: ein solches Feld waere ein Schema-Eingriff, der **jede**
+  Abfrage in `db.py` mit einem `WHERE deleted_at IS NULL` belasten wuerde (eine vergessene
+  Stelle zeigt geloeschte Daten wieder an), und es wuerde geloeschten Aufgabentext dauerhaft im
+  Tresor liegen lassen, obwohl der Nutzer ihn geloescht hat. Der RAM-Puffer haelt geloeschte
+  Daten nur, solange die Sitzung entsperrt laeuft, genau wie alle anderen Aufgabendaten auch.
+- **Genau eine Loeschung.** Das Backend haelt **die letzte** geloeschte Liste samt allen ihren
+  Aufgaben (mit deren Text, `done`-Status und `position`) in **einem** In-RAM-Puffer. Kein
+  Stapel, keine Historie. Eine neue Loeschung **ueberschreibt** den Puffer und verwirft die
+  vorher gepufferte Liste endgueltig.
+- **Wiederherstellung an der alten Stelle.** `undo_delete_list(id)` fuegt die Liste an ihrer
+  gemerkten `position` wieder ein (nachfolgende Listen ruecken zurueck) und stellt die Aufgaben
+  mit ihren alten Positionen wieder her. Die IDs bleiben dieselben. Stimmt `id` **nicht** mit
+  der aktuell gepufferten Liste ueberein (der Puffer wurde inzwischen durch eine neue Loeschung
+  ersetzt oder ist verfallen), liefert die Methode `not_found`, und das Frontend laedt still
+  per `get_state()` neu; sie legt **nie** eine zweite Kopie an.
+- **Der Timer gehoert der UI, nicht dem Puffer.** Der 6-s-Toast "List deleted" mit "Undo" ist
+  **reine Frontend-Anzeige**. Der Backend-Puffer hat **keinen** eigenen Verfalls-Timer: er lebt,
+  bis er ueberschrieben (naechste Loeschung) oder verworfen wird (siehe naechster Punkt). Ein
+  **spaetes Undo** nach dem Verschwinden des Toasts darf deshalb gelingen, solange der Puffer
+  noch lebt; das ist gewollt und kein Fehler.
+- **Verfall beim Sperren/Beenden (sicherheitsrelevant).** Der Puffer ist fluechtiger
+  Sitzungs-RAM und wird bei **jedem** Austritt aus dem entsperrten Zustand verworfen: Lock,
+  Auto-Lock, Panik, Killswitch, Reset, Quit und App-Ende. Umgesetzt in der einen
+  `teardown(reason)`-Sequenz (N11.11.2 in B.8.5, Schritt 7, zusammen mit dem Schluessel-Nullen), damit
+  eine **gesperrte** App **nie** geloeschten Aufgabentext im RAM haelt. Ein Undo im gesperrten
+  Zustand gibt es nicht: `undo_delete_list` steht **nicht** in der G13-Allowlist und liefert
+  gesperrt `locked`.
+
+#### Randfaelle von `reorder`/`reorder_lists`/`move_task` (Etikett N11.2.2, U11-Entscheid 2026-07-15) [Sec]
+
+*(Wortgleich umgezogen in Umbau-Etappe 3; die Validierung faellt unter G20. Register: Anhang 1.)*
+
+*Loest U11 der Plananalyse: Es war offen, was bei unvollstaendigen `ordered_ids`, fremden
+IDs oder Duplikaten passiert, wie die `position` vergeben wird und ob eine verschobene
+erledigte Aufgabe ihren `done`-Status behaelt. Im Zweifel gilt "alles oder nichts" und die
+konsistente Neunummerierung; die Validierung faellt unter G20.*
+
+- **`reorder(list_id, ordered_ids)`:** `ordered_ids` muss **exakt** die Menge **aller**
+  Aufgaben-IDs dieser Liste sein, offene **und** erledigte zusammen (die Sektionstrennung
+  macht das Frontend beim Rendern anhand von `done`, nicht die Reihenfolge). Als Menge
+  gleich: keine fehlende, keine doppelte, keine fremde oder listenfremde ID, ein echtes
+  Array von Strings. **Jede** Abweichung -> `{"error":"invalid"}`, und es wird **nichts**
+  geschrieben (kein Teil-Reorder, keine "besten Bemuehungen"). Bei gueltiger Eingabe
+  vergibt das Backend `position` **neu als 0..n-1** in der uebergebenen Reihenfolge.
+- **`reorder_lists(ordered_ids)`:** dieselbe Regel auf die Listenmenge angewandt: exakt
+  alle Listen-IDs, sonst `invalid`; Neunummerierung 0..n-1.
+- **`move_task(id, target_list_id)`:** beide IDs werden geprueft. Fehlt die Aufgabe oder
+  die Zielliste -> `not_found`; ist `target_list_id` die aktuelle Liste der Aufgabe (oder
+  kein String) -> `invalid`. Die Aufgabe **behaelt ihren `done`-Status** und wird **ans
+  Ende ihrer Sektion in der Zielliste** gehaengt: sie bekommt die hoechste `position` der
+  Zielliste, und weil das Frontend je Sektion nach `position` sortiert, landet eine
+  erledigte am Ende der Erledigt-, eine offene am Ende der offenen Aufgaben. Danach werden
+  **Quell- und Zielliste** konsistent 0..n-1 durchnummeriert.
+- Alle drei sind rein lokal, loesen keine weitere Aktion aus und werden gegen
+  Nicht-Array-/Nicht-String-Eingaben gehaertet (G20).
+
+#### Regel-4-Validierung auch für LOKALE Eingaben + Typ-/Key-Prüfung an der Bridge (Etikett G20) [Sec]
+
+*(Wortgleich hierher gezogen in Umbau-Etappe 6 aus der G20-Zeile der B.9-Gate-Tabelle; Status, Stand und Pruefweg des Gates stehen weiter in B.9.)*
+
+**Regel-4-Validierung auch für LOKALE Eingaben + Typ-/Key-Prüfung an der Bridge.**
+Audit-Befunde: ein 1-MB-Tasktext und Steuerzeichen wie U+0000 werden heute anstandslos
+gespeichert; `reorder(list_id, "string")` iteriert den String zeichenweise und liefert `{"ok":
+true}`; `set_setting` akzeptiert beliebige Keys. Pflicht in `api.py`: (a)
+`add_task`/`edit_task`: Text max. 4096 Zeichen (kein `meta` mehr, N11.1.3);
+`add_list`/`rename_list`: Name max. 256; Überlänge abschneiden; Steuerzeichen U+0000-U+001F
+(ausser `\n` und `\t`) vor dem Schreiben strippen. (b) `reorder`/`reorder_lists` lehnen ab, wenn
+`ordered_ids` keine Liste von Strings ist; `move_task` validiert die IDs. (c) `set_setting`
+akzeptiert nur Keys aus einer Whitelist (`accent`, `theme`, `density`, `sidebar`, `railPinned`,
+`sidebarWidth`, `sound`, `autoLock` plus künftig dort dokumentierte, N11.7), sonst `{"error":
+"invalid"}`. (d) **Werte und Typen prüfen, nicht nur Keys und Längen (V5, 2026-07-15):**
+`set_setting` validiert auch den **Wert** je Key: `theme` gegen `auto|light|dark`,
+`density`/`sidebar` gegen ihre Enum-Werte, `accent` gegen die feste Preset-Whitelist (die sechs
+Hex-Werte aus B.3/B.6; der Wert landet als CSS-Variable im DOM, mit der Whitelist ist
+CSS-Injection über Settings komplett tot), `sidebarWidth` wird schon beim **Schreiben** auf
+180-520 geklemmt (nicht erst beim Lesen geparst), `sound` bool, `autoLock` ganzzahlig aus {0, 1,
+5, 15, 30, 60}; `edit_task.fields` wird typgeprüft (nur bekannte Felder, `text` String, `done`
+bool). Bevorzugte Umsetzung: ein kleines **deklaratives Schema pro Bridge-Methode am
+`@bridge`-Decorator**, das Phase 9 direkt gegen die Regeln testen kann.
+
+#### Ersteinrichtung, Passphrase-Politik und Reset (Etikett N11.3, U8-Entscheid 2026-07-13)
+
+*(Wortgleich umgezogen in Umbau-Etappe 3 aus „N11.3 Phase 8: Ersteinrichtung, Passphrase, Reset“. Die Onboarding-Screens stehen in B.4, der KDF-Upgrade-Bezug in B.7/G8. Register: Anhang 1.)*
+
+- **Keine Bestandsdaten-Uebernahme.** Beim Umstieg auf die echte Verschluesselung wird
+  die alte Dev-DB verworfen; der neue Tresor startet leer. Keine Migration.
+  **Wie** verworfen wird, regelt seit dem A3-Entscheid (2026-07-15) Gate G33 (normative
+  Zeile in B.9): `tasks.db` samt `-journal`/`-wal`/`-shm` wird beim ersten
+  `create_vault()` ueber den Secure-Delete-Pfad entsorgt (bestmoeglich ueberschreiben,
+  dann entlinken; derselbe Pfad wie beim `.bak`-Wegraeumen unter (c) unten), nie per
+  blankem `os.remove`; dazu ein Einmal-Hinweis an den Nutzer mit der ehrlichen
+  SSD-Restgrenze (Wear-Leveling; wer Dev-Reste ausschliessen muss, braucht ein
+  vollverschluesseltes System, G31/B.10.4).
+- **Tresor-Ort beim ersten Start waehlbar.** Der Nutzer legt den Speicherort von
+  `tasks.db.enc` bei der Einrichtung fest. Der Pfad kann nicht im Tresor stehen
+  (Henne-Ei-Problem), daher liegt er in einer kleinen **unverschluesselten Konfig**
+  (z.B. `%LOCALAPPDATA%\NoaToDo\config.json`), die nur diesen Pfad und nicht-geheime
+  Startinfos enthaelt, nie Aufgabendaten.
+- **Passphrase-Regel: ausschliesslich Mindestlaenge 12 Zeichen. Sonst nichts.** Die
+  einzige Pruefung beim Einrichten und beim Passphrase-Wechsel ist
+  `len(passphrase) >= 12`. Ausdruecklich **nicht** gebaut werden:
+  - kein Staerkemesser und keine Staerke-Anzeige (auch keine rein informative Balken-
+    oder Ampel-Anzeige, auch nicht "nur als Hinweis"),
+  - keine Zeichenklassen-Regeln (keine Pflicht zu Gross-/Kleinbuchstaben, Ziffern,
+    Sonderzeichen),
+  - keine Woerterbuch-, Blacklist- oder zxcvbn-artige Pruefung,
+  - keine Obergrenze ausser einer technischen Laengenschranke.
+
+  Gate G8 bleibt fuer die **Argon2id-Kosten** gueltig; die dort urspruenglich genannte
+  "erzwungene Passphrase-Staerke (Staerke-Anzeige beim Einrichten)" ist hiermit
+  **gestrichen**, nicht nur konkretisiert. Wer die Gate-Liste als Checkliste abarbeitet:
+  G8 ist erfuellt, sobald die Argon2id-Parameter stimmen und die Laengenpruefung
+  greift. Ein Staerkemesser waere ein Regelverstoss, kein Bonus.
+
+  **Ehrliche Konsequenz (bewusst akzeptiert):** `aaaaaaaaaaaa` ist eine gueltige
+  Passphrase. Waehlt der Nutzer so etwas, verteidigen nur noch die hohen
+  Argon2id-Kosten (jeder Rateversuch kostet Speicher und Zeit) und der DPAPI-Pepper
+  (ohne das Windows-Konto ist die gestohlene Datei auch mit korrekt geratener
+  Passphrase nicht zu oeffnen). Das ist eine bewusste Komfort-Entscheidung des
+  Nutzers gegen Gaengelung, kein uebersehener Mangel. Die deutliche Verlust-Warnung
+  unten bleibt der einzige erzieherische Text im Flow.
+- **Deutliche Verlust-Warnung bei der Einrichtung.** Klarer Hinweis, dass eine
+  vergessene Passphrase **nicht** wiederherstellbar ist und der einzige Ausweg der
+  Reset (mit Datenverlust) ist; der Nutzer muss das aktiv bestaetigen.
+- **Kein Pepper-Recovery-Export.** Ueberschreibt Gate G18: Der DPAPI-Pepper bleibt als
+  Zweitfaktor (Schutz der gestohlenen Datei), aber es gibt **keinen** Recovery-Export.
+  Bewusst akzeptierte Folge: Der Tresor ist an diesen Windows-PC/dieses Konto gebunden;
+  ohne dieses Konto ist er auch mit korrekter Passphrase nicht mehr zu oeffnen. Der
+  Einrichtungs-Flow enthaelt also **keinen** Recovery-Schritt mehr.
+- **Passphrase vergessen: Reset-Weg.** Kein Recovery, aber ein Reset auf dem Lock-Screen
+  loescht den Tresor unwiderruflich und startet neu. Ablauf: erst der **gleiche
+  zweistufige, bewusst umstaendliche Bestaetigungs-Mechanismus wie der Panik-Killswitch**
+  (Kippschalter, "OK"), danach muss der Nutzer das Wort **"RESET"** abtippen. Danach
+  verhaelt sich die App wie ein echter Erststart: **Speicherort neu abfragen UND neue
+  Passphrase** festlegen.
+- **Passphrase aenderbar** in den Einstellungen (alte Passphrase eingeben, neue mit
+  min. 12 Zeichen setzen; nur im entsperrten Zustand, ueber `change_passphrase(old, new)`,
+  N11.12). Der Tresor wird mit dem neuen Schluessel neu verpackt, verbindlich mit
+  diesen vier Details (Entscheid 2026-07-13, loest Plananalyse U8):
+  - **(a) Frisches Salt, frische Nonce (Pflicht).** Der Wechsel erzeugt ein neues,
+    zufaelliges Argon2-Salt; die frische Nonce liefert ohnehin jedes Verschluesseln
+    (G16). Vom alten Schluesselmaterial wird nichts weiterverwendet.
+  - **(b) Der DPAPI-Pepper bleibt.** Er ist konto-gebunden, nicht passphrase-gebunden
+    (G18), und wird beim Wechsel **nicht** rotiert. Einen neuen Pepper gibt es nur
+    ueber Reset bzw. Tresor-Neuanlage.
+  - **(c) Die `.bak`-Generation wird sofort mitgezogen (sicherheitsrelevant).** Die
+    G16-Rotation wuerde beim Neuverpacken ausgerechnet den **alten** Stand (mit der
+    alten Passphrase lesbar) als `tasks.db.enc.bak` liegen lassen. Deshalb: im selben
+    Zug wie das neue `tasks.db.enc` wird die `.bak`-Generation mit dem **neuen**
+    Schluessel neu geschrieben (bevorzugt, so bleibt die G16-Absturzsicherung erhalten)
+    oder, falls nicht neu geschrieben, geloescht; nach Abschluss des Wechsels darf keine
+    Datei mehr existieren, die mit der alten Passphrase entschluesselbar ist. Wer
+    wegen einer kompromittierten Passphrase wechselt, waere sonst genau ueber `.bak`
+    weiter angreifbar. **Das Wegraeumen des alten Stands laeuft ueber denselben
+    Secure-Delete-Pfad wie der uebrige Tresor-Abbau (ueberschreiben, dann entlinken),
+    nicht ueber ein blankes `os.remove`**, sonst blieben die alt-lesbaren Chiffrat-Bytes
+    in freigegebenen Sektoren rekonstruierbar. Ehrliche Restgrenze (gehoert ins
+    Bedrohungsmodell): auf SSDs mit Wear-Leveling ist auch das Ueberschreiben nicht
+    garantiert; die letzte Deckung des rekonstruierten `.bak` bleibt dann der
+    DPAPI-Pepper (ohne das Windows-Konto ist auch der alte Stand nicht zu oeffnen).
+    Pruefweg: fester Phase-9-Testfall (siehe Phase 9, Krypto-Tests).
+  - **(d) KDF-Upgrade-Pfad.** Beim Wechsel werden die Argon2id-Parameter auf den
+    aktuellen Soll-Stand aus G8 gehoben (im `.enc`-Header koennen aeltere Werte
+    stehen). Der Passphrase-Wechsel ist damit zugleich der definierte Weg, veraltete
+    KDF-Kosten anzuheben; einen separaten Migrationsmechanismus gibt es nicht.
+
+#### Echter Flugmodus: `set_online` und `get_wifi_signal` (Etikett N11.5, U14-/U15-Entscheide 2026-07-15)
+
+*(Wortgleich umgezogen in Umbau-Etappe 3 aus „N11.5 Echter Flugmodus statt Deko-Schalter“. Die Abhaengigkeits-Festlegung (PyWinRT-Pakete, G11) ist nach Phase 0 umgezogen. Register: Anhang 1.)*
+
+- Der Online/Offline-Schalter (Flugzeug/Globus, `set_online`, Taste `G`) **bleibt** und
+  wird **funktional:** offline schalten heisst, den **echten Windows-Flugmodus**
+  einzuschalten, also **alle Funkgeraete** (WLAN, Bluetooth, was vorhanden ist)
+  auszuschalten; online schalten aktiviert sie wieder. Umsetzung ueber die
+  Windows-Radio-APIs (WinRT `Windows.Devices.Radios` bzw. Radio-Management), eine
+  einmalige Nutzerzustimmung ist akzeptabel. `get_wifi_signal()` bleibt und zeigt real
+  den Zustand. Ueberschreibt B.2/B.4 ("rein lokaler Schalter, kein Netzwerkverkehr").
+- **Technische Basis, verbindlich (U14-Entscheid, 2026-07-15).**
+  - **"Flugmodus einschalten" heisst technisch "alle Radios aus".** Der System-Flugmodus
+    als *ein* Flag ist ueber keine oeffentliche API schaltbar; schaltbar sind nur die
+    einzelnen Funkgeraete. Umsetzung ist daher **Radio-Enumeration + `SetStateAsync` je
+    Radio**, nicht das Setzen eines Flugmodus-Flags. Der Wortlaut "Windows-Flugmodus"
+    oben ist als genau das zu lesen (Windows blendet das Flugzeug-Symbol ohnehin erst
+    ein, wenn wirklich alle Radios aus sind). Konkret: `Radio.GetRadiosAsync()`
+    aufzaehlen, nach `RadioKind` filtern (`WiFi`, `Bluetooth`, `MobileBroadband`; `Other`
+    und GPS/`FM` werden nicht angefasst), je Treffer `SetStateAsync(RadioState.Off)` bzw.
+    `.On`, danach `.State` je Radio zurueckgelesen (verifizierte Realitaet, siehe
+    U15-`{online, partial}`-Vertrag oben).
+
+  - **Verweigerter Zugriff degradiert sichtbar statt still zu scheitern.** Vor dem ersten
+    Schalten wird `Radio.RequestAccessAsync()` einmalig ausgewertet. Ist das Ergebnis
+    **nicht** `Allowed` (also `DeniedByUser`, `DeniedBySystem` oder `Unspecified`), wird
+    **kein** Radio angefasst: der Schalter geht in einen sichtbar degradierten Zustand
+    (Tooltip **"no radio access"**, statischer englischer Text nach G29), der reale
+    Funk-Zustand bleibt **unveraendert** und die Pille zeigt weiter den tatsaechlichen
+    Zustand. `set_online` liefert in diesem Fall `{ online:<real>, partial:true }` und
+    aendert nichts. Ein blosses stilles Fehlschlagen (die App "schaltet offline", ohne
+    dass ein Radio ausgeht) ist ausdruecklich verboten, das waere genau die verbotene
+    Falschbehauptung "dunkel" aus dem U15-Aggregations-Vertrag.
+  - **Kein Sicherheits-Riegel (B.10).** Auch mit echter Hardware bleibt der Schalter ein
+    Privatsphaere-/Bequemlichkeits-Werkzeug gegen beilaeufiges Funken, kein Schutz gegen
+    Schadsoftware, die Radios selbst wieder anschalten koennte; er darf nur nie behaupten,
+    dunkel zu sein, wenn er es nicht ist.
+- **Zustand nur beim Beenden wiederherstellen, als letzter Schritt (praezisiert durch
+  N11.10).** Beim Beenden (Off-Knopf/`quit_app`, Panik-Finish, Killswitch-Ende,
+  Fenster-X) wird der Funk-Zustand von **vor** dem App-Start wiederhergestellt (hat die
+  App den Flugmodus eingeschaltet, wird er wieder ausgeschaltet). Das passiert **ganz
+  zuletzt:** erst die Raum-Bereinigung und alle uebrigen Schritte (N10), am Ende die
+  Wiederherstellung des Systemzustands. **Beim Sperren passiert dagegen KEINE
+  Funk-Aenderung, in keiner Richtung: weder offline schalten noch wiederherstellen
+  (N11.10); der Zustand bleibt einfach stehen und gilt nach dem Entsperren unveraendert
+  weiter.**
+- **Externe Aenderungen spiegeln.** Aendert der Nutzer den Flugmodus in den
+  Windows-Einstellungen, passt sich die App-Anzeige an. Umsetzung **ereignisbasiert**
+  (sofortige Reaktion auf die Windows-Radio-Statusaenderung) mit einer seltenen
+  Gegenpruefung als Rueckfalllinie. Der Nutzerwunsch "alle 30 s abfragen" wird durch die
+  sofortige Ereignis-Erkennung erfuellt und uebertroffen.
+- **`set_online`-Vertrag bei echter Hardware (U15-Entscheid, 2026-07-15).** Der Aufruf ist
+  asynchron und kann je Funkgeraet einzeln scheitern (WLAN geht aus, Bluetooth verweigert):
+  - **Antwort erst nach Abschluss, nie feuern-und-vergessen.** `set_online(flag)` schaltet
+    jedes Ziel-Radio (`SetStateAsync`), **liest danach den echten Zustand aller Radios neu
+    ein** und antwortet erst dann. Der zurueckgegebene Zustand ist immer die **verifizierte
+    Realitaet**, nie die blosse Absicht.
+  - **Rueckgabe `{ online, partial }`** (ersetzt das alte `{ online }` in B.2). `partial:true`
+    heisst: nicht jedes Ziel-Radio hat gehorcht.
+  - **Sicherheits-Aggregation, Offline ist die schutzrelevante Richtung.** Beim
+    Offline-Schalten gilt `online:true`, **sobald auch nur ein Radio noch an ist.** Die App
+    behauptet also **nie** "offline/dunkel", solange irgendein Funkgeraet noch sendet; die
+    Pille zeigt dann weiter online, `partial:true`. Beim Online-Schalten (unkritische
+    Richtung) genuegt ein aktives Radio fuer `online:true`. Im Zweifel immer die ehrlichere,
+    weniger "sichere" Anzeige.
+  - **UI bei Teil-Erfolg:** ein `pushToast` mit **statischem englischem Text** (G29), der das
+    verweigernde Radio benennt, z.B. "Bluetooth could not be turned off". Die Pille springt
+    auf den real erreichten Zustand, nicht auf den gewuenschten.
+  - **Kein Doppel-Schalten.** Hoechstens **eine** Radio-Operation gleichzeitig; waehrend eine
+    laeuft, ist die Pille im Warte-Zustand und weitere `G`-/Klick-Ausloeser werden ignoriert
+    (kein Ueberlappen, kein inkonsistenter Mischzustand).
+  - **Verweigerter Gesamt-Zugriff** (`RequestAccessAsync` -> Denied) ist Sache von **U14**:
+    der Schalter degradiert sichtbar (Tooltip "no radio access"), der reale Zustand bleibt
+    unveraendert stehen.
+  - **Ehrliche Einordnung:** Der Schalter ist ein Privatsphaere-/Bequemlichkeits-Werkzeug,
+    **kein** Sicherheits-Riegel gegen Schadsoftware (B.10). Er darf nur nie *behaupten*,
+    dunkel zu sein, wenn er es nicht ist.
+- **`get_wifi_signal()`-Kadenz (U15).** Rein kosmetisch (Balken im Rail-WLAN-Icon). Das
+  Frontend pollt **alle 10 s**, aber **nur** wenn (a) online, (b) das Fenster sichtbar ist
+  (nicht minimiert) und (c) die App entsperrt ist; es **pausiert** bei offline (nichts
+  anzuzeigen), bei verstecktem/minimiertem Fenster und im Lock-Screen (Bridge eingefroren,
+  G13). Die Verbindung an/aus kommt ohnehin ereignisbasiert (oben), nur die Balkenstaerke
+  braucht den Poll. Ein `get_wifi_signal`-Aufruf zaehlt **nicht** als Aktivitaet fuer die
+  Auto-Sperre (U4): den Timer setzt allein `activity_ping` zurueck, nie ein kosmetischer
+  Hintergrund-Poll.
+
+#### Fehler-Hygiene, Fehlercode-Katalog und Logging-Politik (Etikett N11.12, 2026-07-13, S6-Entscheid, Gate G29) [Sec]
+
+*(Wortgleich umgezogen in Umbau-Etappe 3. Vorgefundener Defekt, hier behoben: die N11.12-Ueberschrift war im Nachtrag verloren gegangen, nur ihr Schluss „(2026-07-13, S6-Entscheid, Gate G29) [Sec]“ stand noch am Ende von N11.11.5.4; der Titel ist aus der Schnell-Checkliste rekonstruiert. Register: Anhang 1.)*
+
+*Loest S6 der Plananalyse. Mit dem Sync fiel das alte Gate G10 ("Fehlermeldungen ohne
+Geheimnisse") weg, obwohl sein Kern rein lokal weitergilt. Heute gibt der
+`@bridge`-Decorator `str(exc)` ans Frontend (`api.py`), d.h. schon eine banale `OSError`
+traegt absolute Pfade samt Windows-Benutzernamen als Toast auf den Bildschirm (bei
+Screen-Sharing auf fremde Bildschirme). Ausserdem fehlten ein kanonischer Fehlercode-Katalog
+und jede Aussage darueber, ob und wo das Backend loggt. Angreiferklassen: K3 (kurzer
+physischer Zugriff, abgelesener Bildschirm) und K5 (Reverse-Engineer, der Interna
+geschenkt bekommt), siehe B.10.6.*
+
+##### N11.12.1 Generische Fehler nach vorne, Details nur in den RAM
+
+- **Kein `str(exc)` ans Frontend, nie.** Der `@bridge`-Decorator faengt weiterhin jede
+  Ausnahme, gibt aber ausschliesslich `{"error": <Code>, "message": <statischer Text>}`
+  zurueck; bei `internal` zusaetzlich `{"ref": "<4 Hexzeichen>"}`. Die statischen Texte und
+  die Codes stehen in **B.2** (Fehlercode-Katalog), das ist die einzige Wahrheit.
+- **Verboten in jeder Meldung, die das Backend verlaesst:** Aufgaben-/Listentext,
+  Passphrase, abgeleitete Schluessel, Pepper, Datei-Pfade, Tracebacks, SQL-Fragmente,
+  Exception-Text der darunterliegenden Bibliothek.
+- **In-Memory-Ringpuffer (Diagnose):** `Api` haelt einen Ringpuffer der letzten **50**
+  Fehler, ausschliesslich im RAM (`collections.deque(maxlen=50)`), nie auf der Platte.
+  Ein Eintrag ist: Zeitstempel, Bridge-Methodenname, Fehlercode, Exception-Klassenname,
+  `ref` und eine **redigierte** Kurzmeldung. Redigieren heisst: jeder Pfad
+  (alles, was wie `X:\...` oder `\\...` oder `/...` aussieht) wird durch `<path>` ersetzt,
+  die Meldung auf 200 Zeichen gekuerzt. Aufgabentext gelangt gar nicht erst hinein: der
+  Puffer speichert **niemals** Argumente der Bridge-Methode.
+- **Einsehbar nur im Status-Modal** ("Recent errors", eingeklappt, mit Kopier-Knopf ueber
+  den gehaerteten Backend-Clipboard-Pfad aus G23). Damit hat der Nutzer eine echte
+  Fehlersuche, ohne dass Details ungefragt ins Bild springen.
+- **Der Ringpuffer wird in Schritt 3 der `teardown(reason)`-Sequenz (N11.11, B.8.5) geleert**,
+  also bei Sperre, Panik, Killswitch, Reset und Beenden. Ein gesperrter Bildschirm zeigt
+  keine Diagnose-Historie mehr an.
+
+##### N11.12.2 Logging-Politik (verbindlich)
+
+- **Im Release gibt es kein persistentes Logfile.** Kein `logging.FileHandler`, kein
+  `basicConfig(filename=...)`, keine Absturz-Tracebacks in eine Datei, kein
+  `faulthandler.enable(file=...)`, keine Crash-Reports nach aussen (es gibt ohnehin kein
+  Netz, N11.5). Eine Tresor-App, die nebenher eine Klartext-Logdatei schreibt, unterlaeuft
+  beide Verschluesselungsschichten.
+- **Konsolen-Ausgaben nur als Entwickler-Modus:** Die vorhandenen `print()`-Zeilen
+  (`[NoaToDo] Start ...`) bleiben erlaubt, solange sie **nur** Programm-Zustand melden.
+  Ausfuehrliche Diagnose haengt an `NOATODO_DEBUG=1` (schon vorhanden fuer die DevTools)
+  und darf auch dann weder Passphrase noch Schluessel noch Aufgabentext ausgeben.
+- **Der ausgelieferte Build laeuft nie im Debug-Modus:** in Phase 9 wird geprueft, dass
+  `NOATODO_DEBUG` im Build nicht gesetzt ist und die DevTools aus sind (Abnahmepunkt
+  dort ergaenzt).
+- **Windows-eigene Kanaele:** Es wird nichts ins Windows-Ereignisprotokoll geschrieben und
+  keine Telemetrie erhoben. (Was WebView2 selbst protokolliert, deckt G14 ab: der
+  Profilordner wird gewischt.)
+
+##### N11.12.3 Neues Pflicht-Gate G29
+
+> **🔒 G29 (SOFORT, spaetestens mit Phase 7), Fehler-Hygiene:** (a) Der `@bridge`-Decorator
+> gibt **nur** Codes und statische Texte aus dem Katalog in B.2 zurueck, nie `str(exc)`,
+> nie Pfade, nie Tracebacks, nie Nutzertext. (b) Der Fehlercode-Katalog in B.2 ist
+> vollstaendig und wird bei jedem neuen Code mitgepflegt; ein Code ohne Zeile dort darf
+> nicht ans Frontend. (c) Details landen ausschliesslich im redigierten In-Memory-Ringpuffer
+> (50 Eintraege, Status-Modal, Leerung in `teardown`). (d) Im Release existiert kein
+> persistentes Logfile. **Abnahme:** Ein kuenstlich erzeugter `OSError` in einer
+> Bridge-Methode zeigt im UI nur "Something went wrong." samt `ref`, im Ringpuffer steht
+> `<path>` statt des echten Pfades, und im gesamten Repo findet sich kein `FileHandler`
+> und kein `basicConfig(filename=...)`.
 
 ### B.3 Design-Tokens (aus dem Konzept übernehmen: nicht neu erfinden)
 
@@ -368,7 +868,7 @@ Gruppen durch Trenner:
 1. **Focus mode** (⤢, `F`), blendet Sidebar+Toolbar aus, nur eine „Exit focus"-X bleibt.
 2. **Accent color** (🎨), öffnet Swatch-Popover mit den 6 Akzenten.
 3. **Export** (⬆, `Ctrl+E`), zweistufig: erst Umfang (aktuelle Liste / alle Listen),
-   dann Format (md / txt), siehe N11.2.
+   dann Format (md / txt), siehe Phase 7 (N11.2).
 4. **Shortcuts** (?), öffnet das Tastenkürzel-Modal.
    (Trenner)
 5. **Lock / Unlock** (🔒, `Ctrl+L`).
@@ -394,7 +894,7 @@ Gruppen durch Trenner:
   Nach dem Bestätigen: sofortige Raum-Bereinigung, „Wipe"-Fortschrittsschirm, danach
   der Endschirm mit den zwei Ausgängen Finish (Akzent, App beenden) und Killswitch
   (grau, zweistufig im Knopf, löscht unwiderruflich die Datenbank-Inhalte). Details
-  und Verbindlichkeit: Nachtrag N10.
+  und Verbindlichkeit: Etikett N10.3, unten in diesem Abschnitt.
 - **SettingsModal** (existiert im Code, wird über „⚙ Settings" in der Sidebar und den
   Eintrag im Profil-Menü geöffnet). Es ist das **einzige** Einstellungs-UI der App;
   jeder Key aus B.6 hat hier genau eine Bedienstelle. Sektionen (Zeile + Segment-
@@ -416,10 +916,11 @@ Gruppen durch Trenner:
 - **DeleteModal**, Bestätigung „Delete „Name"?".
 - **ShortcutsModal**, Raster aller Tastenkürzel (siehe B.5).
 - **LockScreen**, Vollbild über allem: Akzent-Ring mit Schloss, „NoaToDo is locked",
-  Passwort-Pille (Phase 8: echte Passphrase-Prüfung, siehe N4). Oben rechts ein
+  Passwort-Pille (Phase 8: echte Passphrase-Prüfung, siehe den N4-Abschnitt unten in
+  B.4). Oben rechts ein
   klassischer **Off-Knopf** (Power-Symbol): beendet die App sofort ohne Passphrase
   über `quit_app()`, vernichtet dabei Spuren, löscht aber nie Nutzer- oder App-Daten
-  (Nachtrag N10). Unten ein unauffälliger, **nicht** akzentuierter Link
+  (N10.2, Volltext unten in B.4). Unten ein unauffälliger, **nicht** akzentuierter Link
   „**Forgot passphrase?**": er führt zum **Reset** (N11.3), dem einzigen Ausweg aus der
   vergessenen Passphrase. Der Reset ist wie der Killswitch abgesichert (erst
   Bestätigung mit dem Klartext-Hinweis, dass **alle** Daten unwiderruflich verloren
@@ -469,7 +970,114 @@ Zurück-Navigation ist in Schritt 1 und 2 erlaubt, nach dem Anlegen nicht mehr.
 Der Onboarding-Flow ist ein **Boot-Zustand, kein Modal**: Er ist nicht mit `Esc`
 schliessbar, hat keinen Weg in die App vorbei am Anlegen, und die Rail/Shortcuts sind
 inaktiv. Einzige Ausnahme: das Fenster-X beendet die App (und läuft dabei durch die
-Sequenz aus N11.11).
+Sequenz aus B.8.5, N11.11).
+
+#### Persistente Offline-Statusanzeige (Etikett N2, UX 4.2/8.3)
+
+*(Wortgleich umgezogen in Umbau-Etappe 3. Register: Anhang 1.)*
+
+Der Online/Offline-Zustand ist heute fast unsichtbar (nur Globus-/Flugzeug-Icon in
+der oft versteckten Rail plus kurzer Toast). Das Konzept sah die `airplane-pill` als
+persistenten Banner vor; ihr CSS liegt ungenutzt im Stylesheet. Optionaler UX-Ausbau:
+- Eine **persistente Statuspille** im Hauptbereich (oder am Dock), sichtbar sobald
+  `online=false` („offline mode"). Der Schalter steuert seit N11.5 den **echten**
+  Windows-Flugmodus (das frühere „rein lokales Flag" ist überholt), umso wichtiger
+  ist die sichtbare Anzeige.
+- Damit entschärft sich auch UX 3.12 (versehentliches `G`/Offline ohne sichtbare Folge).
+
+#### Echter Lock-Screen mit Passphrase: UX-Pflichten (Etikett N4, UX 8.1, Phase 8) [Sec]
+
+*(Wortgleich umgezogen in Umbau-Etappe 3. Register: Anhang 1.)*
+
+B.4 und Phase 8 nennen die Passphrase-Eingabe, aber nicht die UX-Details. Der heutige
+„4x tippen"-Platzhalter (`renderLock`, `lockTap`) wird ersetzt durch ein echtes
+Eingabefeld mit folgenden **Pflicht-Eigenschaften**:
+- Passwort-Feld mit Show/Hide-Umschalter.
+- Fehlerzustand bei falscher Passphrase: Shake + Meldung „wrong passphrase", **ohne**
+  preiszugeben, ob ein Tresor existiert (neutrale Meldung).
+- Warnung bei aktiver Feststelltaste (Caps Lock).
+- **Fortschritts-/Spinner-Zustand beim Entsperren:** Argon2id mit den Kosten aus
+  Gate G8 (256 MiB, `time_cost=3`, `parallelism=4`, N11.4.3) braucht spürbar Zeit; das
+  ist gewollt, also braucht es eine „unlocking…"-Anzeige, sonst wirkt die App
+  eingefroren. Scheitert die Speicher-Allokation (`MemoryError`), zeigt der Screen den
+  eigenen `memory`-Zustand („Not enough memory…", N11.4.3), **nicht** den
+  Falsch-Passwort-Shake.
+- **Rate-Limit-Anzeige** nach mehreren Fehlversuchen („try again in 30 s"); bremst
+  Offline-Rateversuche zusätzlich zur teuren KDF.
+- **Verbindliche Fehlerunterscheidung (falsche Passphrase / beschädigte Datei /
+  fehlender Tresor) samt Rückgabeformat steht in der Entsperr-Fehlerlogik N6 im
+  `unlock()`-Vertrag in B.2 (löst U7).** Kurz: `passphrase`
+  erzeugt Shake + neutrale Meldung, `vault` führt in den Fehlerbildschirm mit
+  `.bak`-Angebot, „kein Tresor" ist ein Boot-Zustand, kein `unlock`-Ergebnis.
+- Hängt an Gate G13 (gesperrt = Backend liefert `locked`), G15 (Prüfung über den
+  Poly1305-Tag) und G18 (DPAPI-Pepper): ohne Pepper bzw. richtige Passphrase scheitert
+  die ChaCha20-Entschlüsselung, die Fehlermeldung kommt aus dem AEAD-Tag.
+
+#### Entsperr-/Boot-Fehlerbildschirm (Etikett N6, UX 6.3, Phase 8) [Sec]
+
+*(Wortgleich umgezogen in Umbau-Etappe 3; die entscheidbare Fehlerlogik samt Rueckgabeformat, der zweite Teil von N6, steht im `unlock()`-Vertrag in B.2. Register: Anhang 1.)*
+
+`boot()` rendert bei Fehlern heute ein nacktes `<pre>boot error</pre>`. Ab Phase 8 sind
+„falsche Passphrase" und „beschädigte/fehlende `tasks.db.enc`" reale Szenarien. Pflicht:
+ein gestalteter Fehlerzustand mit Handlungsoption (Retry, Pfadangabe, Hinweis auf die
+`.bak`-Generation aus Gate G16 und, bei vergessener Passphrase, auf den Reset-Weg aus
+N11.3; einen Pepper-Recovery-Export gibt es bewusst nicht). Der Nutzer darf bei einem
+AEAD-Fehler nie ratlos vor einem leeren Fenster stehen.
+
+#### Off-Knopf auf dem Lock-Screen (Etikett N10.2, 2026-07-08)
+
+*(Wortgleich umgezogen in Umbau-Etappe 3, Punkt 2 des Nachtrags N10. Register: Anhang 1.)*
+
+**2. Off-Knopf auf dem Lock-Screen.** Oben rechts ein klassischer Power-Knopf. Ein
+Klick beendet die App sofort über `quit_app()`, ohne Passphrase. Dabei werden
+zufällig hinterlassene Spuren vernichtet (heute: der Raum ist bereits bereinigt,
+der WebView2-Cache wird ohnehin beim nächsten Start gewischt; Phase 8: sicheres
+Wischen von `PROFILE_DIR` nach G14, Schlüssel nullen nach G25), aber ausdrücklich
+**keine Nutzer- und keine App-Daten gelöscht**. Die Passworteingabe bleibt daneben
+jederzeit möglich; der Off-Knopf ist nur der zweite Ausgang.
+
+#### Panik-Endschirm mit zwei Ausgaengen (Etikett N10.3, 2026-07-08)
+
+*(Wortgleich umgezogen in Umbau-Etappe 3, Punkt 3 des Nachtrags N10; die Abwaegung zur bewussten Aussendarstellung steht in B.10.5. Register: Anhang 1.)*
+
+**3. Panik-Endschirm mit zwei Ausgängen.** Der Panik-Einstieg bleibt mehrstufig
+(Rail-Knopf, Kippschalter „No/Yes", separate Confirm-Pille): mit dem Mehrmals-
+Bestätigen ist man gegen Versehen sicher unterwegs. Nach dem Bestätigen wird sofort
+real bereinigt (Raum leeren und Zustand verwerfen wie beim Lock, **zusätzlich**
+offline schalten; das Offline-Schalten gibt es seit N11.10 nur noch hier im
+Panik-Flow, nicht mehr beim Sperren) und der
+„Wipe"-Fortschrittsschirm gezeigt; danach der Endschirm mit der Aussage, die
+Maschine sei sicher gewiped (bewusste Außendarstellung). Zurück in die App führt
+von dort **kein Weg mehr**. Unten zwei Knöpfe:
+- **Links, Akzentfarbe: „Finish".** Beendet nur die App (`quit_app()`). Alle Daten
+  bleiben vollständig erhalten; der nächste Start ist ein normaler Start.
+- **Rechts, grau: „Killswitch",** zweistufig im Knopf selbst: der erste Klick fährt
+  den Schriftzug „Killswitch" nach rechts und ein „OK" fährt herein; erst der Klick
+  auf „OK" löst aus. Dann läuft ein Fortschrittsbalken mit Statuszeilen („Deleting
+  user data", „Deleting lists", …), währenddessen löscht `killswitch()` die
+  Datenbank-Inhalte **real und unwiderruflich** (alle `lists`/`tasks`
+  und `settings`, danach `VACUUM`, damit die gelöschten Zeilen nicht in freien
+  Seiten der Datei liegen bleiben). Anschließend beendet sich die App von selbst.
+
+#### Header, Profil-Menue, Fensterzustand und Mini-Bounds (Etikett N11.6, U24-Entscheid 2026-07-15)
+
+*(Wortgleich umgezogen in Umbau-Etappe 3 aus N11.6; der Theme- und der Ton-Teil von N11.6 stehen in B.6. Register: Anhang 1.)*
+
+- **Header-Mitte bleibt leer** (die frühere Benachrichtigungs-Pille faellt ersatzlos
+  weg). Brand links, Avatar rechts.
+- **Profil-Menue eindampfen.** Der fest eingetippte Name ("Noa Andersen") und tote
+  Eintraege raus. Es bleibt nur, was echt funktioniert: "Export database" wird der neue
+  Alle-Listen-Export (N11.2), optional ein Link zu den Einstellungen. Alles andere
+  entfernen.
+- **Fenster startet maximiert** (fest verdrahtet, kein Setting noetig). Ueberschreibt N9
+  "maximiert vs letzte Groesse".
+- **Fensterzustand um den Mini-Modus (U24-Entscheid, 2026-07-15).** Beim Wechsel in den
+  Mini-Modus werden die aktuellen Fenster-Bounds (Position, Groesse, Maximiert-Flag)
+  gemerkt; beim Verlassen des Mini-Modus (Rail-Knopf oder `Esc`) werden **genau diese**
+  wiederhergestellt (reines WinForms-Bounds-Merken in `set_mini`, ueber den UI-Thread, kein
+  Setting, keine Spike-Abhaengigkeit). **Der Mini-Modus ueberlebt keine Sperre:** nach dem
+  Entsperren ist das Fenster immer maximiert und nie mini (der Vor-Sperr-Fensterzustand wird
+  pro Sicherheit bewusst nicht ueber die Sperrgrenze getragen, N11.8.3 Spike-Frage 4).
 
 ### B.5 Tastenkürzel (verbindlich, einzige Wahrheit)
 
@@ -534,7 +1142,7 @@ deckt den "schnell alles zu"-Fall damit vollständig ab.
 ### B.6 Einstellungen (persistiert in `settings`-Tabelle)
 
 `accent` (Hex), `theme` (`auto`|`light`|`dark`, Default `auto`, ersetzt das frühere
-`dark`, siehe N11.6), `density` (`comfortable`|`compact`), `sidebar` (`open`|`closed`),
+`dark`, siehe die N11.6-Detail-Festlegungen unten in B.6), `density` (`comfortable`|`compact`), `sidebar` (`open`|`closed`),
 `sound` (bool, Erledigt-Ton, Default `true`, N11.6), `autoLock` (Minuten bis zur
 Auto-Sperre, `0` = nie, Default `15`, N11.4). Werden beim Start aus `get_state()`
 gelesen und auf das `.app`-Element als `data-*`/`--accent` gesetzt; Änderungen sofort
@@ -542,6 +1150,32 @@ via `set_setting` zurückschreiben. Der frühere Key `toolbar` entfällt (die Ra
 immer `floating`). Bei `theme=auto` folgt die App live dem Windows-Hell/Dunkel-Zustand
 (ereignisbasiert), `Ctrl+J` setzt einen manuellen Override, bis wieder `auto` gewählt
 wird.
+
+**Detail-Festlegungen zu Theme und Ton (Etikett N11.6, U16-Entscheid 2026-07-15; wortgleich umgezogen in Umbau-Etappe 3; Register: Anhang 1):**
+
+- **Theme folgt automatisch Windows** (hell/dunkel), mit **sofortiger** Reaktion auf die
+  Windows-Theme-Aenderung (ereignisbasiert ueber `WM_SETTINGCHANGE` bzw. den Registry-
+  Wert `AppsUseLightTheme`), plus **eine seltene Gegenpruefung alle 60 s** als
+  Rueckfalllinie (Intervall festgelegt 2026-07-15, loest Plananalyse U16; das Ereignis
+  bleibt der Hauptweg). Beim Start sofort das korrekte Theme, kein Nachziehen.
+  **Manueller Override bleibt:** `Ctrl+J` bzw. der Theme-Schalter setzt bewusst ein festes
+  Theme, bis der Nutzer wieder auf "automatisch" stellt. Die drei bisher offenen Details
+  sind entschieden (U16):
+  - **`Ctrl+J` aus `theme=auto` heraus** setzt den Override auf das **Gegenteil des
+    aktuell angezeigten (effektiven) Themes**: zeigt die App gerade hell, schaltet es auf
+    festes Dunkel und umgekehrt. Aus einem festen Theme heraus schaltet `Ctrl+J` auf das
+    jeweils andere feste Theme.
+  - **Zurueck zu `auto`** geht **nur** ueber das Appearance-Segment in den Einstellungen
+    (`Auto`|`Light`|`Dark`); `Ctrl+J` kehrt nie von selbst nach `auto` zurueck, es bewegt
+    sich ausschliesslich zwischen den beiden festen Themes.
+  - **Intervall der Gegenpruefung: 60 s** (siehe oben).
+
+  Der Settings-Key `dark` wird dazu durch `theme` mit den Werten
+  `auto`|`light`|`dark` ersetzt (Default `auto`); in die G20-Whitelist aufnehmen.
+
+- **Erledigt-Ton abschaltbar.** Der synthetisierte Blip beim Abhaken bleibt Default an,
+  ist aber in den Einstellungen abschaltbar. Neuer Settings-Key `sound` (bool, Default
+  `true`); in die G20-Whitelist aufnehmen.
 
 ### B.7 Verschlüsselung (verbindlich): Doppel-Kaskade AES-256 + ChaCha20
 
@@ -648,7 +1282,7 @@ Sperren / Schließen / Panic
   Panik-Sperre und Auto-Sperre bei Inaktivität.
 
 **Alternative für Puristen (per Gate G6 inzwischen der gewählte Default; Präzisierung
-in N11.9):** statt Arbeitsdatei auf Platte die ganze (kleine) DB beim Entsperren in eine
+im N11.9-Abschnitt unten in B.7):** statt Arbeitsdatei auf Platte die ganze (kleine) DB beim Entsperren in eine
 **In-Memory-SQLite** (`:memory:`) laden und im Ruhezustand nur als ein einziges, doppelt
 verschlüsseltes Blob ablegen. Dann existiert **nie** eine entschlüsselte Datei auf der
 Platte, Preis: die ganze DB wird bei jeder Persistierung am Stück geschrieben (für ein
@@ -663,7 +1297,166 @@ Platte; Write-back-Politik siehe G17).
 > oben betrifft nur das *Wo* des entsperrten Arbeitsstands (Arbeitsspeicher vs.
 > verschlüsselte Arbeitsdatei, N11.9), **nicht** ob die ChaCha20-Schicht existiert.
 
-### B.8 Sperr-Politik: wann die Passphrase verlangt wird
+#### Verschluesselung praezisiert: Arbeitskopie, Write-back, Gate G28 (Etikett N11.9, 2026-07-09) [Sec]
+
+*(Wortgleich umgezogen in Umbau-Etappe 3 aus „N11.9 Phase 8: Verschluesselung, beide Schichten bleiben Pflicht“. Register: Anhang 1.)*
+
+*Loest den Konflikt Gate G6 (In-Memory, nie eine entschluesselte Datei auf der Platte)
+vs. B.7 (beide Schichten immer am Ruhezustand). Ersetzt die B.7-Ehrlichkeits-Notiz und
+praezisiert die "Alternative fuer Puristen".*
+
+- **Am Ruhezustand liegt weiterhin genau ein Artefakt:** `tasks.db.enc` = ChaCha20-
+  Poly1305( SQLCipher-AES-256-Datenbank-Image ). **Beide Schichten sind darin real
+  vorhanden** (innerer Blob AES, aeussere Huelle ChaCha20). B.7 bleibt voll erfuellt.
+- **Die Arbeitskopie beim Entsperren ist NIE eine Klartext-Datei.** Bevorzugt in-memory
+  (`:memory:`, G6). Gibt die gewaehlte SQLCipher-Build-Variante das verlaessliche
+  Serialisieren des verschluesselten Images aus `:memory:` nicht her, ist der
+  verbindliche Fallback eine **SQLCipher-verschluesselte** Arbeitsdatei in einem
+  ACL-beschraenkten Temp-/RAM-Disk-Pfad. Diese Datei ist am Ruhezustand **AES-Chiffretext,
+  kein Klartext** (SQLCipher entschluesselt Seiten nur in den RAM, auch Journal/WAL sind
+  verschluesselt). G6s eigentliche Sorge (Klartext-Temp-Forensik auf SSD) ist damit
+  gegenstandslos: selbst wenn Secure-Delete auf SSD versagt, bleibt nur Chiffretext.
+  Die Wahl "nie Klartext auf Platte" schlaegt im Zweifel die Wahl "unbedingt reines
+  `:memory:`", weil das Sicherheitsziel so oder so erreicht ist.
+- **G17-Write-back ist in BEIDEN Varianten identisch (U19), damit hier nichts
+  geraten wird.** Persistenzziel am Ruhezustand ist **immer** `tasks.db.enc`, auch im
+  Fallback-Modus: der G17-Debounce (ca. 3 s nach der letzten Aenderung, spaetestens
+  alle 30 s, U20) schreibt in beiden Faellen das gesamte `tasks.db.enc` neu
+  (`.tmp` + `fsync` + `os.replace`, eine `.bak`-Generation, G16). Die
+  SQLCipher-Arbeitsdatei des Fallbacks ist **kein** zweites Persistenzziel und **nie**
+  die Quelle der Wahrheit am Ruhezustand, sondern ein **reines Betriebsmittel**: sie
+  wird beim Entsperren frisch aus `tasks.db.enc` erzeugt, bei Lock/Panik/Quit
+  abgebaut (Teardown N11.11) und beim Start **kommentarlos geloescht/ersetzt**, falls
+  eine verwaiste (evtl. veraltete) Kopie eines Absturzes herumliegt. **Keine
+  Crash-Recovery aus der Arbeitsdatei:** nach einem Absturz wird sie **verworfen**, nie
+  gelesen; der Wiederherstellungsstand ist ausschliesslich das zuletzt debounced
+  geschriebene `tasks.db.enc` (bzw. dessen `.bak`, G16). Damit gilt G17 in beiden
+  Modi woertlich und es gibt keinen Pfad, auf dem ein moeglicherweise verfaelschtes
+  Betriebsmittel als Wahrheit durchgeht (pro Sicherheit: nur das authentifizierte
+  `.enc` ist Quelle).
+- **Ehrliche Neuformulierung (ersetzt die B.7-Notiz "live nur AES"):** Am Ruhezustand
+  schuetzen **beide** Schichten. Waehrend die App entsperrt laeuft, existiert der
+  Klartext ausschliesslich fluechtig im RAM (SQLite-Page-Cache), wie bei jeder App;
+  dagegen helfen schnelle Sperre, Auto-Sperre und Panik, nicht die Cipher.
+- **Neues Pflicht-Gate G28 (Verschluesselungs-Beweis, Phase 8):** Vor Phase-8-Abschluss
+  ist zu **beweisen**, dass die Arbeits-/Zwischendatei tatsaechlich AES-verschluesselt
+  ist: das Oeffnen des inneren Images **ohne** `aes_key` muss fehlschlagen (kein
+  SQLite-Klartext-Header, kein lesbarer Task-Text im Roh-Byte-Dump). Schlaegt der Beweis
+  fuer den `:memory:`-Serialize-Weg fehl, ist der verschluesselte-Temp-Datei-Fallback
+  verbindlich. Kein Auslieferungsbuild ohne bestandenen Beweis. **Automatisierung
+  (V12, 2026-07-15):** der Beweis ist als pytest-Test in der Phase-9-Testliste
+  verankert (Scan des Arbeits-Artefakts auf den SQLite-Klartext-Header
+  `SQLite format 3` und einen bekannten Task-String, jeder Fund ist ein Fail),
+  damit er nicht als Einmal-Handgriff verrottet.
+
+#### Dateiformat von `tasks.db.enc` + atomares Schreiben (Etikett G16) [Sec]
+
+*(Wortgleich hierher gezogen in Umbau-Etappe 6 aus der G16-Zeile der B.9-Gate-Tabelle; Status, Stand und Pruefweg des Gates stehen weiter in B.9.)*
+
+**Dateiformat von `tasks.db.enc` + atomares Schreiben.** Header: Magic `NOA1` (4 Byte),
+Formatversion (1 Byte), Argon2id-Parameter `memory_cost`/`time_cost`/`parallelism` (je u32
+little-endian), Salt (16 Byte), Nonce (12 Byte); danach der ChaCha20-Poly1305-Ciphertext. Bei
+**jedem** Verschlüsseln eine frische Nonce aus `os.urandom(12)`; eine wiederverwendete Nonce
+bricht die AEAD-Sicherheit vollständig. Schreiben **immer** atomar: erst `tasks.db.enc.tmp`
+schreiben, `flush()` + `os.fsync()`, bestehende Datei nach `tasks.db.enc.bak` rotieren (genau
+eine Generation behalten), dann `os.replace()`. Ein Absturz mitten im Sperren darf nie die
+einzige Kopie der Daten zerstören. **Ergänzungen V1 (2026-07-15):** (1) Der **komplette Header
+geht als `associated_data`** in `ChaCha20Poly1305.encrypt/decrypt` ein: jede Header-Manipulation
+(auch heruntergedrehte Argon2-Parameter oder eine getauschte Formatversion, sprich
+Format-Downgrade) wird damit zum sauberen AEAD-Fehler statt still wirksam. (2) Das frisch
+geschriebene `.tmp` wird **vor** der `.bak`-Rotation einmal **probeweise entschlüsselt** (Header
+parsen + AEAD-Tag prüfen); erst nach Erfolg wird rotiert, sonst können zwei fehlerhafte
+Schreibzyklen nacheinander beide Generationen zerstören. (3) **Freier Plattenplatz wird vor dem
+Wrap geprüft** (mindestens Ciphertext-Größe plus Reserve); reicht er nicht, bleibt der alte
+Stand unangetastet und nach vorn geht der Code `vault`. (4) Die zufällige 12-Byte-Nonce aus
+`os.urandom(12)` ist bei dieser Schreibfrequenz (debounced Write-back, G17) **geprüft
+unbedenklich**, kein Zähler-Schema nötig.
+
+#### Konkrete Argon2id-Parameter und der MemoryError-Randfall (Etikett N11.4.3, U17-Entscheid 2026-07-15) [Sec]
+
+*(Wortgleich umgezogen in Umbau-Etappe 3. Register: Anhang 1.)*
+
+*Loest U17. G8 nannte bisher nur Spannen ("Memory >= 256 bis 512 MB, time_cost >= 3,
+parallelism passend"); in den G16-Header muessen aber feste Zahlen, sonst raet die
+umsetzende Seite. Zusaetzlich kann eine zu grosse Speicher-Allokation auf einer
+RAM-knappen Maschine scheitern, und weil der Tresor per Pepper genau an diesen PC
+gebunden ist (G18), waere er dort dann nicht zu oeffnen; ein `MemoryError` mitten im
+Entsperren darf weder als "falsche Passphrase" erscheinen noch die App abstuerzen
+lassen. Im Zweifel pro Sicherheit, wobei **Verfuegbarkeit** (kein dauerhafter
+Selbst-Aussperr, kein Datenverlust) hier ausdruecklich als Sicherheitsziel zaehlt.*
+
+- **Fest verdrahtete Soll-Parameter (der einzige Wahrheitswert; G8 wird damit konkret):**
+  - Typ **Argon2id**, Version **0x13** (Argon2 v1.3),
+  - `memory_cost = 262144` KiB (**256 MiB**),
+  - `time_cost = 3`,
+  - `parallelism = 4`,
+  - `hash_len = 32` (das eine Master-Secret; die Aufteilung in `aes_key`/`chacha_key`
+    macht danach HKDF, G15),
+  - `salt = 16` Byte, pro Tresor zufaellig, im Header (G16).
+
+  **Warum 256 MiB und nicht 512:** Der Tresor ist per DPAPI-Pepper an dieses
+  Windows-Konto gebunden (G18); ein Angreifer ohne das Konto kann die gestohlene Datei
+  gar nicht offline angreifen, gegen ihn wirkt der Pepper, nicht die Argon2-Speichermenge.
+  Der Zugewinn von 512 gegenueber 256 MiB (Faktor 2 an Offline-Kosten) ist damit gering,
+  das Aussperr-Risiko aus genau diesem Befund dagegen real. 256 MiB liegt weit ueber den
+  OWASP-Mindestwerten, allokiert auf jeder modernen Windows-Maschine zuverlaessig und wird
+  nur **einmal** gebraucht (beide Schluessel stammen aus demselben Argon2-Durchlauf).
+  Verfuegbarkeit zaehlt hier als Sicherheitsziel: ein dauerhaft nicht mehr zu oeffnender
+  Tresor ist ein Datenverlust, kein Schutz.
+
+- **Die Parameter stehen im `.enc`-Header (G16) und werden authentifiziert (V1).** Der
+  Header (Magic, Version, Typ, `memory_cost`, `time_cost`, `parallelism`, `hash_len`,
+  Salt, Nonce) geht als `associated_data` in ChaCha20-Poly1305 ein; eine nachtraegliche
+  Manipulation der Parameter macht die Entschluesselung zum sauberen AEAD-Fehler. Der
+  Header ist bauartbedingt nicht geheim (er enthaelt nie Schluesselmaterial).
+
+- **Akzeptanzbereich gegen einen aufgeblaehten Header (DoS-Schutz, pro Sicherheit).** Die
+  KDF-Parameter werden **vor** der Allokation gegen einen festen Bereich geprueft:
+  `memory_cost` in **64 MiB bis 512 MiB**, `time_cost` **1 bis 10**, `parallelism`
+  **1 bis 16**, `hash_len == 32`, Version `0x13`, Typ Argon2id. Liegt ein Wert
+  ausserhalb, gilt der Kopf als **unlesbar** im Sinne von N6 Schritt 2 (B.2): Rueckgabe `vault`
+  (Fehlerbildschirm), **kein** Argon2-Lauf, **kein** Rateversuch. Ohne diese Klammer
+  koennte ein manipulierter Header (z.B. `memory_cost = 16 GiB`) beim naechsten Entsperren
+  eine garantierte Speicher-Erschoepfung erzwingen; die AEAD-Pruefung liefe erst **nach**
+  Argon2 und kaeme zu spaet. Die Obergrenze 512 MiB ist zugleich die Kappe fuer den
+  Schaden eines solchen Versuchs und wird nur zusammen mit dem Default angehoben. (Ein
+  nach unten manipulierter Header liefe ohnehin in den AEAD-Fehler, weil ein anderer
+  Schluessel entstuende; die Untergrenze ist Guertel-und-Hosentraeger und faengt
+  zusaetzlich Korruption ab.)
+
+- **`MemoryError` im Normalfall (korrekte Parameter, Maschine momentan zu knapp) ist ein
+  eigener Zustand, nie "falsche Passphrase".** Die Argon2-Ableitung in `unlock()`,
+  `create_vault()` und `change_passphrase()` wird in `try/except` gegen `MemoryError` (und
+  die entsprechende Allokations-Ausnahme von `argon2-cffi`) gekapselt, **vor** der
+  generischen `internal`-Auffanglinie des `@bridge`-Decorators. Bei Ausloesung:
+  - **kein Absturz** der App; die laufende Sitzung bleibt intakt (bei `unlock` bleibt die
+    App gesperrt, bei `change_passphrase` unveraendert entsperrt, bei `create_vault` im
+    Onboarding-Schritt);
+  - Rueckgabe des **neuen Fehlercodes `memory`** (B.2), nicht `passphrase`, nicht
+    `internal`, nicht `vault`;
+  - **die Rate-Limit-Leiter (N11.4) wird nicht vorangetrieben**: ein Speicher-Engpass ist
+    kein Rateversuch, sonst sperrte sich der rechtmaessige Nutzer unter Speicherdruck
+    selbst in die Eskalations-Leiter (wieder ein Verfuegbarkeits-Schaden);
+  - kein Schluesselmaterial und keine Tresor-Datei werden angefasst; eine etwaige
+    Teil-Allokation wird freigegeben.
+
+- **Frontend-Verhalten von `memory`:** inline im jeweiligen Auth-Screen (Lock-Screen bzw.
+  Onboarding-/Passphrase-aendern-Dialog), Text "Not enough memory. Close other apps and
+  try again.", mit Wiederholen-Moeglichkeit; **kein** Shake (es ist keine falsche
+  Passphrase), **kein** Reset-Angebot (der Tresor ist intakt, ein Reset waere hier ein
+  grundloser Datenverlust), **kein** Countdown. Nach dem Freigeben von Speicher fuehrt
+  derselbe Versuch normal zum Ziel.
+
+- **Anhebung nur ueber den Passphrase-Wechsel (N11.3 (d)).** Aeltere, niedrigere
+  Header-Werte werden nicht automatisch migriert; der KDF-Upgrade-Pfad aus N11.3 (d) in B.2 hebt
+  sie beim naechsten Passphrase-Wechsel auf den dann geltenden Soll-Stand. Wird der Default
+  je erhoeht, wandert die Akzeptanz-Obergrenze im selben Build mit.
+
+### B.8 Sperr-, Auto-Sperr- und Beenden-Politik: wann die Passphrase verlangt wird
+
+#### B.8.1 Was sperrt, was nicht
+
+*(Zusammengefuehrt in Umbau-Etappe 3: der bisherige B.8-Kopf (Ausloeser-Tabelle, Kernregel) und die Win+L-Regel; die N11.8.4-Entscheidung dazu steht als Historie in Anhang 3. Register: Anhang 1.)*
 
 Die App ist **entweder entsperrt** (Schlüssel im Speicher, UI nutzbar) **oder gesperrt**
 (Lock-Screen, DB zu, Schlüssel verworfen). Genau diese Ereignisse lösen eine **Sperre**
@@ -689,7 +1482,18 @@ aus, sodass danach die **Passphrase neu eingegeben** werden muss:
 > Fokuswechsel und die Windows-Sitzungssperre sind *keine* Sperr-Ereignisse und lassen
 > die App entsperrt.
 
-**Verschärfung (2026-07-08, verbindlich, Details in Nachtrag N10):** Sperren ist jetzt
+**Keine Windows-Sperre-Erkennung (N11.8.4, verbindlich):** Es wird **kein** Session-Hook
+gebaut (kein `WTSRegisterSessionNotification`, kein `WM_WTSSESSION_CHANGE`, kein
+`WTS_SESSION_LOCK`-Handler), weder in `main.py` noch sonstwo. Die verlässliche Sperre ist
+allein die Auto-Sperre nach Inaktivität (N11.4), umgesetzt als Hintergrund-Timer auf einer
+monotonen Uhr, unabhängig von Fensterfokus und Windows-Sitzungszustand.
+
+
+#### B.8.2 Verstärkte Sperre / Raum-Bereinigung
+
+*(Zusammengefuehrt in Umbau-Etappe 3: die B.8-Verschaerfung vom 2026-07-08, N10.1 („Panik light“) und N11.10 (W1-Entscheid), wortgleich. Register: Anhang 1.)*
+
+**Verschärfung (2026-07-08, verbindlich, Etikett N10):** Sperren ist jetzt
 „Panik light". Jede Sperre bereinigt **zuerst den Raum** (Ansicht leeren, In-Memory-
 Listen und Auswahl verwerfen, Menüs/Modals schließen; **das frühere „offline schalten"
 ist durch N11.10 gestrichen, der Online-/Funkzustand bleibt beim Sperren unangetastet**),
@@ -701,27 +1505,562 @@ beendet (`quit_app()`); in Phase 8 wischt genau dieser Pfad zusätzlich alle lok
 Spuren (G14/G25). Panik führt nicht mehr in den Lock-Screen zurück, sondern endet im
 Endschirm mit Finish/Killswitch (N10).
 
-**Keine Windows-Sperre-Erkennung (N11.8.4, verbindlich):** Es wird **kein** Session-Hook
-gebaut (kein `WTSRegisterSessionNotification`, kein `WM_WTSSESSION_CHANGE`, kein
-`WTS_SESSION_LOCK`-Handler), weder in `main.py` noch sonstwo. Die verlässliche Sperre ist
-allein die Auto-Sperre nach Inaktivität (N11.4), umgesetzt als Hintergrund-Timer auf einer
-monotonen Uhr, unabhängig von Fensterfokus und Windows-Sitzungszustand.
+**1. Lock wird verstärkt („Panik light").** Jede Sperre (Lock-Button, `Ctrl+L`,
+später die Auto-Sperre nach Inaktivität; die Windows-Sitzungssperre sperrt nicht, N11.8.4)
+macht zuerst das, was bisher nur Panik tat: Raum leeren (`state.lists` verwerfen, keine Liste offen, Menüs/Modals/Auswahl
+schließen). **N11.10 gilt vorrangig: offline geschaltet wird beim Sperren NICHT mehr,
+der Online-/Funkzustand bleibt exakt so, wie er gerade ist.** Erst dann erscheint der
+bekannte Lock-Screen mit der Passwort-Pille. Es werden dabei **keine Daten gelöscht**:
+das Backend bleibt die Wahrheit, nach dem Entsperren lädt das Frontend alles frisch per
+`get_state()` und startet wie mit leerer Arbeitsfläche (Sidebar zu, keine Liste offen).
+*(Der durch N11.10 gestrichene Alt-Wortlaut liegt wortgleich in Anhang 3,
+Umbau-Etappe 5.)*
+
+**Sperre schaltet nicht mehr offline (Etikett N11.10, 2026-07-13, W1-Entscheid) [Sec]**
+
+*Loest den Widerspruch W1 der Plananalyse (N10.1 "jede Sperre schaltet offline, und
+offline bleibt es" vs. N11.5 "beim Sperren wird der Funk-Zustand von vor dem App-Start
+wiederhergestellt"). Entscheidung: Linie 1, entkoppeln. Ueberschreibt N10.1 (den
+Offline-Teil), die B.8-Tabelle/Verschaerfung und die N11.5-Wiederherstellungsregel
+fuer den Sperr-Fall.*
+
+- **Die Sperre schaltet die App NICHT mehr offline.** Das gilt fuer **jede** Sperre:
+  Lock-Button, `Ctrl+L` und Auto-Sperre nach Inaktivitaet (N11.4). Beim Sperren bleibt der
+  Online-/Funkzustand **exakt so, wie er gerade ist**, in keiner Richtung angefasst:
+  es wird **weder** der Flugmodus eingeschaltet **noch** ein frueherer Funk-Zustand
+  wiederhergestellt. Das Internet bleibt normal verfuegbar; nach dem Entsperren gilt
+  derselbe Zustand unveraendert weiter.
+- **Begruendung:** Seit N11.5 heisst "offline" nicht mehr "lokales Flag", sondern echte
+  Funkgeraete des ganzen PCs aus (WLAN, Bluetooth). Eine Sperre, die offline schaltet,
+  wuerde mit dem Auto-Lock-Default (15 min Inaktivitaet) alle 15 Minuten das WLAN und
+  Bluetooth des gesamten Rechners abschalten, etwa waehrend nebenan ein Video streamt.
+  Die App hat seit der Sync-Entfernung zudem keinerlei eigene Netzwerkfunktion mehr,
+  das Offline-Schalten beim Sperren schuetzt also nichts App-eigenes.
+- **Die Raum-Bereinigung beim Sperren bleibt vollstaendig erhalten** (N10.1: Ansicht
+  leeren, `state.lists` verwerfen, Menues/Modals/Auswahl schliessen, dann Lock-Screen).
+  Es entfaellt **nur** der Offline-Schritt.
+- **Funk geschaltet wird nur noch an zwei Stellen:** (1) beim **expliziten
+  Nutzer-Toggle** (Flugzeug/Globus-Pill bzw. Taste `G`, N11.5) und (2) im
+  **Panik-Flow** (bewusste, mehrstufig bestaetigte Notfall-Aktion; dort bleibt das
+  Offline-Schalten wie in N10.3 beschrieben). Die Wiederherstellung des Funk-Zustands
+  von vor dem App-Start passiert **nur noch beim Beenden** (als letzter Schritt,
+  N11.5), nie beim Sperren.
+- **Crash-Fall (Praezisierung aus dem W1-Entscheid):** Stuerzt die App ab, bleibt der
+  Funk ehrlich so geschaltet, wie er zuletzt war (die Wiederherstellung laeuft nur im
+  sauberen Beenden-Pfad). Damit das nicht dauerhaft haengen bleibt, wird der gemerkte
+  Funk-Ausgangszustand beim Einschalten des Flugmodus durch die App in `config.json`
+  persistiert (N11.3, nicht nur im RAM); findet der naechste Start dort einen nicht
+  aufgeraeumten Eintrag, stellt er den Ausgangszustand wieder her und loescht den
+  Eintrag.
+- **Umsetzungsfolge fuer den heutigen Code:** `clearWorkspace()` in `app.js` schaltet
+  derzeit auch offline. Kuenftig darf der **Lock-Pfad** (`doLock()`, Auto-Lock)
+  den Online-Zustand nicht mehr anfassen; nur der **Panik-Flow**
+  (Confirm im Panik-Panel) behaelt das Offline-Schalten.
+
+
+#### B.8.3 Auto-Sperre: Definition der Inaktivität
+
+*(Zusammengefuehrt in Umbau-Etappe 3 aus N11.4 (Auto-Sperre-Teil) und N11.4.2 (U4-Entscheid), wortgleich. Register: Anhang 1.)*
+
+- **Auto-Sperre nach Inaktivitaet: einstellbar, Default 15 min.** Presets in den
+  Einstellungen (z.B. 1/5/15/30/60 min) plus "nie" zum Abschalten. Konkretisiert B.8.
+
+**Was „Inaktivitaet“ der Auto-Sperre heisst (Etikett N11.4.2, 2026-07-15, U4-Entscheid) [Sec]**
+
+*Loest U4 der Plananalyse: "Inaktivitaet" war undefiniert. Nur Bridge-Aufrufe zu zaehlen
+waere falsch (15 Minuten eine Liste **lesen** ohne Klick spraeche die Sperre mitten im
+Gebrauch aus); die globale System-Idle-Zeit (GetLastInputInfo) waere das andere Extrem
+(die App sperrte nie, solange irgendwo auf dem PC getippt wird, auch wenn NoaToDo
+stundenlang unberuehrt offen liegt: genau das Szenario, das N11.8.4 absichern will). Im
+Zweifel gilt hier durchweg die sicherere Richtung.*
+
+- **Aktivitaet = Eingabe-Ereignisse im DOM des App-Fensters:** Maus-Bewegung/Klick,
+  Tastatur, Wheel/Scroll, Touch. **Nicht** die globale System-Idle-Zeit, **nicht** allein
+  Bridge-Aufrufe. Ein Fenster ohne Fokus bekommt keine solchen Ereignisse, also haelt ein
+  im Hintergrund liegendes NoaToDo sich **nicht** selbst wach.
+- **Meldung gedrosselt ueber `activity_ping()`.** Das Frontend meldet Aktivitaet mit einer
+  fuehrenden Flanke (das erste Ereignis feuert sofort), danach **hoechstens alle 30 s** ein
+  weiterer Ping. Die Drosselung meldet nur *unter*, verschiebt die Sperre also nie nach
+  hinten, hoechstens (um bis zu die Drossel-Spanne) nach **vorn**. Das ist die gewollte
+  Richtung; der kuerzeste Preset (1 min) sperrt damit im Zweifel etwas frueher, nie
+  spaeter.
+- **Der Backend-Timer ist die alleinige Autoritaet und fail-safe.** Ein Hintergrund-Timer
+  (monotone Uhr `time.monotonic()`, eigener Thread, N11.8.4) tickt (z.B. jede Sekunde) und
+  ruft bei `now - last_activity > timeout` die gemeinsame `teardown(reason='autolock')`
+  (N11.11). `activity_ping()` setzt **nur** `last_activity` auf die **Backend**-Uhr; es
+  nimmt **keinen** Zeitwert vom Frontend entgegen (dessen Uhr ist ungeprueft), kann
+  `last_activity` **nie in die Zukunft** setzen und den Timer **nicht** abschalten.
+  Bleiben die Pings aus, weil das Frontend haengt, abstuerzt oder per XSS stillgelegt
+  wird, sperrt die App. **Das Frontend kann die Sperre nur *aufschieben*, nie
+  *verhindern*.** Genau diese Richtung ist gewollt.
+- **Nur `activity_ping` zaehlt.** **Kein** anderer Bridge-Aufruf setzt den Timer zurueck.
+  Ein Hintergrund-Poll (z.B. `get_wifi_signal()` alle paar Sekunden fuer das Rail-Icon)
+  haelt die App also **nicht** wach; nur echte Nutzer-Eingabe tut das.
+- **Kein Lese-Ausnahme.** 15 Minuten eine Liste lesen ohne jede Eingabe fuehrt zur Sperre.
+  Bewusst so, zugunsten der Sicherheit.
+- **Gesperrt kein Ping.** `activity_ping` steht **nicht** in `ALLOWED_WHEN_LOCKED` (G13):
+  gesperrt liefert es `locked` und ruehrt `last_activity` nicht an. Eine gesperrte App
+  laesst sich so nicht "wachhalten".
+- **Initialisierung.** `last_activity` wird beim Entsperren bzw. Tresor-Oeffnen auf jetzt
+  gesetzt; eine frisch entsperrte, danach unberuehrte App sperrt nach Ablauf des Timeouts.
+- **`autoLock = 0` (nie).** Der Timer ist dann aus; es sperren nur noch Lock-Button /
+  `Ctrl+L`, die Panik und der **Prozess-Neustart** (der immer gesperrt startet, B.8).
+  "Nie" heisst also nicht "nie eine Sperre".
+- **Setting-Aenderung greift live.** Ein kleinerer Timeout wird beim naechsten Tick gegen
+  das bestehende `last_activity` geprueft und kann sofort sperren (sichere Richtung).
+- **Offener nativer Dialog ist keine Aktivitaet (Verweis N11.11.5, Punkt 6).** Der Timer
+  laeuft weiter, die Ping-Schleife ruht solange; feuert die Sperre bei offenem Dialog,
+  gilt die aufgeteilte Sequenz aus N11.11.5.
+- **Ehrliche Einordnung.** `activity_ping` ist **keine** Sicherheitsgrenze gegen ein
+  *kompromittiertes* Frontend (XSS = RCE per Sicherheitsmodell; dann hat der Angreifer
+  ohnehin `pywebview.api.*`-Vollzugriff). Die Sperr-Garantie kommt allein aus dem
+  autoritativen, fail-safe Backend-Timer; der Ping regelt nur die **Bequemlichkeit**
+  (nicht mitten im aktiven Gebrauch sperren).
+
+
+#### B.8.4 Entsperr-Rate-Limit und seine Persistenz
+
+*(Zusammengefuehrt in Umbau-Etappe 3 aus N11.4 (Rate-Limit-Teil) und N11.4.1 (U6-Entscheid), wortgleich. Register: Anhang 1.)*
+
+- **Rate-Limit bei falscher Passphrase (konkret):**
+  - Nach **jedem** Fehlversuch 2 s Zwangspause bis zum naechsten Versuch.
+  - **3 freie Versuche**, dann greift die Eskalations-Leiter.
+  - **Leiter:** 10 s, 30 s, 1 min, 5 min, 15 min, 30 min, 1 h, 5 h, 10 h (danach bleibt
+    es bei 10 h).
+  - **Jede Stufe erlaubt 2 Fehlversuche**, bevor auf die naechste (laengere) Stufe
+    hochgeschaltet wird.
+  - Gilt zusaetzlich zur ohnehin langsamen Argon2id-Ableitung (G8). Anzeige gemaess N4 (B.4)
+    ("try again in ...").
+
+**Der Rate-Limit-Zustand wird persistiert (Etikett N11.4.1, 2026-07-13, U6-Entscheid) [Sec]**
+
+*Loest U6 der Plananalyse: Die Leiter lag bisher nur im RAM. Der Lock-Screen hat einen
+prominenten Off-Knopf, also braucht ein Rater genau zwei Klicks (beenden, neu starten),
+um jede Sperrzeit zu loeschen; die Leiter war damit wirkungslos. Zugleich ist die Wanduhr
+manipulierbar (Systemzeit vorstellen) und die monotone Uhr ueberlebt keinen Neustart.*
+
+- **Persistiert wird `{fails, stage, next_try_at, locked_at, duration}`** in `config.json`
+  (unverschluesselt, ausserhalb des Tresors, denn er ist beim Entsperren ja gerade zu;
+  das exakte Gesamt-Schema der Datei steht in N11.15.1 (B.11), Befund U2 erledigt). Der Zustand
+  ueberlebt Beenden und Neustart: Wer im 30-min-Riegel steckt und die App neu startet,
+  steckt weiter im 30-min-Riegel. Die App enthaelt **keinen** Weg, den Zustand aus der
+  UI zu loeschen.
+- **Zurueckgesetzt wird nur durch Erfolg:** Ein erfolgreiches `unlock()` setzt
+  `fails = 0`, `stage = 0` und loescht `next_try_at`. Auch der `reset_vault()`-Weg
+  raeumt ihn auf (er loescht ohnehin alles, N11.11 Schritt 8).
+- **Uhrbasis, zwei Uhren, bewusst getrennt:**
+  - **Innerhalb einer Sitzung** zaehlt die **monotone** Uhr (`time.monotonic()`); sie ist
+    gegen jedes Verstellen der Systemzeit immun.
+  - **Ueber einen Neustart hinweg** gibt es nur die Wanduhr: `next_try_at` und
+    `locked_at` werden als UTC-Zeitstempel geschrieben, dazu die `duration` der laufenden
+    Stufe.
+  - **Rueckwaerts-Sprung-Regel:** Ist beim Start `jetzt < locked_at` (die Systemuhr wurde
+    zurueckgestellt) oder fehlen/widersprechen sich die Werte, wird die laufende Sperrzeit
+    **komplett neu gestartet** (`locked_at = jetzt`, `next_try_at = jetzt + duration`),
+    nicht etwa verkuerzt. Im Zweifel immer zugunsten der Sperre. Ein Vorwaerts-Sprung
+    (Uhr vorstellen) laesst die Sperre ablaufen; das ist hingenommen, siehe die
+    Ehrlichkeits-Notiz unten.
+  - Fehlt oder ist `config.json` unlesbar, gilt der Zustand als "voll gesperrt auf der
+    zuletzt bekannten Stufe" nur, wenn die Datei existiert und kaputt ist; fehlt sie ganz
+    (frischer Rechner), ist das ein Erststart und es gibt nichts zu bremsen (die genaue
+    Fehlerbehandlung der Datei steht in N11.15.2 (B.11): kaputte Datei nach `config.json.bad`,
+    Fehlerbildschirm, danach frische, leere Leiter).
+- **Reihenfolge: erst zaehlen und schreiben, dann pruefen (pro Sicherheit).** Ein
+  Fehlversuch wird gezaehlt (`fails += 1`, Stufe/`duration`/`next_try_at`/`locked_at` neu)
+  und `config.json` wird **synchron und atomar (N11.15.1) geschrieben, BEVOR** die teure
+  Argon2id-Ableitung und die AEAD-Pruefung ueberhaupt starten und **bevor** irgendeine
+  Antwort ans Frontend geht. Sonst gaebe es denselben billigen Ausweg wie ueber den
+  Off-Knopf: Versuch schicken, den Prozess toeten, solange die Pruefung noch laeuft, und der
+  Fehlschlag landet nie auf Platte. Nur ein **erfolgreiches** `unlock()` setzt anschliessend
+  zurueck; jeder andere Ausgang (falsch, Absturz, Kill, Stromausfall) laesst den bereits
+  erhoehten Stand stehen.
+- **Eine deterministische Stufenfunktion, ein Codepfad.** Aus `fails` allein ergeben sich
+  Stufe, `duration` und `next_try_at` durch **eine** reine Funktion, die im laufenden Betrieb
+  und beim Start (aus dem persistierten `fails`) identisch rechnet, damit kein Pfad die Leiter
+  anders auslegt: die ersten 3 Fehlversuche sind frei (nur die 2-s-Pause aus N11.4), ab dem 4.
+  greift die Leiter, und **je 2 weitere Fehlversuche** schalten eine Stufe hoch (Fehlversuch
+  4-5 -> 10 s, 6-7 -> 30 s, 8-9 -> 1 min, ... bis 10 h, dann Deckel). `stage` ist damit nur
+  eine redundante, bequeme Spiegelung von `fails`; widersprechen sich beide in einer geladenen
+  Datei, gilt der **hoehere** Wert (im Zweifel zugunsten der Sperre).
+- **Innerhalb der Sitzung die laengere Restzeit (pro Sicherheit).** Solange die App laeuft,
+  existieren beide Uhren; die noch zu wartende Sperrzeit ist `max(monoton abgeleitet, aus der
+  Wanduhr abgeleitet)`, nie die kuerzere. So verkuerzt weder ein Vorstellen der Systemuhr noch
+  ein Eingriff an der monotonen Uhr die Wartezeit. (Der reine Neustart-Fall, in dem nur die
+  Wanduhr vorliegt, bleibt wie oben geregelt: Rueckwaerts-Sprung -> Sperre komplett neu.)
+- **Ehrliche Einordnung (gehoert ins Bedrohungsmodell, K3):** Die Leiter bremst den
+  **beilaeufigen Rater am Geraet** (Mitbewohner, Kollege, die zehn Minuten Zeit haben).
+  Sie ist **kein** Schutz gegen den ernsthaften Angreifer: Der kopiert `tasks.db.enc` und
+  raet **offline**, wo weder Leiter noch Auto-Sperre existieren. Dagegen stehen
+  ausschliesslich die Argon2id-Kosten (G8) und der DPAPI-Pepper (G18). Ebenso ehrlich:
+  Wer Dateizugriff hat, kann `config.json` loeschen und die Leiter zuruecksetzen, aber
+  genau dieser Angreifer kopiert lieber gleich den Tresor und raet offline. Die Leiter
+  wird deshalb nie als Schutz gegen K1 **verkauft**.
+
+
+#### B.8.5 Die gemeinsame teardown(reason)-Sequenz
+
+*(Wortgleich umgezogen in Umbau-Etappe 3 aus „N11.11 Die gemeinsame Sperr-/Beenden-Sequenz (2026-07-13, S5-Entscheid, Gate G35) [Sec]“ samt N11.11.1 bis N11.11.4. Register: Anhang 1.)*
+
+*Loest Befund S5 der Plananalyse: die Ablaeufe Sperren, Beenden, Panik, Killswitch und
+Reset waren ueber fuenf Stellen verstreut (B.8, N10, N11.5, N11.8.1/N11.8.3, Phase 8
+Punkt 2) und nirgends als eine pruefbare Sequenz definiert; mehrere Schritte standen
+ueberhaupt nirgends. Dieser Abschnitt ist ab sofort die **einzige Wahrheit** fuer alle
+Ausgaenge und bindet zugleich U5, U21, V7 und V8 ein. Er praezisiert die genannten
+Stellen, widerspricht ihnen aber nicht.*
+
+##### N11.11.1 Eine Funktion, alle Ausgaenge
+
+In `backend/security.py` entsteht **genau eine** Routine:
+
+```python
+def teardown(reason: Reason) -> None: ...
+# Reason = "lock" | "autolock" | "quit" | "panic_finish" | "killswitch" | "reset" | "atexit"
+```
+
+**Alle** Ausgaenge rufen ausschliesslich sie, keiner baut seinen eigenen Ablauf:
+Lock-Button/`Ctrl+L` (`lock`), Auto-Sperre (`autolock`), Off-Knopf des Lock-Screens
+(`quit`), Panik-Endschirm "Finish" (`quit`), Killswitch-Ende (`killswitch`),
+Lock-Screen-Reset (`reset`), **natives Fenster-X** (`quit`, per `closing`-Handler, siehe
+Phase 8 Punkt 2) und die Rueckfalllinie `atexit`/`try…finally` um `webview.start()`
+(`atexit`). Der Panik-Confirm selbst ist **kein** Ausgang: er raeumt den Raum, schaltet
+offline (N11.10) und fuehrt in den Endschirm; erst dessen Knoepfe rufen `teardown`.
+
+**Nicht verhandelbar:** Wer einen neuen Ausgang baut (neuer Knopf, neuer Hotkey, neues
+Fenster-Ereignis), ruft `teardown`. Ein zweiter, handgeschriebener Beenden-Pfad ist ein
+Gate-Verstoss (G35), auch wenn er "dasselbe" tut.
+
+##### N11.11.2 Die Soll-Sequenz (verbindliche Reihenfolge)
+
+`teardown(reason)` laeuft **immer** in dieser Reihenfolge; welche Schritte fuer welchen
+Grund gelten, steht in der Tabelle in N11.11.3. Die Reihenfolge ist selbst
+sicherheitsrelevant (Schritt 7 darf nie vor Schritt 5/6 laufen, U21; Schritt 10 ist
+immer der letzte, N11.5).
+
+1. **Eintritt absichern (Idempotenz).** Ein Prozess-weites Flag plus Lock: `teardown`
+   laeuft **hoechstens einmal** durch. Ein zweiter Aufruf (X waehrend die Auto-Sperre
+   schon laeuft, `atexit` nach `quit_app`) kehrt sofort zurueck oder wartet auf den
+   laufenden Durchlauf. Ein `lock`, das ein `quit` ueberholt, wird verworfen: ein
+   begonnenes Beenden gewinnt immer gegen ein begonnenes Sperren.
+2. **Offene native Dialoge aufloesen (U5).** Ist ein nativer Dialog offen (Export-Save,
+   Onboarding-Ordnerwahl), darf **nie** unter ihm das Hauptfenster abgebaut werden
+   (N11.8.3). Kurzfassung der Regel: **jeder Grund ausser `autolock`** bricht den Dialog
+   sofort ab (Cancel) und faehrt fort (der Nutzer steht davor, er hat es selbst
+   ausgeloest); **`autolock`** laeuft trotzdem sofort bis Schritt 7 durch (die Daten
+   werden gesichert, die Ansicht wird gesperrt) und schiebt **nur die nativen Schritte
+   9 bis 11** auf, bis der Dialog zu ist, wobei die Sequenz den Dialog selbst
+   schliesst, statt auf ihn zu warten. **Der vollstaendige Ablauf samt der
+   Angriffsvektoren, die eine naive Aufschiebung erst erzeugen wuerde, steht in
+   N11.11.5 (B.8.6); er ist Teil dieses Schrittes und nicht optional.**
+3. **Eingaben einfrieren.** Backend setzt sofort `locked = True` (bzw. `shutting_down`),
+   damit ab hier jede Bridge-Methode ausserhalb der G13-Allowlist `{"error": "locked"}`
+   liefert und keine neue Mutation mehr hereinkommt. Frontend leert den Raum
+   (`clearWorkspace()`: Listen, Auswahl, Menues, Modals, Eingaben; **ohne** den
+   Online-Zustand anzufassen, N11.10).
+4. **Timer stoppen und ausstehende Aenderungen synchron persistieren (G17).** Den
+   Auto-Sperr-Timer und den **G17-Debounce-Timer abbrechen**; steht noch eine ungesicherte
+   Aenderung an, wird sie **synchron** und **vor** allen weiteren Schritten nach
+   `tasks.db.enc` geschrieben (atomar nach G16). `teardown` wartet auf den Abschluss, kein
+   Feuern-und-Vergessen. Fuer `killswitch` und `reset` entfaellt dieser Schritt
+   ersatzlos (die Daten werden ohnehin sofort geloescht; ein letzter Write-back waere
+   sinnlose Schreiblast auf genau die Datei, die gleich stirbt). **Fehlerfall:** Scheitert
+   das Schreiben bei `lock`/`autolock`/`quit`, bricht die Sequenz ab und zeigt den
+   N6-Fehlerbildschirm; es wird **nicht** weitergewischt und **nicht** beendet (sonst
+   kostet der Beenden-Pfad Daten). Die `.bak`-Generation aus G16 bleibt unangetastet.
+5. **Clipboard sofort leeren (V7, G23).** Traegt das Windows-Clipboard noch App-Inhalt
+   (dieselbe Pruefung "ist es noch unser Inhalt", die schon der 60-s-Auto-Clear nutzt),
+   wird es **jetzt** geleert und der 60-s-Timer abgebrochen. Sonst laege bis zu eine
+   Minute Aufgabentext im Clipboard, waehrend die App laengst gesperrt oder beendet ist.
+   Fremder Inhalt (der Nutzer hat inzwischen etwas anderes kopiert) bleibt unangetastet.
+6. **DB schliessen.** SQLCipher-Verbindung sauber schliessen, In-Memory-Image freigeben,
+   eine allfaellige **verschluesselte** Arbeitsdatei (N11.9-Fallback) loeschen. Erst
+   danach darf irgendetwas an Dateien angefasst werden (U21).
+7. **Schluessel nullen (G25) und fluechtige RAM-Puffer verwerfen.** `aes_key`,
+   `chacha_key`, Master-Secret und die RAM-Kopie des Pepper als `bytearray` ueberschreiben
+   und verwerfen; die Passphrase ist ohnehin direkt nach der Ableitung verworfen. **Hier
+   wird auch der Undo-Puffer der letzten geloeschten Liste (N11.2.1) verworfen**, damit eine
+   gesperrte App nie geloeschten Aufgabentext im RAM haelt. Ab hier ist der Prozess
+   schluessellos. Gilt auch fuer `lock`/`autolock`: eine Sperre ohne Schluessel-Nullen (und
+   ohne Verwerfen dieses Puffers) waere keine.
+8. **Nur `killswitch` und `reset`: loeschen.** Erst **nach** Schritt 6 und 7 (offene
+   Handles, U21): `tasks.db.enc` samt `.bak` und Vault-Metadaten loeschen, den
+   DPAPI-Pepper aus dem Credential Manager entfernen (`keyring.delete_password`, G18),
+   den Vault-Eintrag in `config.json` (und den Rate-Limit-Zustand, U6) verwerfen. Der
+   Killswitch ist ab Phase 8 eine reine **Datei**-Operation und braucht keine Schluessel
+   (N11.8.1), funktioniert also gesperrt wie entsperrt; im entsperrten Zustand sorgen
+   6 und 7 dafuer, dass er nicht gegen offene Handles laeuft. **Dokumentierter
+   Nebeneffekt:** Mit dem Pepper sterben auch alle **frueher kopierten** `.enc`-Staende
+   endgueltig, selbst wenn der Angreifer spaeter die Passphrase erfuehre (U21).
+   Unterschied der beiden Gruende: `killswitch` beendet danach den Prozess (Schritte 9
+   bis 11), `reset` beendet **nicht**, sondern springt in das Onboarding (Speicherort
+   waehlen, neue Passphrase, frischer Pepper, N11.3) und die Sequenz endet hier.
+9. **WebView2-Profil freigeben und sicher wischen (G14).** Die Haupt-Ansicht abbauen
+   (das WebView2, das `PROFILE_DIR` offen haelt, schliessen), dann `PROFILE_DIR` sicher
+   wischen. **`LOCK_PROFILE_DIR` wird nie gewischt** (inhaltsfrei, N11.8.3). Bei
+   `lock`/`autolock` uebernimmt danach der Lock-Screen aus `LOCK_PROFILE_DIR`, und die
+   Sequenz **endet hier** (Schritte 10 und 11 sind Beenden-Schritte). Gewischt wird immer
+   der **real beschriebene** Pfad, nicht der literale: unter Store-Python liegt er
+   umgeleitet unter `...\Packages\PythonSoftwareFoundation.Python.3.11_*\LocalCache\Local\`
+   (V8).
+10. **Funk-Zustand wiederherstellen (N11.5/N11.10), als letzter fachlicher Schritt.** Nur
+    auf den Beenden-Gruenden (`quit`, `killswitch`, `atexit`): hat die App den Flugmodus
+    eingeschaltet, wird der beim Start gemerkte Zustand wiederhergestellt und der
+    Merker in `config.json` geloescht. **Beim Sperren passiert hier nichts** (N11.10, die
+    Sequenz ist da ohnehin schon beendet). Zuletzt, damit der Raum erst geraeumt ist,
+    bevor die Funkgeraete wieder angehen.
+11. **Prozess-Ende.** Single-Instance-Mutex (G19) freigeben, verbleibende Handles
+    schliessen, WinForms-Form ueber `BeginInvoke` auf dem UI-Thread schliessen, Prozess
+    beenden.
+
+**Fehlerregel fuer die Schritte 5 bis 11:** Sie laufen **best effort**. Scheitert einer
+(Clipboard-API belegt, Profilordner gesperrt, Radio-API verweigert), wird er
+uebersprungen und die Sequenz laeuft weiter; **nie** darf ein gescheiterter Schritt die
+folgenden verhindern, sonst bleibt ausgerechnet im Fehlerfall der Schluessel im RAM oder
+das Profil ungewischt. Einzige Ausnahme ist Schritt 4 (Datenverlust, siehe dort).
+
+##### N11.11.3 Welcher Schritt gilt fuer welchen Ausgang
+
+| Schritt | `lock` / `autolock` | `quit` (Off, Finish, Fenster-X) | `killswitch` | `reset` | `atexit` |
+|---|---|---|---|---|---|
+| 1 Idempotenz | ja | ja | ja | ja | ja |
+| 2 Dialog aufloesen | `autolock`: Schritte 3-7 sofort, 9-11 aufgeschoben, Dialog wird geschlossen (N11.11.5) | Cancel | Cancel | Cancel | entfaellt |
+| 3 Einfrieren | ja | ja | ja | ja | ja |
+| 4 Debounce-Flush | ja | ja | **nein** | **nein** | ja (falls moeglich) |
+| 5 Clipboard leeren | ja | ja | ja | ja | ja |
+| 6 DB schliessen | ja | ja | ja (entsperrt) | ja (entsperrt) | ja |
+| 7 Schluessel nullen | ja | ja | ja | ja | **ja (Pflicht)** |
+| 8 Dateien/Pepper loeschen | nein | nein | **ja** | **ja** | nein |
+| 9 `PROFILE_DIR` wischen | ja, dann Lock-Screen | ja | ja | ja | ja (falls moeglich) |
+| 10 Funk wiederherstellen | **nein** (N11.10) | ja | ja | nein (App laeuft weiter) | ja |
+| 11 Prozess-Ende | nein (Lock-Screen) | ja | ja | **nein** (Onboarding) | ja |
+
+`atexit` ist die Rueckfalllinie fuer den Fall, dass der Message-Loop unerwartet
+zurueckkehrt: Es laeuft dieselbe Funktion, aber nur noch, was ohne UI moeglich ist. Die
+Pflichtschritte dort sind 5, 7, 10 und 11 (Clipboard, Schluessel, Funk, Mutex).
+
+##### N11.11.4 Neues Pflicht-Gate G35
+
+> **🔒 G35 (Phase 8), gemeinsame Sperr-/Beenden-Sequenz:** Es gibt **genau eine**
+> `teardown(reason)`-Routine, und **jeder** Ausgang (Lock-Button, `Ctrl+L`, Auto-Sperre,
+> Off-Knopf, Panik-Finish, Killswitch, Reset, natives Fenster-X, `atexit`) laeuft
+> ausschliesslich durch sie, in der Reihenfolge aus N11.11.2. Abnahme: Fuer **jeden** der
+> neun Ausgaenge ist nachzuweisen, dass (a) ein ausstehender G17-Debounce synchron
+> geschrieben wurde (ausser Killswitch/Reset), (b) das Clipboard keinen App-Inhalt mehr
+> traegt, (c) die Schluessel genullt sind, (d) `PROFILE_DIR` gewischt ist, (e) der
+> Funk-Zustand nur auf den Beenden-Wegen und nur als letzter Schritt wiederhergestellt
+> wurde, (f) der Mutex freigegeben ist. Ein zweiter, handgeschriebener Beenden-/Sperr-Pfad
+> im Code ist ein Gate-Verstoss.
+>
+> **Ergaenzung (U5, siehe N11.11.5 in B.8.6):** Die Abnahme gilt zusaetzlich fuer den Fall
+> "Auto-Sperre feuert, waehrend ein nativer Dialog offen ist". Nachzuweisen ist, dass
+> dabei (g) das Hauptfenster **nicht** unter dem modalen Dialog abgebaut wird, (h) die
+> Schluessel trotzdem sofort genullt sind, (i) der Dialog geschlossen und sein Ergebnis
+> verworfen wird (keine Export-Datei entsteht nach dem Sperren) und (j) die Sperre sich
+> durch einen offenen Dialog **nicht unbegrenzt hinausschieben** laesst.
+
+
+
+##### Keine WebView2-Datenspuren auf der Platte (Etikett G14) [Sec]
+
+*(Wortgleich hierher gezogen in Umbau-Etappe 6 aus der G14-Zeile der B.9-Gate-Tabelle; Status, Stand und Pruefweg des Gates stehen weiter in B.9.)*
+
+**Keine WebView2-Datenspuren auf der Platte.** WebView2 legt einen User-Data-Ordner an (Cache,
+localStorage, GPU-Cache); dort können gerenderte Task-Texte an beiden Verschlüsselungsschichten
+vorbei landen. **Umgesetzter Stand (Pflicht, so bleiben):** **ein fester, benutzerprivater
+Profilordner** statt Privatmodus, d.h. `webview.start(..., private_mode=False,
+storage_path=PROFILE_DIR)` mit `PROFILE_DIR = %LOCALAPPDATA%\NoaToDo\webview`, **zwingend
+zusammen mit dem Single-Instance-Mutex aus G19** (zwei Instanzen würden den geteilten Ordner
+sperren/korrumpieren); `_cleanup_stale_webview_profiles()` räumt beim Start die alten
+Temp-Profile weg. **`private_mode=True` ist ersatzlos gestrichen und darf nicht wieder eingebaut
+werden:** der Privatmodus legte pro Start ein neues `%TEMP%\tmp...\EBWebView` an, das bei hartem
+Beenden liegen blieb (real bis 55 Altlasten) und zusammen mit verwaisten `msedgewebview2.exe`
+Starthänger über eine Minute verursachte. **Offen für Phase 8:** (a) `PROFILE_DIR` bei
+`lock()`/`panic()`/sauberem Beenden **sicher wischen**, wobei das native Fenster-X ausdrücklich
+als sauberes Beenden zählt und denselben Wisch-Pfad wie `quit_app()` durchlaufen muss; (b)
+verwaiste `msedgewebview2.exe` (überleben einen harten Kill und sperren den Ordner, nächster
+Start sonst `0x800700AA` ERROR_BUSY) vor dem Wischen beenden, dabei nur Prozesse mit
+`PROFILE_DIR` als Arbeitsverzeichnis, nicht pauschal alle (andere Apps nutzen WebView2 auch);
+(c) das Wischen mit Mutex und Lock-Lebenszyklus abstimmen (nicht wischen, solange WebView2 den
+Ordner offen hält). **Entwarnung zur Vertraulichkeit:** Aufgabentexte erreichen keine
+persistierbare WebView2-Fläche (kein localStorage/IndexedDB, keine Cookies, kein fetch/XHR; alle
+Daten kommen über die In-Memory-Bridge ins DOM), im Profil liegt nur nicht-sensibler UI-Cache;
+einziger Randfall ist ein WebView2-Crash-Dump mit DOM-Fragmenten, genau dagegen ist das Wischen
+Pflicht. Das Frontend darf localStorage/sessionStorage/IndexedDB **nie** für Aufgabendaten
+verwenden. **Store-Python-Redirect (V8, 2026-07-15; Volltext in N11.15.5, B.11):** unter
+Microsoft-Store-Python wird `%LOCALAPPDATA%` real nach
+`...\Packages\PythonSoftwareFoundation...\LocalCache\Local\NoaToDo\...` umgeleitet. Der Wisch
+operiert deshalb **immer in-process auf dem effektiven Pfad** (die Python-API sieht die
+Umleitung automatisch); externe Werkzeuge oder Anleitungen mit dem literalen Pfad verfehlen die
+echten Daten. Und weil die Phase-9-`.exe` ohne Redirect läuft, bekommt Phase 9 einen
+**einmaligen Erststart-Schritt**, der die bekannten alten Redirect-Pfade entfernt (nur den
+umgeleiteten `NoaToDo\webview`-Ordner und eine dortige `config.json`; eine `tasks.db.enc` wird
+dabei **niemals** angefasst), sonst bleibt der alte umgeleitete Profilordner für immer liegen.
+
+#### B.8.6 Native Dialoge und die aufgeteilte Auto-Sperre
+
+*(Wortgleich umgezogen in Umbau-Etappe 3 aus „N11.11.5 Native Dialoge und die aufgeschobene Auto-Sperre (2026-07-13, U5-Entscheid) [Sec]“ samt N11.11.5.1 bis N11.11.5.4. Register: Anhang 1.)*
+
+*Loest U5 der Plananalyse. Native Dialoge (Export-Save-Dialog aus G21, Ordnerwahl im
+Onboarding aus N11.3) sind die einzige Stelle, an der ein **modales Windows-Fenster** dem
+Hauptfenster gehoert. Feuert die Auto-Sperre (N11.4, Default 15 min) genau dann, baut die
+Sequenz in Schritt 9 die WebView-Ansicht unter einem noch offenen modalen Dialog ab: im
+guenstigen Fall haengt die App, im ungueenstigen stuerzt sie ab und hinterlaesst genau den
+Zustand, den die Sperre verhindern sollte (Schluessel im RAM eines abgestuerzten Prozesses,
+ungewischtes `PROFILE_DIR`, WER-Dump, A1). Angreiferklasse: **K3** (kurzer physischer
+Zugriff), siehe B.10.2.*
+
+##### N11.11.5.1 Die naive Loesung waere ein neues Loch
+
+Der naheliegende Patch ("Flag um `create_file_dialog`, Sperre aufschieben, nach dem
+Schliessen nachholen") behebt den Absturz und **oeffnet dabei drei neue Wege**. Sie sind
+hier benannt, weil genau diese Art von Folgeschaden die Regel aus B.10 verlangt, jede
+Massnahme gegen ihre Angreiferklasse zu pruefen:
+
+1. **Die Auto-Sperre laesst sich beliebig lange aushebeln (K3).** Ein offener Dialog wuerde
+   die Sperre auf unbestimmte Zeit aufschieben. Wer kurz Zugriff auf den entsperrten
+   Rechner hat, drueckt `Ctrl+E`, laesst den Save-Dialog offen stehen und geht: Die App
+   sperrt **nie** wieder, und die Aufgaben stehen weiter sichtbar im Hauptfenster hinter
+   dem Dialog. Damit waere ausgerechnet die einzige verlaessliche Sperre (N11.8.4) durch
+   einen Mausklick abschaltbar. **Dasselbe passiert versehentlich:** Nutzer laesst den
+   Dialog offen, klappt den Laptop zu, die App bleibt entsperrt.
+2. **Ein Export, der nach dem Sperren noch schreibt.** Kehrt der Dialog nach der Sperre
+   zurueck und die Sequenz nimmt sein Ergebnis noch entgegen, schreibt eine **gesperrte**
+   App eine Klartext-Datei mit Aufgaben auf die Platte, an G13 vorbei (der Inhalt lag beim
+   Aufruf schon im Speicher der Methode, der `locked`-Check des Decorators hat sie laengst
+   durchgelassen).
+3. **Das Flag als Dauerzustand.** Bleibt das Flag durch eine Ausnahme, einen abgestuerzten
+   Dialog oder einen zweiten, parallel geoeffneten Dialog haengen, ist die Auto-Sperre
+   dauerhaft tot, ohne dass es jemand merkt (der schlimmste Fehlerfall: ein Schutz, der
+   still nicht mehr laeuft).
+
+##### N11.11.5.2 Verbindliche Regel: nicht "aufschieben", sondern **aufteilen**
+
+Der Kern der Loesung: **Gefaehrlich ist nur der native Teil der Sequenz, nicht die
+Sperre selbst.** Schritte 3 bis 7 (einfrieren, Write-back, Clipboard, DB schliessen,
+Schluessel nullen) sind reine Python-/DOM-Operationen und beruehren kein natives Fenster;
+sie laufen problemlos, waehrend ein modaler Dialog offen ist. Nur die Schritte 9 bis 11
+(WebView-Ansicht abbauen, `PROFILE_DIR` wischen, Form schliessen) duerfen das nicht.
+
+Feuert `autolock` bei offenem Dialog, gilt daher:
+
+1. **Sofort und ohne Aufschub laufen die Schritte 1 bis 7.** Nach wenigen Millisekunden
+   ist die App gesperrt (`locked = True`, G13-Allowlist greift), der ausstehende
+   Write-back ist geschrieben (G17/G16), das Clipboard ist geleert (V7), die DB ist zu
+   und **die Schluessel sind genullt** (G25). Ab hier gibt es nichts mehr zu holen, egal
+   wie lange der Dialog noch steht.
+2. **Die Ansicht wird sofort zugemacht.** Das Frontend bekommt `onLocked()` und rendert
+   `clearWorkspace()` plus Lock-Screen. Das ist reines DOM im schon laufenden WebView
+   (`evaluate_js`), also **keine** native Fensteroperation; hinter dem Dialog steht damit
+   der Lock-Screen und keine Aufgabenliste mehr. **Nachweispflicht in Phase 8:** dass
+   `evaluate_js` waehrend eines offenen modalen Dialogs zuverlaessig durchkommt (der
+   modale Dialog pumpt die Nachrichtenschleife weiter, gesendete Nachrichten laufen also;
+   sollte es in der Praxis doch haengen, gilt Punkt 3 zuerst und die Ansicht wird erst
+   danach umgestellt).
+3. **Die Sequenz schliesst den Dialog selbst, sie wartet nicht auf ihn** (Antwort auf
+   Angriffsvektor 1). Auf dem UI-Thread (nur dort, `_run_on_ui_thread`) wird der offene
+   modale Dialog beendet (Best effort: `WM_CLOSE`/`EndDialog` an das Dialog-Fenster,
+   ermittelt ueber das Besitzer-Fenster des Hauptformulars). Das entspricht einem "Abbrechen"
+   und ist verlustfrei: der Nutzer verliert nur einen Dateinamen, keine Daten.
+4. **Erst wenn kein Dialog mehr offen ist, laufen die Schritte 9 bis 11** (Ansicht abbauen,
+   `PROFILE_DIR` wischen, Lock-Screen aus `LOCK_PROFILE_DIR`). Gelingt Punkt 3 nicht
+   (kein Handle, Dialog reagiert nicht), bleibt genau dieser Rest geparkt und laeuft, sobald
+   der Dialog zurueckkehrt. **Das ist vertretbar, weil die Sperre inhaltlich schon
+   vollzogen ist:** ohne Schluessel und ohne offene DB haengt an den geparkten Schritten
+   kein Geheimnis mehr, nur noch Aufraeumarbeit (der WebView2-Cache, den ohnehin auch der
+   naechste Start purgen wuerde).
+5. **Das Ergebnis des Dialogs ist nichtig** (Antwort auf Angriffsvektor 2). Kehrt
+   `create_file_dialog` zurueck, nachdem eine Sperre gefeuert hat, wird der gewaehlte Pfad
+   **verworfen**, es wird **keine Datei geschrieben**, der schon aufgebaute Export-Inhalt
+   wird aus dem Speicher genullt, und die Bridge-Methode liefert `{"error": "locked"}`
+   (stumm im Frontend, B.2). Gleiches gilt fuer die Onboarding-Ordnerwahl: nach einer
+   zwischenzeitlichen Sperre/Teardown wird kein Tresor angelegt.
+6. **Der offene Dialog ist keine Aktivitaet.** Er setzt den Auto-Sperr-Timer **nicht**
+   zurueck (U4 definiert Aktivitaet als Eingabe im App-Fenster), und Interaktion **im**
+   nativen Dialog zaehlt ausdruecklich auch nicht. Ein offener Dialog verzoegert die
+   Sperre also nicht, er verzoegert nur ihre letzten drei Schritte.
+
+##### N11.11.5.3 Dialog-Buchfuehrung (Antwort auf Angriffsvektor 3)
+
+- **Hoechstens ein nativer Dialog gleichzeitig.** Jeder Aufruf von `create_file_dialog`
+  laeuft in `api.py` durch **einen** gemeinsamen Kontextmanager (`_native_dialog(...)`),
+  der ein Prozess-Flag samt Zeitstempel setzt und es im `finally` **immer** wieder
+  freigibt, auch bei Ausnahme. Ist das Flag schon gesetzt, wird der zweite Dialog gar
+  nicht geoeffnet, sondern die Methode liefert `{"error": "busy"}` (B.2). Damit kann weder
+  ein Doppelklick noch ein Bridge-Aufruf an der UI vorbei (XSS, DevTools) Dialoge stapeln
+  und so eine Kette bauen, die nie endet.
+- **Kein eigener Dialog-Pfad.** Wer einen neuen nativen Dialog einfuehrt, benutzt diesen
+  Kontextmanager. Ein `create_file_dialog` ohne ihn ist ein G35-Verstoss, genau wie ein
+  zweiter Beenden-Pfad.
+- **Waechter gegen ein haengendes Flag.** Der Auto-Sperr-Thread prueft bei jedem Tick: Ist
+  das Flag gesetzt, aber **kein** modales Fenster mehr vorhanden (oder steht das Flag
+  laenger, als ein Dialog plausibel offen sein kann), gilt es als verwaist, wird
+  zurueckgesetzt und die geparkten Schritte laufen an. Ein stiller Dauer-Aufschub darf es
+  nicht geben.
+- **Sichtbar im Status-Modal (G22-Geist):** Steht die Sperre wegen eines Dialogs im
+  Zustand "gesperrt, Aufraeumen geparkt", meldet `get_status()` das ehrlich, statt "alles
+  sauber" zu behaupten.
+
+##### N11.11.5.4 Was ausdruecklich **nicht** gilt
+
+- **Kein Aufschub fuer irgendetwas ausser `autolock`.** Lock-Button, `Ctrl+L`, Panik,
+  Killswitch, Reset, Off-Knopf, Fenster-X: alle brechen den Dialog sofort ab und laufen
+  durch. Bei ihnen steht der Nutzer davor, ein Aufschub waere nur ein Weg, die eigene
+  Panik-Taste zu verzoegern.
+- **Kein "Auto-Sperre wird uebersprungen, weil der Nutzer ja gerade exportiert".** Ein
+  offener Dialog ist kein Anwesenheitsbeweis; genau darauf baut Angriffsvektor 1.
+- **Keine Verlaengerung der Sperrfrist,** solange ein Dialog offen ist. Der Timer laeuft
+  unveraendert.
+
+
+#### B.8.7 Killswitch und Reset als Datei-Operation
+
+*(Zusammengefuehrt in Umbau-Etappe 3 aus N11.8.1 (Killswitch = Datei-Operation, Punkt 1 des frueheren N11.8) und N10.4 (Verhalten nach dem Killswitch), wortgleich. Register: Anhang 1.)*
+
+1. **Killswitch wird auf reine Datei-Loeschung umgebaut (Prioritaet).**
+   *Ueberschreibt N10.4 (Killswitch "schreibt Standard-Settings neu und setzt
+   `seeded=true`") und die heutige `db.killswitch()`-Implementierung.* Der aktuelle
+   `killswitch()` oeffnet die DB und loescht Zeilen. Das ist mit dem gesperrten
+   Phase-8-Zustand unvereinbar (keine Schluessel im RAM, DB ist nur ein ChaCha20-Blob)
+   und mit G13, das den Aufruf gerade im gesperrten Zustand erlaubt. Ab Phase 8 ist der
+   Killswitch daher **keine DB-Operation, sondern eine Datei-Operation:** `tasks.db.enc`
+   samt `.bak` und Vault-Metadaten loeschen, den DPAPI-Pepper aus dem Credential Manager
+   entfernen (`keyring.delete_password`, G18), `PROFILE_DIR` (und `LOCK_PROFILE_DIR`,
+   Punkt 3) wischen (G14), dann beenden. **Keine Schluessel noetig.** Der `seeded`-Marker
+   wird dabei **nicht** geschrieben (der Datei-Killswitch beruehrt die DB nicht mehr); er
+   bleibt der passive Backend-Guard aus N11.7. Weil es ohnehin keine Demo-Seed-Daten mehr
+   gibt (N11.1.4), ist der naechste Start nach dem Killswitch automatisch ein **leerer
+   Erststart** (Punkt 2).
+
+**4. Nach dem Killswitch.** Der nächste Start verhält sich wie ein Erststart auf
+einem frischen Rechner, aber **ohne** die Demo-Seed-Daten: keine Listen, alles kann
+neu angelegt werden. **N11.8.1 gilt vorrangig: `killswitch()` ist ab Phase 8 eine reine Datei-Loeschung (`tasks.db.enc` + `.bak` + Metadaten + Pepper + Profile), schreibt KEINE Settings und keinen `seeded`-Marker mehr; der naechste Start ist mangels Datei automatisch ein leerer Erststart.** (Frueher, DB-basiert: schrieb Standard-Settings neu und setzte `seeded=true`.) Gelöscht wird nur der Inhalt der
+Datenbank, **nie das Programm selbst**. Nirgendwo dürfen danach Daten liegen, die
+auf die frühere Nutzung schließen lassen. Ehrliche Einordnung des heutigen Stands:
+Zeileninhalte sind weg und `VACUUM` baut die Datei neu auf, aber auf SSD/NTFS ist
+das noch kein forensisches Secure-Delete; erst die Phase-8-Härtung (In-Memory-DB
+nach G6, `.enc`-Neuaufbau nach G16, `PROFILE_DIR`-Wisch nach G14) macht die Zusage
+auch forensisch belastbar.
+
 
 ### B.9 Eingabe-Sicherheit: Schutz vor bösartigem Inhalt (verbindlich)
 
 > ## ⚠️ SICHERHEITS-HÄRTUNG, STAND & OFFENE PFLICHT-GATES
 >
-> Aus dem Security-Review (2026-06-08) ergab sich eine klare Trennung in
-> „sofort erledigt" und „muss in der jeweiligen Phase erledigt werden".
 > **Diese Liste ist verbindlich. Die offenen Punkte sind Gates: Die jeweilige
 > Phase gilt erst als fertig, wenn ihr Sicherheitspunkt umgesetzt ist.**
+> **Alle folgenden Gates sind verbindlich und vom Nutzer bestätigt. KEINER
+> dieser Punkte ist optional, jeder MUSS in der genannten Phase umgesetzt
+> werden.** Die Entstehungsgeschichte der Gates (wann welches Gate aus welchem
+> Review/Audit kam) steht als Protokoll-Absatz im Entscheidungsregister
+> (Anhang 1, dorthin verschoben in Umbau-Etappe 2).
 >
 > **NORMATIVE QUELLE (Regel seit 2026-07-13, behebt Plananalyse S1/S2):** Diese
-> Tabelle und die Nachtragstabelle G13-G35 direkt darunter sind zusammen die
+> Tabelle (seit Umbau-Etappe 2 die eine, aus den früheren zwei B.9-Tabellen
+> zusammengeführte Gate-Tabelle) ist die
 > **einzige normative Quelle** für alle Sicherheits-Gates. Definition, Status,
 > Stand (Datum) und Prüfweg eines Gates stehen nur hier und werden nur hier
-> gepflegt. Nennt eine Zeile ausdrücklich einen Volltext-Anker (G27: Phase 9,
-> G28: N11.9, G29: N11.12, G30: B.10, G35: N11.11), gehört genau dieser eine
+> gepflegt. Nennt eine Zeile ausdrücklich einen Volltext-Anker (G13: B.2, G14: B.8.5,
+> G16: B.7, G20: B.2, G21: Phase 7, G27: Phase 9, G28: B.7 (N11.9), G29: B.2 (N11.12),
+> G30: B.10, G34: Phase 9, G35: B.8.5 (N11.11)), gehört genau dieser eine
 > Volltext zur Definition dazu. Alle
 > anderen Stellen sind nachrangig: die Phasen-Abschnitte listen nur noch
 > Gate-Nummern mit Stichwort und verweisen hierher, die Schnellübersicht am
@@ -742,10 +2081,32 @@ monotonen Uhr, unabhängig von Fensterfokus und Windows-Sitzungszustand.
 > |---|---|---|---|---|---|
 > | **G6** | **8** | offen | seit 2026-06-08 | Im entsperrten Betrieb existiert zu keinem Zeitpunkt eine entschlüsselte DB-Datei auf der Platte (Datei-Monitor auf `%TEMP%` und den App-Ordner während Unlock, Arbeit und Lock). | **In-Memory-DB** (`:memory:`) statt entschlüsselter Temp-Arbeitskopie, siehe B.7 „Alternative für Puristen". Eliminiert Temp-Datei-Forensik (Secure-Delete auf SSD ist unzuverlässig). |
 > | **G7** | **8** | offen | seit 2026-06-08 | `db.py` setzt `PRAGMA key` als Raw-Key mit 64 Hex-Zeichen; nirgends mehr ein String-Key oder eine `'%s'`-Interpolation. | **Roher Hex-Schlüssel** für `PRAGMA key = "x'<64 hex>'"` statt String-Interpolation (`db.py`), damit SQLCipher kein eigenes PBKDF2 über den schon abgeleiteten Key legt (und das Quote-Escaping entfällt). Den Dev-Platzhalter in `db.py` bei dieser Gelegenheit ersetzen. |
-> | **G8** | **8** | offen | seit 2026-06-08 | Argon2id-Parameter im Code ablesen (Memory ≥ 256 MB, time_cost ≥ 3); das Setup akzeptiert 12 gleiche Zeichen als Passphrase, und die UI zeigt keinerlei Stärkemesser oder Zeichenregeln. | **Starke Argon2id-Parameter** (Memory ≥ 256-512 MB, time_cost ≥ 3) **plus die Passphrase-Politik aus N11.3: ausschliesslich Mindestlänge 12 Zeichen, kein Stärkemesser, keine Zeichenregeln.** Die Passphrase ist der einzige reale Schwachpunkt (Offline-Brute-Force), abgefedert wird das allein über die Argon2id-Kosten und den Pepper; das ist wichtiger als die zweite Cipher-Schicht. Frühere Fassungen verlangten eine „erzwungene Passphrase-Stärke mit Stärke-Anzeige"; das ist bewusst gestrichen und darf nicht wieder eingebaut werden (ehrliche Konsequenz: `aaaaaaaaaaaa` ist gültig). |
+> | **G8** | **8** | offen | seit 2026-06-08 | Argon2id-Parameter im Code ablesen (Memory ≥ 256 MB, time_cost ≥ 3); das Setup akzeptiert 12 gleiche Zeichen als Passphrase, und die UI zeigt keinerlei Stärkemesser oder Zeichenregeln. | **Starke Argon2id-Parameter** (Memory ≥ 256-512 MB, time_cost ≥ 3) **plus die Passphrase-Politik aus N11.3 (B.2): ausschliesslich Mindestlänge 12 Zeichen, kein Stärkemesser, keine Zeichenregeln.** Die Passphrase ist der einzige reale Schwachpunkt (Offline-Brute-Force), abgefedert wird das allein über die Argon2id-Kosten und den Pepper; das ist wichtiger als die zweite Cipher-Schicht. Frühere Fassungen verlangten eine „erzwungene Passphrase-Stärke mit Stärke-Anzeige"; das ist bewusst gestrichen und darf nicht wieder eingebaut werden (ehrliche Konsequenz: `aaaaaaaaaaaa` ist gültig). |
 > | **🔴 G9** | **8** | offen | seit 2026-06-08 | `grep DEV_AES_KEY` über `Code/` liefert 0 Treffer; `db.connect()` ohne passphrase-abgeleiteten Schlüssel schlägt fehl. | **`DEV_AES_KEY` & jeden statischen Schlüssel-Default ersatzlos entfernen.** Es darf **keinen** Code-Pfad geben, der die DB ohne passphrase-abgeleiteten Schlüssel öffnet. Sonst öffnet die „verschlüsselte" DB mit einem öffentlich im Quellcode stehenden String → **effektiv null Verschlüsselung**, während der Status fälschlich „AES-256 + ChaCha20" meldet. Wichtigstes Gate der Phase 8. Dazu gehören der saubere Erst-Einrichtungs-Flow (Passphrase anlegen) und die Migration der bestehenden Dev-DB auf den echten Schlüssel. |
 > | **G11** | **0 / 9 (Build)** | ✅ erfüllt über `requirements.lock.txt`; Rest (Hash-Checking im Build) offen für Phase 9 | 2026-07-13 | Jede Zeile in `requirements.lock.txt` trägt eine feste `==`-Version; der Release-Build (Phase 9) installiert ausschliesslich aus der Lock-Datei mit `--require-hashes`; die Ziel-Python-Version ist auf **3.11.x** festgeschrieben (Doku und Build-Umgebung), und der Release-Build laeuft nachweislich unter 3.11.x. | **Abhängigkeiten pinnen.** Die verbindliche gepinnte Menge ist `requirements.lock.txt` (liegt vor; `requirements.txt` bleibt bewusst die lose Liste des Direktbedarfs; frühere Fassungen dieses Gates verlangten das Pinning fälschlich in `requirements.txt` selbst). Rest-Pflicht in Phase 9: der Release-Build installiert nur aus der Lock-Datei, mit `pip` Hash-Checking. Eine getauschte Lib = Totalkompromittierung der Tresor-App. **Auch der Interpreter ist eine gepinnte Abhaengigkeit (U25):** die Ziel-Python-Version ist **3.11.x** (heutiges Setup: Microsoft-Store-Python 3.11), festgehalten in der Doku und in der Build-Umgebung (Phase 9), weil `sqlcipher3-wheels` Wheels nur fuer bestimmte CPython-Versionen liefert (eine falsche Version = kein passendes Wheel = stiller Bruch) und die `.exe` gegen genau diesen Interpreter gebaut werden muss. Gilt laufend: bei jedem Dependency-Update bewusst prüfen. |
 > | **G12** | **vor 7 (vorgezogen aus 3/8)** | offen | festgestellt 2026-07-13 (kein Navigations-Handler in `main.py`) | Mit `NOATODO_DEBUG=1` in der DevTools-Konsole `window.location='https://example.com'` und `window.open('https://example.com')` ausführen: beides wird verweigert, die App bleibt auf der lokalen `index.html`. | **WebView-Navigation abriegeln.** Navigations-/New-Window-Events in PyWebView abfangen und jede **externe** Navigation (`window.location`/`window.open` zu externem `http`) verweigern. Die App ist rein lokal und navigiert nie woandershin. |
+> | **🔴 G13** | **8** | offen | seit 2026-06-10 | Test iteriert gesperrt über ALLE Bridge-Methoden: alles ausserhalb der Allowlist liefert `{"error": "locked"}`, `get_state()` nur `{"locked": true}`, während `quit_app()`/`killswitch()` gesperrt funktionieren. | **Serverseitige Lock-Durchsetzung (als Allowlist).** Volltext in B.2 (Etikett G13). |
+> | **G14** | **8 (Teile vorgezogen)** | teils erledigt: fester Profilordner + Altlasten-Wisch ✅, sicheres Wischen offen | 2026-06-20 | Nach normalem Betrieb liegen keine `%TEMP%\tmp*\EBWebView`-Altlasten; ab Phase 8: nach Lock/Panic/Quit (auch Fenster-X) ist `PROFILE_DIR` gewischt, und ein Neustart nach hartem Kill scheitert nicht mit `0x800700AA`. | **Keine WebView2-Datenspuren auf der Platte.** Volltext in B.8.5 (Etikett G14). |
+> | **G15** | **8** | offen | seit 2026-06-10 | Im `.enc`-Header existiert kein Hash-Feld; eine falsche Passphrase erzeugt einen AEAD-Fehler mit der Meldung "Passphrase falsch"; die getrennten HKDF-`info`-Labels stehen im Code. | **Schlüsselableitung mit Domain-Separation, KEIN gespeicherter Verifikations-Hash.** Argon2id erzeugt aus dem Pepper-gebundenen `ikm` (verbindliche Konstruktion in G18, V2a) + Salt **ein** 32-Byte-Master-Secret; daraus per HKDF-SHA256 mit getrennten `info`-Labels (`b"noatodo/aes-v1"`, `b"noatodo/chacha-v1"`) `aes_key` und `chacha_key` ableiten. Es wird **kein** Argon2-Hash der Passphrase gespeichert: Die Prüfung beim Entsperren ist der Erfolg oder Misserfolg der ChaCha20-Poly1305-Entschlüsselung (der Poly1305-Tag verifiziert die Passphrase implizit; falsche Passphrase = AEAD-Exception = Meldung "Passphrase falsch"). So liegt kein zusätzliches Orakel-Material für Offline-Angreifer auf der Platte. Ersetzt die ältere Formulierung in B.7 ("Argon2-Hash zum Prüfen speichern", "Teilstücke des KDF-Outputs"). |
+> | **G16** | **8** | offen | seit 2026-06-10 | Hexdump von `tasks.db.enc` beginnt mit `NOA1`; zwei aufeinanderfolgende Wraps tragen verschiedene Nonces; nach einem simulierten Absturz mitten im Sperren greift `.bak`. Zusätzlich (V1): ein manipuliertes Header-Byte lässt die Entschlüsselung mit einem sauberen AEAD-Fehler scheitern; ein Wrap auf ein (simuliert) volles Laufwerk lässt `.enc` und `.bak` unangetastet; das `.tmp` wird nachweislich vor der `.bak`-Rotation probeentschlüsselt. | **Dateiformat von `tasks.db.enc` + atomares Schreiben.** Volltext in B.7 (Etikett G16). |
+> | **G17** | **8** | offen | seit 2026-06-10 | Mutation ausführen, ca. 5 s warten, Prozess hart beenden: der Neustart zeigt die Änderung. | **Write-back-Politik für die In-Memory-DB** (Ergänzung zu G6). Nach jeder mutierenden Bridge-Operation wird die In-Memory-DB debounced persistiert (z.B. 3 s nach der letzten Änderung; zusätzlich **sofort** bei Lock/Panic/Quit), als neues `tasks.db.enc` nach dem Verfahren aus G16. Ein Crash kostet damit höchstens die letzten Sekunden, nie den Tagesstand. |
+> | **G18** | **8** | offen (Zusage konditioniert 2026-07-13, B.10.4) | seit 2026-06-10 | Der Credential-Manager-Eintrag existiert; eine Kopie von `tasks.db.enc` lässt sich auf einem fremden Windows-Konto auch mit korrekter Passphrase nicht öffnen. | **DPAPI-Pepper gegen Offline-Brute-Force (Pflicht).** Beim Einrichten der Passphrase wird zusätzlich ein zufälliger 32-Byte-Pepper erzeugt und über `keyring` im Windows Credential Manager (DPAPI, ans Windows-Konto gebunden) abgelegt. Der Pepper fliesst zusätzlich zur Passphrase in die Ableitung ein. **Verbindliche, versionierte Konstruktion (V2a, 2026-07-15; ersetzt die frühere Angabe „Argon2id-`secret`-Parameter", die so nicht umsetzbar ist, weil `argon2-cffi` Argon2s Keyed-Secret-Parameter nicht exponiert):** die Passphrase wird **vor** Argon2id an den Pepper gebunden: `ikm = HKDF-Extract(salt=pepper, ikm=passphrase_utf8)` (per Definition identisch mit `HMAC-SHA256(key=pepper, msg=passphrase_utf8)`, Ergebnis 32 Byte), danach `master_secret = Argon2id(password=ikm, salt=<Salt aus dem G16-Header>, Parameter aus N11.4.3, B.7)`. Die Konstruktion hängt an der Formatversion im G16-Header; eine spätere Änderung erhöht die Version und braucht einen Migrationspfad. **Wirkung, konditioniert (B.10.4, Plananalyse S4; die frühere Formulierung "kann offline gar nicht raten" war ein Überversprechen und ist gestrichen):** Wer **nur die Tresordatei** `tasks.db.enc` kopiert hat (Klasse K1), kann offline nichts anfangen, ihm fehlt der Pepper aus dem Windows-Konto. Wer die **ganze, unverschlüsselte Platte** hat (gestohlener Laptop, ausgebaute SSD), kann den DPAPI-Master-Key offline angreifen; der Pepper hängt dann an der Stärke des **Windows-Anmeldepassworts**. Die Zusage gilt daher nur mit BitLocker/Geräteverschlüsselung **oder** starkem Windows-Passwort, und genau so (mit dieser Bedingung) muss sie in UI und Doku stehen. **Kein Recovery-Export (N11.3, überschreibt die frühere Pflicht):** der Tresor ist bewusst an dieses Windows-Konto/diesen PC gebunden; geht das Windows-Profil verloren, ist die DB auch mit korrekter Passphrase nicht mehr zu öffnen. Der Einrichtungs-Flow enthält daher keinen Recovery-Schritt; der einzige Ausweg bei Verlust ist der Reset (Datenverlust, N11.3). |
+> | **G19** | **8, vorgezogen** | ✅ umgesetzt; Nachbesserung offen (V3: Mutex-Namensraum) | 2026-06-20, V3 ergänzt 2026-07-15 | Zweite Instanz starten: Hinweisbox erscheint, der zweite Prozess beendet sich, die erste Instanz läuft ungestört weiter. Zusätzlich (V3): dieselbe Prüfung aus einer zweiten Logon-Session desselben Benutzers (RDP/schnelle Benutzerumschaltung); auch dort darf keine zweite Instanz auf dieselbe DB starten. | **Single-Instance-Schutz.** Beim Start einen benannten Windows-Mutex belegen (`ctypes.windll.kernel32.CreateMutexW(None, False, "Local\\NoaToDoSingleton")`, danach `GetLastError() == ERROR_ALREADY_EXISTS (183)` prüfen). Läuft schon eine Instanz: Hinweis zeigen und den zweiten Prozess sofort beenden. Zwei Instanzen würden sich `tasks.db.enc` bzw. die Arbeitskopie gegenseitig überschreiben (Korruption/Datenverlust). **Nachbesserung V3 (2026-07-15): Mutex-Namensraum.** `Local\NoaToDoSingleton` ist nur **pro Logon-Session** eindeutig: derselbe Benutzer über RDP oder schnelle Benutzerumschaltung startet damit eine zweite Instanz auf demselben Profil und derselben DB, exakt die Korruption, die dieses Gate verhindern soll. Zielname: **`Global\NoaToDo-<User-SID>`** (`Global\` gilt über alle Sessions hinweg, die User-SID hält verschiedene Windows-Konten weiterhin getrennt). Der Code nutzt heute noch `Local\...`; die Umstellung ist Rest-Pflicht dieses Gates, spätestens in Phase 8. |
+> | **G20** | **7** | offen | seit 2026-06-10 | Ein 1-MB-Text wird auf 4096 Zeichen gekürzt; `reorder(list_id, "string")` liefert einen Fehler; `set_setting("foo", 1)` liefert `{"error": "invalid"}`. Zusätzlich (V5): `set_setting("accent", "red;} body{...")` liefert `invalid`; `set_setting("sidebarWidth", 9999)` speichert höchstens 520; `set_setting("autoLock", 7)` liefert `invalid`. | **Regel-4-Validierung auch für LOKALE Eingaben + Typ-/Key-Prüfung an der Bridge.** Volltext in B.2 (Etikett G20). |
+> | **G21** | **7** | offen | seit 2026-06-10 | Eine Liste namens `CON` exportiert als `_CON.md`; ein Task mit Zeilenumbruch bleibt im Export einzeilig; die Datei liegt real am im Save-Dialog gewählten Ort. Zusätzlich (V6): eine Liste namens `a<b>:c?*` bzw. `..\..\evil` ergibt einen Dateinamens-Vorschlag ohne diese Zeichen und ohne `..`; ein 300-Zeichen-Listenname wird auf ca. 120 Zeichen gekappt; dasselbe gilt für `export_all`. | **Export-Härtung.** Volltext in Phase 7 (Etikett G21). |
+> | **🔴 G22** | **SOFORT, spätestens mit 7** | teils erledigt (2026-07-16): `get_status()` + Status-Modal ehrlich (`active:false`, Warnfarbe, `dev_key`-Flag); Header-Pill/Lock-Untertitel existieren im Code nicht. **OFFEN bis Phase 8:** der Panik-Endschirm behauptet weiter "All data securely wiped" (heute falsch, Lock/Panik sind Frontend-only, `tasks.db` bleibt dev-key-lesbar); Termin **2026-07-20** | seit 2026-06-10 | Solange `DEV_AES_KEY` in `db.py` existiert, darf nirgends in der App "active", "ENCRYPTED" oder "securely wiped" stehen: Status-Modal öffnen sowie Header-Pill, Lock-Screen-Untertitel und Panik-Endschirm prüfen. | **Ehrliche Sicherheits-Behauptungen in der gesamten UI (ausgeweitet 2026-07-13, Plananalyse S2; vorher nur `get_status()`).** Bis Phase 8 fertig ist, darf **keine** Stelle der App eine Verschlüsselung oder einen sicheren Wipe behaupten, die es nicht gibt. (a) `get_status()` meldet den realen Zustand: Schicht 1 "SQLCipher mit Entwicklungs-Schlüssel (UNSICHER)", Schicht 2 "nicht implementiert", `active: false`; das Status-Modal zeigt das in Warnfarben statt grün (aktuell meldet der Status "AES-256 + ChaCha20 · active", während der AES-Key öffentlich im Repo steht; im Audit nachgewiesen). (b) Dieselbe Ehrlichkeit gilt für **alle** weiteren Verschlüsselungs-/Wipe-Behauptungen der UI: die Header-Pill ("LOCAL · ENCRYPTED"), den Lock-Screen-Untertitel ("LOCAL VAULT · ENCRYPTED") und den Panik-Endschirm ("All data securely wiped") bis Phase 8 auf ehrliche Texte umstellen (z.B. "LOCAL · DEV BUILD"). Die "bewusste Aussendarstellung" des Endschirms aus N10.3 ist erst ab Phase 8 zulässig, wenn der reale Wipe-Pfad (G14/G25, Killswitch) existiert; die Abwägung dazu steht in B.10.5. Ab Phase 8 zeigt der Status echte Werte (Argon2-Parameter, Pepper vorhanden ja/nein, Zeitpunkt des letzten Wraps). |
+> | **G23** | **6.5** | ✅ umgesetzt | 2026-06-10 | Der kopierte Task erscheint nicht in der Win+V-History; das Clipboard ist 60 s nach dem Kopieren leer. | **Clipboard-Hygiene + Einzel-Task-Kopie.** Windows speichert das Clipboard in der Zwischenablage-History (Win+V) und synchronisiert es ggf. ins Microsoft-Cloud-Clipboard, App-Inhalte würden so den Rechner verlassen. Umgesetzt: (a) Kopiert wird nur noch **eine ausgewählte Aufgabe** (`copy_task`), nie eine ganze Liste; für Listen gibt es den Export. (b) Das Kopieren passiert komplett im **Backend** (`api.py`, Win32 per ctypes, nicht `navigator.clipboard`) und setzt zusätzlich zu `CF_UNICODETEXT` die Formate `ExcludeClipboardContentFromMonitorProcessing`, `CanIncludeInClipboardHistory` (=0) und `CanUploadToCloudClipboard` (=0). (c) Auto-Clear: 60 s nach dem Kopieren wird das Clipboard geleert, sofern es noch unseren Inhalt trägt. (d) Der `Strg+C`-App-Shortcut wurde ersatzlos entfernt. Bei künftigen Copy-Funktionen MUSS derselbe Backend-Pfad verwendet werden. |
+> | **G25** | **8** | offen | seit 2026-06-10 | Code-Review: Schlüssel/Master-Secret/Pepper als `bytearray` mit Nullung an allen Ausgängen (Lock, Panic, Quit, Fenster-X, `atexit`); kein Geheimnis in Logs, Exceptions oder `get_status()`. | **RAM-Schlüssel-Hygiene.** `aes_key`, `chacha_key`, Master-Secret und Pepper als `bytearray` (nicht `bytes`/`str`) halten; beim Sperren/Panic/Beenden **vor** dem Verwerfen mit Nullen überschreiben. Die Passphrase unmittelbar nach der Ableitung verwerfen; Passphrase und Schlüssel dürfen **nie** in Logs, Exceptions, `get_status()` oder sonstwie ans Frontend gelangen. Im Code dokumentieren: Python gibt keine harten Garantien (der GC kann Kopien hinterlassen), das Nullen ist Best-Effort und trotzdem Pflicht. |
+> | **G26** | **entfällt** | ❌ verworfen (zu fehleranfällig) | 2026-06-20 | Nur noch Regressions-Check: `SetWindowDisplayAffinity` kommt im Code nicht vor. | **Screenshot-Schutz (entfernt).** Idee war, das Fenster per `SetWindowDisplayAffinity(hwnd, WDA_EXCLUDEFROMCAPTURE)` aus Bildschirmaufnahmen herauszunehmen. Mehrfach umgesetzt und wieder entfernt, weil er reale Probleme machte: auf manchen GPU-/Treiber-Konstellationen blockiert die Affinity das WebView2-Rendern komplett (Fenster bleibt weiss / reagiert nicht), und die Startup-Verdrahtung verklemmte zudem die Nachrichtenschleife. Zusatznachteile: blendet das Fenster auch in legitimer Freigabe/Aufnahme schwarz aus und nuetzt nichts gegen eine Kamera. **Entscheidung: dauerhaft entfernt, nicht wieder einbauen.** Falls je erneut gewuenscht, zwingend mit Render-Verifikation nach dem Setzen (Affinity automatisch zuruecknehmen, wenn der Inhalt nicht mehr rendert) und ausschliesslich ueber `_run_on_ui_thread`. |
+> | **G27** | **9** | offen | seit 2026-06-20; Frontend-Integrität ergänzt 2026-07-15 (Plananalyse A5) | `signtool verify` besteht; das Bundle enthält keinen Python-Quelltext; ein Hexdump der `.exe` zeigt keine Klartext-Docstrings; eine nachträglich veränderte `app.js` verhindert den Start mit einer Integritäts-Meldung. | **Binary-Härtung gegen Reverse-Engineering + Manipulation.** Authenticode-Signing der `.exe` (Manipulation erkennbar, SmartScreen entschärft); keinen Python-Quelltext mitliefern (vorzugsweise Nuitka statt entpackbarem PyInstaller-Bundle, mindestens Docstrings/`assert`s strippen); optional Obfuskation (PyArmor) als Bonus. **Grundsatz: das Sicherheitsmodell beruht nie auf Code-Geheimhaltung** (Kerckhoffs), sondern allein auf Passphrase + DPAPI-Pepper + Verschlüsselung; die Härtung erhöht nur die Hürde. Keine fragilen Anti-Debugging-Tricks als Schutzbasis. **Ergänzung Frontend-Integrität (2026-07-15, Plananalyse A5):** Die Signatur deckt nur die `.exe`; `index.html`/`app.js`/`style.css` lägen daneben (One-Folder) oder werden entpackt und wären bei intakter Exe-Signatur austauschbar. Wer sie einmal schreiben kann, besitzt die App dauerhaft: das nächste `boot()` lädt das manipulierte JS mit voller Bridge und liest die Passphrase-Eingabe des HTML-Lock-Screens mit. Pflicht: Frontend-Assets ins signierte Binary einbetten und von dort laden, **oder** beim Start jeden Asset-Hash gegen ein im Binary eingebettetes Manifest prüfen; bei Abweichung verweigert die App den Start mit einer klaren Meldung (kein "trotzdem fortfahren"). Das erschwert stille K4-Persistenz, wird aber nie als vollständiger K4-Schutz verkauft (B.10.3 Punkt 1). Volltext in Phase 9. |
+> | **G28** | **8** | offen | seit 2026-07-09 (N11.9) | Der dokumentierte Beweis liegt vor: das Öffnen des inneren Images ohne `aes_key` scheitert, ein Roh-Byte-Dump zeigt weder SQLite-Klartext-Header noch Task-Text. | **Verschlüsselungs-Beweis (aus N11.9, 2026-07-09).** Vor Phase-8-Abschluss ist zu **beweisen**, dass die Arbeits-/Zwischendatei tatsächlich AES-verschlüsselt ist: das Öffnen des inneren Images **ohne** `aes_key` muss fehlschlagen (kein SQLite-Klartext-Header, kein lesbarer Task-Text im Roh-Byte-Dump). Schlägt der Beweis für den `:memory:`-Serialize-Weg fehl, ist der Fallback mit SQLCipher-verschlüsselter Arbeitsdatei verbindlich. Kein Auslieferungsbuild ohne bestandenen Beweis. **Automatisiert (V12, 2026-07-15):** der Beweis ist kein Einmal-Handgriff, sondern ein pytest-Test der Phase-9-Testliste (Scan des Arbeits-Artefakts auf den SQLite-Klartext-Header `SQLite format 3` und einen bekannten Task-String; jeder Fund ist ein Fail). Volltext in B.7 (Etikett N11.9). |
+> | **🔴 G29** | **SOFORT, spätestens 7** | offen; Termin **2026-07-20** (gesetzt 2026-07-13, S2-Regel: kein "SOFORT" ohne Termin) | seit 2026-07-13 | Eine provozierte `OSError` (z.B. Export auf ein nicht erreichbares Laufwerk) zeigt im Toast nur den Katalog-Text ohne Pfad/Benutzernamen; im Release existiert kein Logfile. | **Fehler-Hygiene, Fehlercode-Katalog, Logging-Politik (aus N11.12, 2026-07-13, Plananalyse S6).** Mit dem Sync fiel das alte G10 („Fehlermeldungen ohne Geheimnisse") weg, sein lokaler Kern gilt weiter: Der `@bridge`-Decorator gibt heute `str(exc)` ans Frontend (`api.py`), eine banale `OSError` trägt damit absolute Pfade samt Windows-Benutzernamen als Toast auf den Bildschirm (und bei Screen-Sharing auf fremde Bildschirme). Pflicht: (a) **Generische Fehler nach vorne**: nur Code + statischer Text aus dem Katalog in **B.2**, nie `str(exc)`, nie Pfade, Tracebacks, SQL-Fragmente, Aufgabentext, Passphrase oder Schlüssel. (b) **Fehlercode-Katalog in B.2** ist kanonisch (`not_found`, `invalid`, `locked`, `passphrase`, `rate_limited`, `vault`, `canceled`, `internal`), inklusive der Spalte „Frontend-Verhalten" und der Codes, die **stumm** bleiben (`locked`, `canceled`); jeder neue Code wird dort eingetragen, sonst darf er nicht ans Frontend. (c) **Details nur in einen In-Memory-Ringpuffer** (50 Einträge, redigiert: Pfade werden zu `<path>`, nie Bridge-Argumente), einsehbar im Status-Modal, geleert in Schritt 3 der `teardown()`-Sequenz (G35). (d) **Logging-Politik:** im Release **kein** persistentes Logfile (kein `FileHandler`, kein `basicConfig(filename=...)`, keine Traceback-Datei), Diagnose nur hinter `NOATODO_DEBUG`, und auch dort nie Passphrase/Schlüssel/Aufgabentext; der Auslieferungsbuild läuft nie im Debug-Modus (Prüfung in Phase 9). Volltext in B.2 (Etikett N11.12). |
+> | **G30** | **Doku, vor 8** | ✅ B.10 verankert; Arbeitsregel gilt laufend | 2026-07-13 | B.10 existiert, und jedes Gate steht mit seiner Angreiferklasse in der Zuordnungstabelle B.10.6; ein neues Gate ohne Klassen-Eintrag verletzt das Gate. | **Bedrohungsmodell (B.10, ergänzt 2026-07-13 aus Plananalyse S4).** Der Plan definierte Gegenmassnahmen, ohne je die Angreifer zu benennen. Pflicht: Abschnitt **B.10** ist verbindlicher Teil des Plans und **vor** Beginn von Phase 8 zu lesen. Er legt fest: die sechs Angreiferklassen K1 bis K6 (Datei-/Plattendieb, Forensik, kurzer physischer Zugriff, Malware im eigenen Konto, Reverse-Engineer, Zwangs-Situation), die ausdrücklichen **Nicht-Ziele** (allen voran **Malware-als-Nutzer, K4**: dagegen gibt es im selben Sicherheitskontext keine Verteidigung, und es wird keine vorgetäuscht, das ist die G26-Lektion), die **Voraussetzungen** (BitLocker/Geräteverschlüsselung dringend empfohlen, starkes Windows-Passwort, Passphrase min. 12 Zeichen), die **konditionierte G18-Zusage** (kein "gar nicht raten" ohne die Bedingung, siehe G18 und B.10.4) und die **dokumentierte Abwägung zum Panik-Endschirm** (bei "Finish" behauptet er einen Wipe, den es nicht gab; bewusst so gewollt, mit dem Restrisiko in K6, B.10.5). **Arbeitsregel ab sofort:** Jedes neue Gate trägt sich in die Zuordnungstabelle B.10.6 ein und nennt seine Angreiferklasse(n). Eine Massnahme ohne Klasse wird nicht gebaut. |
+> | **G31** | **8** | offen | seit 2026-07-15 (Plananalyse A1) | Das Status-Modal zeigt den realen BitLocker-Status des Tresor-Laufwerks (oder ehrlich "unbekannt", wenn die Abfrage scheitert, nie ein falsches "geschützt"); die Einrichtungs-UI enthält die BitLocker-Empfehlung; Code-Review: alle Schlüssel-`bytearray`s werden nach der Ableitung per `VirtualLock` gesperrt und vor dem G25-Nullen per `VirtualUnlock` freigegeben; `faulthandler` schreibt nie in eine Datei, und es existiert kein Code-Pfad, der Tracebacks oder Dumps auf die Platte schreibt. | **RAM-auf-Platte-Lecks minimieren (Pagefile, Ruhezustand, Crash-Dumps).** Die entsperrte DB lebt im RAM (G6/N11.9), aber Windows schreibt RAM auf die Platte: `pagefile.sys` (Auslagerung), `hiberfil.sys` (Ruhezustand = kompletter RAM-Abzug inkl. Schlüsseln und Klartext) und WER-Minidumps beim Crash des **Python-Prozesses** (G14 behandelt nur WebView2-Dumps). Ein Offline-Angreifer (K2) liest daraus Schlüssel und Inhalte, ohne die Kaskade anzufassen; das G25-Nullen verkürzt nur das Zeitfenster. Pflicht, dreiteilig: **(a) Ehrlichkeit zuerst:** BitLocker/Geräteverschlüsselung ist die einzige vollständige Antwort und steht als Voraussetzung im Bedrohungsmodell (B.10.4). Die Einrichtungs-UI empfiehlt sie, und das Status-Modal zeigt den realen BitLocker-Status des Tresor-Laufwerks an (WMI-Abfrage `Win32_EncryptableVolume`; ohne Adminrechte ggf. nicht lesbar, dann ehrlich "Status unbekannt" anzeigen, im Sinne von G22 nie ein ungeprüftes "geschützt"). **(b) `VirtualLock` für Schlüsselmaterial (Best-Effort):** `aes_key`, `chacha_key`, Master-Secret und Pepper werden als `bytearray` (G25) nach der Ableitung per `VirtualLock` (ctypes, über die Buffer-Adresse) gegen Auslagern gesperrt und vor dem Nullen per `VirtualUnlock` freigegeben. Schlägt `VirtualLock` fehl (Working-Set-Quota), läuft die App normal weiter, kein Fehler an den Nutzer (Verfügbarkeit zählt als Sicherheitsziel, dieselbe Abwägung wie N11.4.3). Ehrlich dokumentieren: `VirtualLock` hält Seiten aus dem Pagefile, **nicht** aus `hiberfil.sys` (der Ruhezustand schreibt auch gesperrte Seiten) und nicht aus Crash-Dumps; gegen diese Rest-Kanäle hilft nur (a). **(c) Dump-/Traceback-Minimierung:** kein `faulthandler.enable()` mit Datei-Ziel, keine Traceback-Dateien (deckt sich mit der G29-Logging-Politik), WER-Fehlerdialoge/-Dumps für den eigenen Prozess minimieren, soweit ohne Adminrechte möglich (z.B. `SetErrorMode`). Dass ein Nutzer oder Admin über die WER-LocalDumps-Registry trotzdem Prozess-Dumps erzwingen kann, ist eine dokumentierte Restgrenze (K4-Terrain), keine App-Aufgabe. |
+> | **G32** | **8 (mit dem Onboarding, N11.13)** | offen | seit 2026-07-15 (Plananalyse A2) | Onboarding-Schritt 1 schlägt `%LOCALAPPDATA%\NoaToDo` vor; ein testweise gewählter Pfad unter OneDrive/Dropbox zeigt die Warnung mit beiden Kernsätzen (Versionshistorie beim Anbieter; Killswitch/Reset löschen dort nichts), ein lokaler Pfad zeigt keine; die Killswitch-/Reset-Bestätigung enthält den Cloud-Satz, wenn der Tresor auf einem erkannten Sync-Pfad liegt. | **Tresor-Ort: sicherer Default + Cloud-Sync-Warnung.** Der Nutzer wählt den Speicherort frei (N11.3); landet `tasks.db.enc` in einem Sync-Ordner (naheliegend: "Dokumente" ist oft umgeleitet), erzeugt das G17-Rewriting hunderte serverseitige Versionen pro Tag. Jeder alte Stand bleibt beim Anbieter wiederherstellbar (gelöschte Aufgaben leben in Cloud-Versionen weiter; **Killswitch und Reset löschen dort nichts**), und Änderungsfrequenz plus Dateigrösse ergeben ein präzises Nutzungsprofil. Verschlüsselt bleibt alles, aber Retention und Metadaten entwerten das Local-first-Versprechen und den Killswitch teilweise. Pflicht: **(a)** Das Onboarding schlägt `%LOCALAPPDATA%\NoaToDo` als Default vor (wird von keinem üblichen Sync-Client erfasst). **(b)** Liegt der gewählte Pfad unter einer erkennbaren Sync-Wurzel, erscheint eine deutliche Warnung, die **beide** Fakten nennt: die verschlüsselte Datei wird synchronisiert und beim Anbieter versioniert, und Killswitch/Reset löschen Cloud-Versionen **nicht**. Erkennung Best-Effort: OneDrive über die Umgebungsvariablen (`OneDrive`, `OneDriveConsumer`, `OneDriveCommercial`), Dropbox über `info.json` (`%APPDATA%\Dropbox\info.json` bzw. `%LOCALAPPDATA%\Dropbox\info.json`), zusätzlich Pfadbestandteile ("OneDrive", "Dropbox", "Google Drive", "iCloudDrive", case-insensitive). Ein nicht erkannter Sync-Ordner bleibt möglich; deshalb steht der Killswitch-Satz zusätzlich in der Killswitch-/Reset-Doku und im Bedrohungsmodell (B.10.3 Punkt 6). **(c)** Die Warnung ist eine Warnung, keine Sperre: die freie Ortswahl aus N11.3 bleibt, der Nutzer darf bewusst fortfahren. Wechseldatenträger und Netz-/UNC-Pfade behandelt N11.15.4 (B.11) (eigene Warnung "Tresor nicht erreichbar"). |
+> | **G33** | **8 (Erststart, `create_vault()`)** | offen | seit 2026-07-15 (Plananalyse A3) | Nach dem ersten `create_vault()` auf einem Rechner mit Dev-Bestand existieren `Code/data/tasks.db` samt `tasks.db-journal`/`-wal`/`-shm` nicht mehr (vorher bestmöglich überschrieben, nicht nur entlinkt); der Einmal-Hinweis mit der forensischen Restgrenze wurde angezeigt. | **Dev-Altdaten entsorgen.** `DEV_AES_KEY` steht im Repo-Quelltext; die heutige `data/tasks.db` mit den echten Aufgaben ist damit faktisch Klartext (im Git-Repo liegt sie dank `.gitignore` korrekt **nicht**, das wurde geprüft). N11.3 sagt nur "die alte Dev-DB wird verworfen"; dieses Gate legt das **Wie** fest: Der Phase-8-Erststart (im Zuge von `create_vault()`, bevor der neue Tresor in Betrieb geht) löscht `tasks.db` **samt** `tasks.db-journal`, `tasks.db-wal` und `tasks.db-shm` über den Secure-Delete-Pfad (bestmöglich überschreiben, dann entlinken; derselbe Pfad wie beim `.bak`-Wegräumen in N11.3 (c)), nie per blankem `os.remove` (ein `os.remove` hinterlässt auf SSD forensische Reste, dasselbe Argument, mit dem G6 die Temp-Kopien eliminiert). **Ehrliche Restgrenze, einmal sichtbar für den Nutzer:** Daten, die während der Dev-Phase geschrieben wurden, können auf einer SSD (Wear-Leveling) forensisch verbleiben, ebenso alte Export-Dateien aus der Dev-Zeit (eigene Dateien des Nutzers; die App sucht und löscht sie nicht, der Hinweis nennt sie); wer das ausschliessen muss, braucht ein frisches, vollverschlüsseltes System (BitLocker, G31/B.10.4). Dieser Hinweis wird beim Umstieg **einmal** angezeigt (nur wenn eine Dev-DB gefunden und entsorgt wurde), damit der Nutzer ihn bewusst gelesen hat. |
+> | **G34** | **9; Teilpunkt (b) SOFORT** | (b) `text_select=False` explizit gesetzt ✅ 2026-07-16 (`main.py` `create_window`); Rest offen für Phase 9: (a) DevTools/`NOATODO_DEBUG` im Release hart aus, (c) `AreBrowserAcceleratorKeysEnabled=false` (kein `Strg+P`) + `AreDefaultContextMenusEnabled=false`. Regressionstest für `text_select` folgt mit der Phase-9-Testliste (heute kein Test-Setup) | seit 2026-07-15 (Plananalyse A4/A6) | Release-`.exe` mit gesetztem `NOATODO_DEBUG=1` starten: keine DevTools erreichbar (F12 und Rechtsklick tot); `Strg+P` öffnet keinen Druckdialog; Rechtsklick zeigt kein WebView2-Kontextmenü; Task-/Listentext ist nicht selektierbar, Eingabefelder bleiben es (Regressionstest für `text_select=False`, läuft schon vor Phase 9). | **Release-Härtung: Debug-Schalter, DevTools, Kopier-/Auslass-Kanäle.** Volltext in Phase 9 (Etikett G34). |
+> | **🔴 G35** | **8** | offen | seit 2026-07-13 (N11.11, S5-Entscheid) | Es existiert im Code genau eine `teardown(reason)`-Routine, und für jeden der neun Ausgänge ist der N11.11-Nachweis einzeln erbracht (Debounce synchron geschrieben, Clipboard geleert, Schlüssel genullt, `PROFILE_DIR` gewischt, Funk nur auf Beenden-Wegen als letzter Schritt, Mutex frei). | **Gemeinsame Sperr-/Beenden-Sequenz.** Sperren, Beenden, Panik-Ende, Killswitch und Reset laufen durch genau **eine** Routine `teardown(reason)` in `security.py`, in der Reihenfolge aus N11.11.2: Idempotenz-Sperre, offene native Dialoge auflösen (U5), Eingaben einfrieren (G13), G17-Debounce abbrechen und ausstehende Änderungen synchron persistieren, Clipboard sofort leeren, wenn es noch App-Inhalt trägt (G23/V7), DB schließen, Schlüssel nullen (G25), erst dann (nur Killswitch/Reset) Dateien und Pepper löschen (U21), `PROFILE_DIR` wischen (G14), Funk-Zustand ganz zuletzt wiederherstellen (nur auf den Beenden-Wegen, N11.5/N11.10), Mutex freigeben. Jeder Ausgang (Lock-Button, `Ctrl+L`, Auto-Sperre, Off-Knopf, Panik-Finish, Killswitch, Reset, natives Fenster-X, `atexit`) ruft diese Routine; ein zweiter, handgeschriebener Beenden-/Sperr-Pfad ist ein Gate-Verstoss. Volltext in B.8.5 (Etikett N11.11). |
 >
 > **Zwei Kleinigkeiten (Hinweis, kein Gate):**
 > - **Export/Clipboard:** `export_list` schreibt **unverschlüsselte** Dateien (by
@@ -759,55 +2120,6 @@ monotonen Uhr, unabhängig von Fensterfokus und Windows-Sitzungszustand.
 > sondern listen nur die Gate-Nummern mit Stichwort und Verweis hierher
 > (Plananalyse S1: die früheren Wortlaut-Kopien sind mehrfach
 > auseinandergedriftet, siehe W3/W4/W8/W18).
-
-> ## 🔒 NACHTRAG: Gates G13 bis G35 (Code-Audit + Testlauf vom 2026-06-10, seither fortgeschrieben)
->
-> Ein vollständiges Code-Audit (Code-Review aller Module plus 23 automatisierte
-> Checks gegen die echte Bridge-API auf einer Wegwerf-DB) hat weitere
-> Pflichtpunkte ergeben. **Alle folgenden Gates sind verbindlich und vom Nutzer
-> bestätigt. KEINER dieser Punkte ist optional, jeder MUSS in der genannten
-> Phase umgesetzt werden.** Sie gelten zusätzlich zu den übrigen Gates; die
-> Phasen-Abschnitte listen nur noch die Gate-Nummern mit Stichwort und Verweis
-> auf diese Tabelle (normative Quelle, siehe Regel oben). Die Tabelle wird seit dem
-> Audit fortgeschrieben (behebt Plananalyse W18): G24 wurde mit der
-> Microsoft-Integration entfernt, G26 (Screenshot-Schutz, verworfen) und G27 kamen
-> später hinzu, G28 (Verschlüsselungs-Beweis) stammt aus N11.9 (2026-07-09)
-> und ist hier nur zusammengefasst (Volltext in N11.9). Am 2026-07-13 kamen aus
-> der Plananalyse dazu: G29 (Fehler-Hygiene, S6, Volltext in N11.12), G30
-> (Bedrohungsmodell, S4, Volltext in **B.10**) und G35 (gemeinsame
-> Sperr-/Beenden-Sequenz, S5, Volltext in N11.11). Am 2026-07-15 wurden die
-> Angriffsvektoren-Befunde A1 bis A7 der Plananalyse (Teil 5) entschieden und
-> eingearbeitet: **G31** (RAM-auf-Platte-Lecks, A1), **G32** (Tresor-Ort und
-> Cloud-Warnung, A2), **G33** (Dev-Altdaten, A3) und **G34** (Release-Härtung,
-> A4/A6) stehen jetzt als Gates in dieser Tabelle (die Zeile hier ist jeweils der
-> normative Volltext); A5 (Frontend-Integrität) ist als Ergänzung in G27
-> eingearbeitet, A7 (Fenstertitel) als verbindliche Regel in B.4 (bewusst kein
-> eigenes Gate, eine Zeile Regel genügt).
->
-> | Gate | Phase | Status | Stand | Prüfweg | Punkt |
-> |---|---|---|---|---|---|
-> | **🔴 G13** | **8** | offen | seit 2026-06-10 | Test iteriert gesperrt über ALLE Bridge-Methoden: alles ausserhalb der Allowlist liefert `{"error": "locked"}`, `get_state()` nur `{"locked": true}`, während `quit_app()`/`killswitch()` gesperrt funktionieren. | **Serverseitige Lock-Durchsetzung (als Allowlist).** Die Sperre existiert heute nur als Frontend-Overlay: Im Audit wurde nachgewiesen, dass nach `lock()` Aufrufe wie `add_task()` und `get_state()` weiterhin funktionieren und alle Daten liefern (ein einziger JS-Aufruf umgeht den Lock-Screen). Pflicht: Ein zentraler Check im `bridge`-Decorator prüft `self.locked` und arbeitet gegen eine **explizite Allowlist**, nicht gegen eine Ausnahmenliste: `ALLOWED_WHEN_LOCKED = {"unlock", "quit_app", "killswitch", "get_state", "get_boot_state", "choose_vault_dir", "create_vault", "reset_vault"}` (die letzten vier ergänzt mit dem U1-Entscheid 2026-07-13, N11.13: Onboarding und Reset laufen gerade **ohne** Schlüssel und wären sonst blockiert). Jede Methode, die **nicht** in dieser Menge steht, gibt gesperrt sofort `{"error": "locked"}` zurück, ohne die DB zu berühren. Das gilt ausdrücklich auch für `lock()` und `panic()` (gesperrt ohnehin sinnlos) und für jede künftig ergänzte Bridge-Methode: **neue Methoden sind per Default gesperrt** und müssen bewusst in die Allowlist aufgenommen werden (die Formulierung „jede ausser X" driftete in der Vergangenheit auseinander, siehe Plananalyse W4/V4). Zu den erlaubten Methoden: `get_state()` liefert gesperrt nur `{"locked": true}` ohne Listen/Settings; `get_boot_state()` liefert nur den dreiwertigen Zustand plus den Vault-Pfad (kein Geheimnis, N11.13); `quit_app()` (Off-Knopf im Lock-Screen) und `killswitch()` (Panik-Endschirm) sind bewusste Ausnahmen aus N10, weil beide nie Daten preisgeben und gerade **ohne** Passphrase funktionieren müssen; `choose_vault_dir()`/`create_vault()` sind der Onboarding-Weg (es gibt noch keinen Tresor, also nichts preiszugeben) und `reset_vault()` der Weg der vergessenen Passphrase (löscht nur, gibt nie Daten heraus, doppelt bestätigt, N11.13); `unlock(passphrase)` ist der einzige Weg zurück in die Daten. **Ausdrücklich NICHT in der Allowlist:** `change_passphrase()` (braucht die Schlüssel, also den entsperrten Zustand). Diese Zeile ist die normative Fassung von G13 (Regel oben: Phasen und Schnellübersicht führen nur noch die Nummer). |
-> | **G14** | **8 (Teile vorgezogen)** | teils erledigt: fester Profilordner + Altlasten-Wisch ✅, sicheres Wischen offen | 2026-06-20 | Nach normalem Betrieb liegen keine `%TEMP%\tmp*\EBWebView`-Altlasten; ab Phase 8: nach Lock/Panic/Quit (auch Fenster-X) ist `PROFILE_DIR` gewischt, und ein Neustart nach hartem Kill scheitert nicht mit `0x800700AA`. | **Keine WebView2-Datenspuren auf der Platte.** WebView2 legt einen User-Data-Ordner an (Cache, localStorage, GPU-Cache); dort können gerenderte Task-Texte an beiden Verschlüsselungsschichten vorbei landen. **Umgesetzter Stand (Pflicht, so bleiben):** **ein fester, benutzerprivater Profilordner** statt Privatmodus, d.h. `webview.start(..., private_mode=False, storage_path=PROFILE_DIR)` mit `PROFILE_DIR = %LOCALAPPDATA%\NoaToDo\webview`, **zwingend zusammen mit dem Single-Instance-Mutex aus G19** (zwei Instanzen würden den geteilten Ordner sperren/korrumpieren); `_cleanup_stale_webview_profiles()` räumt beim Start die alten Temp-Profile weg. **`private_mode=True` ist ersatzlos gestrichen und darf nicht wieder eingebaut werden:** der Privatmodus legte pro Start ein neues `%TEMP%\tmp...\EBWebView` an, das bei hartem Beenden liegen blieb (real bis 55 Altlasten) und zusammen mit verwaisten `msedgewebview2.exe` Starthänger über eine Minute verursachte. **Offen für Phase 8:** (a) `PROFILE_DIR` bei `lock()`/`panic()`/sauberem Beenden **sicher wischen**, wobei das native Fenster-X ausdrücklich als sauberes Beenden zählt und denselben Wisch-Pfad wie `quit_app()` durchlaufen muss; (b) verwaiste `msedgewebview2.exe` (überleben einen harten Kill und sperren den Ordner, nächster Start sonst `0x800700AA` ERROR_BUSY) vor dem Wischen beenden, dabei nur Prozesse mit `PROFILE_DIR` als Arbeitsverzeichnis, nicht pauschal alle (andere Apps nutzen WebView2 auch); (c) das Wischen mit Mutex und Lock-Lebenszyklus abstimmen (nicht wischen, solange WebView2 den Ordner offen hält). **Entwarnung zur Vertraulichkeit:** Aufgabentexte erreichen keine persistierbare WebView2-Fläche (kein localStorage/IndexedDB, keine Cookies, kein fetch/XHR; alle Daten kommen über die In-Memory-Bridge ins DOM), im Profil liegt nur nicht-sensibler UI-Cache; einziger Randfall ist ein WebView2-Crash-Dump mit DOM-Fragmenten, genau dagegen ist das Wischen Pflicht. Das Frontend darf localStorage/sessionStorage/IndexedDB **nie** für Aufgabendaten verwenden. **Store-Python-Redirect (V8, 2026-07-15; Volltext N11.15.5):** unter Microsoft-Store-Python wird `%LOCALAPPDATA%` real nach `...\Packages\PythonSoftwareFoundation...\LocalCache\Local\NoaToDo\...` umgeleitet. Der Wisch operiert deshalb **immer in-process auf dem effektiven Pfad** (die Python-API sieht die Umleitung automatisch); externe Werkzeuge oder Anleitungen mit dem literalen Pfad verfehlen die echten Daten. Und weil die Phase-9-`.exe` ohne Redirect läuft, bekommt Phase 9 einen **einmaligen Erststart-Schritt**, der die bekannten alten Redirect-Pfade entfernt (nur den umgeleiteten `NoaToDo\webview`-Ordner und eine dortige `config.json`; eine `tasks.db.enc` wird dabei **niemals** angefasst), sonst bleibt der alte umgeleitete Profilordner für immer liegen. |
-> | **G15** | **8** | offen | seit 2026-06-10 | Im `.enc`-Header existiert kein Hash-Feld; eine falsche Passphrase erzeugt einen AEAD-Fehler mit der Meldung "Passphrase falsch"; die getrennten HKDF-`info`-Labels stehen im Code. | **Schlüsselableitung mit Domain-Separation, KEIN gespeicherter Verifikations-Hash.** Argon2id erzeugt aus dem Pepper-gebundenen `ikm` (verbindliche Konstruktion in G18, V2a) + Salt **ein** 32-Byte-Master-Secret; daraus per HKDF-SHA256 mit getrennten `info`-Labels (`b"noatodo/aes-v1"`, `b"noatodo/chacha-v1"`) `aes_key` und `chacha_key` ableiten. Es wird **kein** Argon2-Hash der Passphrase gespeichert: Die Prüfung beim Entsperren ist der Erfolg oder Misserfolg der ChaCha20-Poly1305-Entschlüsselung (der Poly1305-Tag verifiziert die Passphrase implizit; falsche Passphrase = AEAD-Exception = Meldung "Passphrase falsch"). So liegt kein zusätzliches Orakel-Material für Offline-Angreifer auf der Platte. Ersetzt die ältere Formulierung in B.7 ("Argon2-Hash zum Prüfen speichern", "Teilstücke des KDF-Outputs"). |
-> | **G16** | **8** | offen | seit 2026-06-10 | Hexdump von `tasks.db.enc` beginnt mit `NOA1`; zwei aufeinanderfolgende Wraps tragen verschiedene Nonces; nach einem simulierten Absturz mitten im Sperren greift `.bak`. Zusätzlich (V1): ein manipuliertes Header-Byte lässt die Entschlüsselung mit einem sauberen AEAD-Fehler scheitern; ein Wrap auf ein (simuliert) volles Laufwerk lässt `.enc` und `.bak` unangetastet; das `.tmp` wird nachweislich vor der `.bak`-Rotation probeentschlüsselt. | **Dateiformat von `tasks.db.enc` + atomares Schreiben.** Header: Magic `NOA1` (4 Byte), Formatversion (1 Byte), Argon2id-Parameter `memory_cost`/`time_cost`/`parallelism` (je u32 little-endian), Salt (16 Byte), Nonce (12 Byte); danach der ChaCha20-Poly1305-Ciphertext. Bei **jedem** Verschlüsseln eine frische Nonce aus `os.urandom(12)`; eine wiederverwendete Nonce bricht die AEAD-Sicherheit vollständig. Schreiben **immer** atomar: erst `tasks.db.enc.tmp` schreiben, `flush()` + `os.fsync()`, bestehende Datei nach `tasks.db.enc.bak` rotieren (genau eine Generation behalten), dann `os.replace()`. Ein Absturz mitten im Sperren darf nie die einzige Kopie der Daten zerstören. **Ergänzungen V1 (2026-07-15):** (1) Der **komplette Header geht als `associated_data`** in `ChaCha20Poly1305.encrypt/decrypt` ein: jede Header-Manipulation (auch heruntergedrehte Argon2-Parameter oder eine getauschte Formatversion, sprich Format-Downgrade) wird damit zum sauberen AEAD-Fehler statt still wirksam. (2) Das frisch geschriebene `.tmp` wird **vor** der `.bak`-Rotation einmal **probeweise entschlüsselt** (Header parsen + AEAD-Tag prüfen); erst nach Erfolg wird rotiert, sonst können zwei fehlerhafte Schreibzyklen nacheinander beide Generationen zerstören. (3) **Freier Plattenplatz wird vor dem Wrap geprüft** (mindestens Ciphertext-Größe plus Reserve); reicht er nicht, bleibt der alte Stand unangetastet und nach vorn geht der Code `vault`. (4) Die zufällige 12-Byte-Nonce aus `os.urandom(12)` ist bei dieser Schreibfrequenz (debounced Write-back, G17) **geprüft unbedenklich**, kein Zähler-Schema nötig. |
-> | **G17** | **8** | offen | seit 2026-06-10 | Mutation ausführen, ca. 5 s warten, Prozess hart beenden: der Neustart zeigt die Änderung. | **Write-back-Politik für die In-Memory-DB** (Ergänzung zu G6). Nach jeder mutierenden Bridge-Operation wird die In-Memory-DB debounced persistiert (z.B. 3 s nach der letzten Änderung; zusätzlich **sofort** bei Lock/Panic/Quit), als neues `tasks.db.enc` nach dem Verfahren aus G16. Ein Crash kostet damit höchstens die letzten Sekunden, nie den Tagesstand. |
-> | **G18** | **8** | offen (Zusage konditioniert 2026-07-13, B.10.4) | seit 2026-06-10 | Der Credential-Manager-Eintrag existiert; eine Kopie von `tasks.db.enc` lässt sich auf einem fremden Windows-Konto auch mit korrekter Passphrase nicht öffnen. | **DPAPI-Pepper gegen Offline-Brute-Force (Pflicht).** Beim Einrichten der Passphrase wird zusätzlich ein zufälliger 32-Byte-Pepper erzeugt und über `keyring` im Windows Credential Manager (DPAPI, ans Windows-Konto gebunden) abgelegt. Der Pepper fliesst zusätzlich zur Passphrase in die Ableitung ein. **Verbindliche, versionierte Konstruktion (V2a, 2026-07-15; ersetzt die frühere Angabe „Argon2id-`secret`-Parameter", die so nicht umsetzbar ist, weil `argon2-cffi` Argon2s Keyed-Secret-Parameter nicht exponiert):** die Passphrase wird **vor** Argon2id an den Pepper gebunden: `ikm = HKDF-Extract(salt=pepper, ikm=passphrase_utf8)` (per Definition identisch mit `HMAC-SHA256(key=pepper, msg=passphrase_utf8)`, Ergebnis 32 Byte), danach `master_secret = Argon2id(password=ikm, salt=<Salt aus dem G16-Header>, Parameter aus N11.4.3)`. Die Konstruktion hängt an der Formatversion im G16-Header; eine spätere Änderung erhöht die Version und braucht einen Migrationspfad. **Wirkung, konditioniert (B.10.4, Plananalyse S4; die frühere Formulierung "kann offline gar nicht raten" war ein Überversprechen und ist gestrichen):** Wer **nur die Tresordatei** `tasks.db.enc` kopiert hat (Klasse K1), kann offline nichts anfangen, ihm fehlt der Pepper aus dem Windows-Konto. Wer die **ganze, unverschlüsselte Platte** hat (gestohlener Laptop, ausgebaute SSD), kann den DPAPI-Master-Key offline angreifen; der Pepper hängt dann an der Stärke des **Windows-Anmeldepassworts**. Die Zusage gilt daher nur mit BitLocker/Geräteverschlüsselung **oder** starkem Windows-Passwort, und genau so (mit dieser Bedingung) muss sie in UI und Doku stehen. **Kein Recovery-Export (N11.3, überschreibt die frühere Pflicht):** der Tresor ist bewusst an dieses Windows-Konto/diesen PC gebunden; geht das Windows-Profil verloren, ist die DB auch mit korrekter Passphrase nicht mehr zu öffnen. Der Einrichtungs-Flow enthält daher keinen Recovery-Schritt; der einzige Ausweg bei Verlust ist der Reset (Datenverlust, N11.3). |
-> | **G19** | **8, vorgezogen** | ✅ umgesetzt; Nachbesserung offen (V3: Mutex-Namensraum) | 2026-06-20, V3 ergänzt 2026-07-15 | Zweite Instanz starten: Hinweisbox erscheint, der zweite Prozess beendet sich, die erste Instanz läuft ungestört weiter. Zusätzlich (V3): dieselbe Prüfung aus einer zweiten Logon-Session desselben Benutzers (RDP/schnelle Benutzerumschaltung); auch dort darf keine zweite Instanz auf dieselbe DB starten. | **Single-Instance-Schutz.** Beim Start einen benannten Windows-Mutex belegen (`ctypes.windll.kernel32.CreateMutexW(None, False, "Local\\NoaToDoSingleton")`, danach `GetLastError() == ERROR_ALREADY_EXISTS (183)` prüfen). Läuft schon eine Instanz: Hinweis zeigen und den zweiten Prozess sofort beenden. Zwei Instanzen würden sich `tasks.db.enc` bzw. die Arbeitskopie gegenseitig überschreiben (Korruption/Datenverlust). **Nachbesserung V3 (2026-07-15): Mutex-Namensraum.** `Local\NoaToDoSingleton` ist nur **pro Logon-Session** eindeutig: derselbe Benutzer über RDP oder schnelle Benutzerumschaltung startet damit eine zweite Instanz auf demselben Profil und derselben DB, exakt die Korruption, die dieses Gate verhindern soll. Zielname: **`Global\NoaToDo-<User-SID>`** (`Global\` gilt über alle Sessions hinweg, die User-SID hält verschiedene Windows-Konten weiterhin getrennt). Der Code nutzt heute noch `Local\...`; die Umstellung ist Rest-Pflicht dieses Gates, spätestens in Phase 8. |
-> | **G20** | **7** | offen | seit 2026-06-10 | Ein 1-MB-Text wird auf 4096 Zeichen gekürzt; `reorder(list_id, "string")` liefert einen Fehler; `set_setting("foo", 1)` liefert `{"error": "invalid"}`. Zusätzlich (V5): `set_setting("accent", "red;} body{...")` liefert `invalid`; `set_setting("sidebarWidth", 9999)` speichert höchstens 520; `set_setting("autoLock", 7)` liefert `invalid`. | **Regel-4-Validierung auch für LOKALE Eingaben + Typ-/Key-Prüfung an der Bridge.** Audit-Befunde: ein 1-MB-Tasktext und Steuerzeichen wie U+0000 werden heute anstandslos gespeichert; `reorder(list_id, "string")` iteriert den String zeichenweise und liefert `{"ok": true}`; `set_setting` akzeptiert beliebige Keys. Pflicht in `api.py`: (a) `add_task`/`edit_task`: Text max. 4096 Zeichen (kein `meta` mehr, N11.1.3); `add_list`/`rename_list`: Name max. 256; Überlänge abschneiden; Steuerzeichen U+0000-U+001F (ausser `\n` und `\t`) vor dem Schreiben strippen. (b) `reorder`/`reorder_lists` lehnen ab, wenn `ordered_ids` keine Liste von Strings ist; `move_task` validiert die IDs. (c) `set_setting` akzeptiert nur Keys aus einer Whitelist (`accent`, `theme`, `density`, `sidebar`, `railPinned`, `sidebarWidth`, `sound`, `autoLock` plus künftig dort dokumentierte, N11.7), sonst `{"error": "invalid"}`. (d) **Werte und Typen prüfen, nicht nur Keys und Längen (V5, 2026-07-15):** `set_setting` validiert auch den **Wert** je Key: `theme` gegen `auto|light|dark`, `density`/`sidebar` gegen ihre Enum-Werte, `accent` gegen die feste Preset-Whitelist (die sechs Hex-Werte aus B.3/B.6; der Wert landet als CSS-Variable im DOM, mit der Whitelist ist CSS-Injection über Settings komplett tot), `sidebarWidth` wird schon beim **Schreiben** auf 180-520 geklemmt (nicht erst beim Lesen geparst), `sound` bool, `autoLock` ganzzahlig aus {0, 1, 5, 15, 30, 60}; `edit_task.fields` wird typgeprüft (nur bekannte Felder, `text` String, `done` bool). Bevorzugte Umsetzung: ein kleines **deklaratives Schema pro Bridge-Methode am `@bridge`-Decorator**, das Phase 9 direkt gegen die Regeln testen kann. |
-> | **G21** | **7** | offen | seit 2026-06-10 | Eine Liste namens `CON` exportiert als `_CON.md`; ein Task mit Zeilenumbruch bleibt im Export einzeilig; die Datei liegt real am im Save-Dialog gewählten Ort. Zusätzlich (V6): eine Liste namens `a<b>:c?*` bzw. `..\..\evil` ergibt einen Dateinamens-Vorschlag ohne diese Zeichen und ohne `..`; ein 300-Zeichen-Listenname wird auf ca. 120 Zeichen gekappt; dasselbe gilt für `export_all`. | **Export-Härtung.** Audit-Befunde: eine Liste namens `CON` exportiert als `CON.md` (reservierter Windows-Gerätename), und Zeilenumbrüche im Task-Text brechen die Markdown-Struktur des Exports (eingeschleuste falsche `- [x]`-Zeilen/Überschriften). Pflicht in `export_list`: (a) Dateiname: reservierte Namen (CON, PRN, AUX, NUL, COM1-COM9, LPT1-LPT9; case-insensitive, auch mit Endung) mit `_`-Präfix entschärfen; führende/abschliessende Punkte und Leerzeichen entfernen; bleibt nichts übrig, Fallback `list`. (a2) **Verbotene Zeichen und Längenkappung (V6, 2026-07-15):** die unter Windows unzulässigen Zeichen `<`, `>`, `:`, `"`, `/`, `\`, `\|`, `?`, `*` sowie `..`-Sequenzen im vorgeschlagenen Dateinamen durch `_` ersetzen (Listennamen sind Freitext) und das Ergebnis auf ca. 120 Zeichen kürzen. Reihenfolge: erst Zeichen ersetzen, dann kürzen, dann die Gerätenamen-Prüfung aus (a). Gilt für `export_list` **und** `export_all`. (b) Inhalt: in md/txt jede Aufgabe einzeilig ausgeben, `\r` und `\n` im Task-Text durch ein Leerzeichen ersetzen (kein Meta mehr, N11.1.3). (c) Echten Save-Dialog umsetzen (`window.create_file_dialog(webview.SAVE_DIALOG, save_filename=...)`) und die Datei wirklich schreiben. Stand heute schreibt der Export **keine** Datei, das Frontend zeigt nur einen Toast. |
-> | **🔴 G22** | **SOFORT, spätestens mit 7** | teils erledigt (2026-07-16): `get_status()` + Status-Modal ehrlich (`active:false`, Warnfarbe, `dev_key`-Flag); Header-Pill/Lock-Untertitel existieren im Code nicht. **OFFEN bis Phase 8:** der Panik-Endschirm behauptet weiter "All data securely wiped" (heute falsch, Lock/Panik sind Frontend-only, `tasks.db` bleibt dev-key-lesbar); Termin **2026-07-20** | seit 2026-06-10 | Solange `DEV_AES_KEY` in `db.py` existiert, darf nirgends in der App "active", "ENCRYPTED" oder "securely wiped" stehen: Status-Modal öffnen sowie Header-Pill, Lock-Screen-Untertitel und Panik-Endschirm prüfen. | **Ehrliche Sicherheits-Behauptungen in der gesamten UI (ausgeweitet 2026-07-13, Plananalyse S2; vorher nur `get_status()`).** Bis Phase 8 fertig ist, darf **keine** Stelle der App eine Verschlüsselung oder einen sicheren Wipe behaupten, die es nicht gibt. (a) `get_status()` meldet den realen Zustand: Schicht 1 "SQLCipher mit Entwicklungs-Schlüssel (UNSICHER)", Schicht 2 "nicht implementiert", `active: false`; das Status-Modal zeigt das in Warnfarben statt grün (aktuell meldet der Status "AES-256 + ChaCha20 · active", während der AES-Key öffentlich im Repo steht; im Audit nachgewiesen). (b) Dieselbe Ehrlichkeit gilt für **alle** weiteren Verschlüsselungs-/Wipe-Behauptungen der UI: die Header-Pill ("LOCAL · ENCRYPTED"), den Lock-Screen-Untertitel ("LOCAL VAULT · ENCRYPTED") und den Panik-Endschirm ("All data securely wiped") bis Phase 8 auf ehrliche Texte umstellen (z.B. "LOCAL · DEV BUILD"). Die "bewusste Aussendarstellung" des Endschirms aus N10.3 ist erst ab Phase 8 zulässig, wenn der reale Wipe-Pfad (G14/G25, Killswitch) existiert; die Abwägung dazu steht in B.10.5. Ab Phase 8 zeigt der Status echte Werte (Argon2-Parameter, Pepper vorhanden ja/nein, Zeitpunkt des letzten Wraps). |
-> | **G23** | **6.5** | ✅ umgesetzt | 2026-06-10 | Der kopierte Task erscheint nicht in der Win+V-History; das Clipboard ist 60 s nach dem Kopieren leer. | **Clipboard-Hygiene + Einzel-Task-Kopie.** Windows speichert das Clipboard in der Zwischenablage-History (Win+V) und synchronisiert es ggf. ins Microsoft-Cloud-Clipboard, App-Inhalte würden so den Rechner verlassen. Umgesetzt: (a) Kopiert wird nur noch **eine ausgewählte Aufgabe** (`copy_task`), nie eine ganze Liste; für Listen gibt es den Export. (b) Das Kopieren passiert komplett im **Backend** (`api.py`, Win32 per ctypes, nicht `navigator.clipboard`) und setzt zusätzlich zu `CF_UNICODETEXT` die Formate `ExcludeClipboardContentFromMonitorProcessing`, `CanIncludeInClipboardHistory` (=0) und `CanUploadToCloudClipboard` (=0). (c) Auto-Clear: 60 s nach dem Kopieren wird das Clipboard geleert, sofern es noch unseren Inhalt trägt. (d) Der `Strg+C`-App-Shortcut wurde ersatzlos entfernt. Bei künftigen Copy-Funktionen MUSS derselbe Backend-Pfad verwendet werden. |
-> | **G25** | **8** | offen | seit 2026-06-10 | Code-Review: Schlüssel/Master-Secret/Pepper als `bytearray` mit Nullung an allen Ausgängen (Lock, Panic, Quit, Fenster-X, `atexit`); kein Geheimnis in Logs, Exceptions oder `get_status()`. | **RAM-Schlüssel-Hygiene.** `aes_key`, `chacha_key`, Master-Secret und Pepper als `bytearray` (nicht `bytes`/`str`) halten; beim Sperren/Panic/Beenden **vor** dem Verwerfen mit Nullen überschreiben. Die Passphrase unmittelbar nach der Ableitung verwerfen; Passphrase und Schlüssel dürfen **nie** in Logs, Exceptions, `get_status()` oder sonstwie ans Frontend gelangen. Im Code dokumentieren: Python gibt keine harten Garantien (der GC kann Kopien hinterlassen), das Nullen ist Best-Effort und trotzdem Pflicht. |
-> | **G26** | **entfällt** | ❌ verworfen (zu fehleranfällig) | 2026-06-20 | Nur noch Regressions-Check: `SetWindowDisplayAffinity` kommt im Code nicht vor. | **Screenshot-Schutz (entfernt).** Idee war, das Fenster per `SetWindowDisplayAffinity(hwnd, WDA_EXCLUDEFROMCAPTURE)` aus Bildschirmaufnahmen herauszunehmen. Mehrfach umgesetzt und wieder entfernt, weil er reale Probleme machte: auf manchen GPU-/Treiber-Konstellationen blockiert die Affinity das WebView2-Rendern komplett (Fenster bleibt weiss / reagiert nicht), und die Startup-Verdrahtung verklemmte zudem die Nachrichtenschleife. Zusatznachteile: blendet das Fenster auch in legitimer Freigabe/Aufnahme schwarz aus und nuetzt nichts gegen eine Kamera. **Entscheidung: dauerhaft entfernt, nicht wieder einbauen.** Falls je erneut gewuenscht, zwingend mit Render-Verifikation nach dem Setzen (Affinity automatisch zuruecknehmen, wenn der Inhalt nicht mehr rendert) und ausschliesslich ueber `_run_on_ui_thread`. |
-> | **G27** | **9** | offen | seit 2026-06-20; Frontend-Integrität ergänzt 2026-07-15 (Plananalyse A5) | `signtool verify` besteht; das Bundle enthält keinen Python-Quelltext; ein Hexdump der `.exe` zeigt keine Klartext-Docstrings; eine nachträglich veränderte `app.js` verhindert den Start mit einer Integritäts-Meldung. | **Binary-Härtung gegen Reverse-Engineering + Manipulation.** Authenticode-Signing der `.exe` (Manipulation erkennbar, SmartScreen entschärft); keinen Python-Quelltext mitliefern (vorzugsweise Nuitka statt entpackbarem PyInstaller-Bundle, mindestens Docstrings/`assert`s strippen); optional Obfuskation (PyArmor) als Bonus. **Grundsatz: das Sicherheitsmodell beruht nie auf Code-Geheimhaltung** (Kerckhoffs), sondern allein auf Passphrase + DPAPI-Pepper + Verschlüsselung; die Härtung erhöht nur die Hürde. Keine fragilen Anti-Debugging-Tricks als Schutzbasis. **Ergänzung Frontend-Integrität (2026-07-15, Plananalyse A5):** Die Signatur deckt nur die `.exe`; `index.html`/`app.js`/`style.css` lägen daneben (One-Folder) oder werden entpackt und wären bei intakter Exe-Signatur austauschbar. Wer sie einmal schreiben kann, besitzt die App dauerhaft: das nächste `boot()` lädt das manipulierte JS mit voller Bridge und liest die Passphrase-Eingabe des HTML-Lock-Screens mit. Pflicht: Frontend-Assets ins signierte Binary einbetten und von dort laden, **oder** beim Start jeden Asset-Hash gegen ein im Binary eingebettetes Manifest prüfen; bei Abweichung verweigert die App den Start mit einer klaren Meldung (kein "trotzdem fortfahren"). Das erschwert stille K4-Persistenz, wird aber nie als vollständiger K4-Schutz verkauft (B.10.3 Punkt 1). Volltext in Phase 9. |
-> | **G28** | **8** | offen | seit 2026-07-09 (N11.9) | Der dokumentierte Beweis liegt vor: das Öffnen des inneren Images ohne `aes_key` scheitert, ein Roh-Byte-Dump zeigt weder SQLite-Klartext-Header noch Task-Text. | **Verschlüsselungs-Beweis (aus N11.9, 2026-07-09).** Vor Phase-8-Abschluss ist zu **beweisen**, dass die Arbeits-/Zwischendatei tatsächlich AES-verschlüsselt ist: das Öffnen des inneren Images **ohne** `aes_key` muss fehlschlagen (kein SQLite-Klartext-Header, kein lesbarer Task-Text im Roh-Byte-Dump). Schlägt der Beweis für den `:memory:`-Serialize-Weg fehl, ist der Fallback mit SQLCipher-verschlüsselter Arbeitsdatei verbindlich. Kein Auslieferungsbuild ohne bestandenen Beweis. **Automatisiert (V12, 2026-07-15):** der Beweis ist kein Einmal-Handgriff, sondern ein pytest-Test der Phase-9-Testliste (Scan des Arbeits-Artefakts auf den SQLite-Klartext-Header `SQLite format 3` und einen bekannten Task-String; jeder Fund ist ein Fail). Volltext in N11.9. |
-> | **🔴 G29** | **SOFORT, spätestens 7** | offen; Termin **2026-07-20** (gesetzt 2026-07-13, S2-Regel: kein "SOFORT" ohne Termin) | seit 2026-07-13 | Eine provozierte `OSError` (z.B. Export auf ein nicht erreichbares Laufwerk) zeigt im Toast nur den Katalog-Text ohne Pfad/Benutzernamen; im Release existiert kein Logfile. | **Fehler-Hygiene, Fehlercode-Katalog, Logging-Politik (aus N11.12, 2026-07-13, Plananalyse S6).** Mit dem Sync fiel das alte G10 („Fehlermeldungen ohne Geheimnisse") weg, sein lokaler Kern gilt weiter: Der `@bridge`-Decorator gibt heute `str(exc)` ans Frontend (`api.py`), eine banale `OSError` trägt damit absolute Pfade samt Windows-Benutzernamen als Toast auf den Bildschirm (und bei Screen-Sharing auf fremde Bildschirme). Pflicht: (a) **Generische Fehler nach vorne**: nur Code + statischer Text aus dem Katalog in **B.2**, nie `str(exc)`, nie Pfade, Tracebacks, SQL-Fragmente, Aufgabentext, Passphrase oder Schlüssel. (b) **Fehlercode-Katalog in B.2** ist kanonisch (`not_found`, `invalid`, `locked`, `passphrase`, `rate_limited`, `vault`, `canceled`, `internal`), inklusive der Spalte „Frontend-Verhalten" und der Codes, die **stumm** bleiben (`locked`, `canceled`); jeder neue Code wird dort eingetragen, sonst darf er nicht ans Frontend. (c) **Details nur in einen In-Memory-Ringpuffer** (50 Einträge, redigiert: Pfade werden zu `<path>`, nie Bridge-Argumente), einsehbar im Status-Modal, geleert in Schritt 3 der `teardown()`-Sequenz (G35). (d) **Logging-Politik:** im Release **kein** persistentes Logfile (kein `FileHandler`, kein `basicConfig(filename=...)`, keine Traceback-Datei), Diagnose nur hinter `NOATODO_DEBUG`, und auch dort nie Passphrase/Schlüssel/Aufgabentext; der Auslieferungsbuild läuft nie im Debug-Modus (Prüfung in Phase 9). Volltext in N11.12. |
-> | **G30** | **Doku, vor 8** | ✅ B.10 verankert; Arbeitsregel gilt laufend | 2026-07-13 | B.10 existiert, und jedes Gate steht mit seiner Angreiferklasse in der Zuordnungstabelle B.10.6; ein neues Gate ohne Klassen-Eintrag verletzt das Gate. | **Bedrohungsmodell (B.10, ergänzt 2026-07-13 aus Plananalyse S4).** Der Plan definierte Gegenmassnahmen, ohne je die Angreifer zu benennen. Pflicht: Abschnitt **B.10** ist verbindlicher Teil des Plans und **vor** Beginn von Phase 8 zu lesen. Er legt fest: die sechs Angreiferklassen K1 bis K6 (Datei-/Plattendieb, Forensik, kurzer physischer Zugriff, Malware im eigenen Konto, Reverse-Engineer, Zwangs-Situation), die ausdrücklichen **Nicht-Ziele** (allen voran **Malware-als-Nutzer, K4**: dagegen gibt es im selben Sicherheitskontext keine Verteidigung, und es wird keine vorgetäuscht, das ist die G26-Lektion), die **Voraussetzungen** (BitLocker/Geräteverschlüsselung dringend empfohlen, starkes Windows-Passwort, Passphrase min. 12 Zeichen), die **konditionierte G18-Zusage** (kein "gar nicht raten" ohne die Bedingung, siehe G18 und B.10.4) und die **dokumentierte Abwägung zum Panik-Endschirm** (bei "Finish" behauptet er einen Wipe, den es nicht gab; bewusst so gewollt, mit dem Restrisiko in K6, B.10.5). **Arbeitsregel ab sofort:** Jedes neue Gate trägt sich in die Zuordnungstabelle B.10.6 ein und nennt seine Angreiferklasse(n). Eine Massnahme ohne Klasse wird nicht gebaut. |
-> | **G31** | **8** | offen | seit 2026-07-15 (Plananalyse A1) | Das Status-Modal zeigt den realen BitLocker-Status des Tresor-Laufwerks (oder ehrlich "unbekannt", wenn die Abfrage scheitert, nie ein falsches "geschützt"); die Einrichtungs-UI enthält die BitLocker-Empfehlung; Code-Review: alle Schlüssel-`bytearray`s werden nach der Ableitung per `VirtualLock` gesperrt und vor dem G25-Nullen per `VirtualUnlock` freigegeben; `faulthandler` schreibt nie in eine Datei, und es existiert kein Code-Pfad, der Tracebacks oder Dumps auf die Platte schreibt. | **RAM-auf-Platte-Lecks minimieren (Pagefile, Ruhezustand, Crash-Dumps).** Die entsperrte DB lebt im RAM (G6/N11.9), aber Windows schreibt RAM auf die Platte: `pagefile.sys` (Auslagerung), `hiberfil.sys` (Ruhezustand = kompletter RAM-Abzug inkl. Schlüsseln und Klartext) und WER-Minidumps beim Crash des **Python-Prozesses** (G14 behandelt nur WebView2-Dumps). Ein Offline-Angreifer (K2) liest daraus Schlüssel und Inhalte, ohne die Kaskade anzufassen; das G25-Nullen verkürzt nur das Zeitfenster. Pflicht, dreiteilig: **(a) Ehrlichkeit zuerst:** BitLocker/Geräteverschlüsselung ist die einzige vollständige Antwort und steht als Voraussetzung im Bedrohungsmodell (B.10.4). Die Einrichtungs-UI empfiehlt sie, und das Status-Modal zeigt den realen BitLocker-Status des Tresor-Laufwerks an (WMI-Abfrage `Win32_EncryptableVolume`; ohne Adminrechte ggf. nicht lesbar, dann ehrlich "Status unbekannt" anzeigen, im Sinne von G22 nie ein ungeprüftes "geschützt"). **(b) `VirtualLock` für Schlüsselmaterial (Best-Effort):** `aes_key`, `chacha_key`, Master-Secret und Pepper werden als `bytearray` (G25) nach der Ableitung per `VirtualLock` (ctypes, über die Buffer-Adresse) gegen Auslagern gesperrt und vor dem Nullen per `VirtualUnlock` freigegeben. Schlägt `VirtualLock` fehl (Working-Set-Quota), läuft die App normal weiter, kein Fehler an den Nutzer (Verfügbarkeit zählt als Sicherheitsziel, dieselbe Abwägung wie N11.4.3). Ehrlich dokumentieren: `VirtualLock` hält Seiten aus dem Pagefile, **nicht** aus `hiberfil.sys` (der Ruhezustand schreibt auch gesperrte Seiten) und nicht aus Crash-Dumps; gegen diese Rest-Kanäle hilft nur (a). **(c) Dump-/Traceback-Minimierung:** kein `faulthandler.enable()` mit Datei-Ziel, keine Traceback-Dateien (deckt sich mit der G29-Logging-Politik), WER-Fehlerdialoge/-Dumps für den eigenen Prozess minimieren, soweit ohne Adminrechte möglich (z.B. `SetErrorMode`). Dass ein Nutzer oder Admin über die WER-LocalDumps-Registry trotzdem Prozess-Dumps erzwingen kann, ist eine dokumentierte Restgrenze (K4-Terrain), keine App-Aufgabe. |
-> | **G32** | **8 (mit dem Onboarding, N11.13)** | offen | seit 2026-07-15 (Plananalyse A2) | Onboarding-Schritt 1 schlägt `%LOCALAPPDATA%\NoaToDo` vor; ein testweise gewählter Pfad unter OneDrive/Dropbox zeigt die Warnung mit beiden Kernsätzen (Versionshistorie beim Anbieter; Killswitch/Reset löschen dort nichts), ein lokaler Pfad zeigt keine; die Killswitch-/Reset-Bestätigung enthält den Cloud-Satz, wenn der Tresor auf einem erkannten Sync-Pfad liegt. | **Tresor-Ort: sicherer Default + Cloud-Sync-Warnung.** Der Nutzer wählt den Speicherort frei (N11.3); landet `tasks.db.enc` in einem Sync-Ordner (naheliegend: "Dokumente" ist oft umgeleitet), erzeugt das G17-Rewriting hunderte serverseitige Versionen pro Tag. Jeder alte Stand bleibt beim Anbieter wiederherstellbar (gelöschte Aufgaben leben in Cloud-Versionen weiter; **Killswitch und Reset löschen dort nichts**), und Änderungsfrequenz plus Dateigrösse ergeben ein präzises Nutzungsprofil. Verschlüsselt bleibt alles, aber Retention und Metadaten entwerten das Local-first-Versprechen und den Killswitch teilweise. Pflicht: **(a)** Das Onboarding schlägt `%LOCALAPPDATA%\NoaToDo` als Default vor (wird von keinem üblichen Sync-Client erfasst). **(b)** Liegt der gewählte Pfad unter einer erkennbaren Sync-Wurzel, erscheint eine deutliche Warnung, die **beide** Fakten nennt: die verschlüsselte Datei wird synchronisiert und beim Anbieter versioniert, und Killswitch/Reset löschen Cloud-Versionen **nicht**. Erkennung Best-Effort: OneDrive über die Umgebungsvariablen (`OneDrive`, `OneDriveConsumer`, `OneDriveCommercial`), Dropbox über `info.json` (`%APPDATA%\Dropbox\info.json` bzw. `%LOCALAPPDATA%\Dropbox\info.json`), zusätzlich Pfadbestandteile ("OneDrive", "Dropbox", "Google Drive", "iCloudDrive", case-insensitive). Ein nicht erkannter Sync-Ordner bleibt möglich; deshalb steht der Killswitch-Satz zusätzlich in der Killswitch-/Reset-Doku und im Bedrohungsmodell (B.10.3 Punkt 6). **(c)** Die Warnung ist eine Warnung, keine Sperre: die freie Ortswahl aus N11.3 bleibt, der Nutzer darf bewusst fortfahren. Wechseldatenträger und Netz-/UNC-Pfade behandelt N11.15.6 (eigene Warnung "Tresor nicht erreichbar"). |
-> | **G33** | **8 (Erststart, `create_vault()`)** | offen | seit 2026-07-15 (Plananalyse A3) | Nach dem ersten `create_vault()` auf einem Rechner mit Dev-Bestand existieren `Code/data/tasks.db` samt `tasks.db-journal`/`-wal`/`-shm` nicht mehr (vorher bestmöglich überschrieben, nicht nur entlinkt); der Einmal-Hinweis mit der forensischen Restgrenze wurde angezeigt. | **Dev-Altdaten entsorgen.** `DEV_AES_KEY` steht im Repo-Quelltext; die heutige `data/tasks.db` mit den echten Aufgaben ist damit faktisch Klartext (im Git-Repo liegt sie dank `.gitignore` korrekt **nicht**, das wurde geprüft). N11.3 sagt nur "die alte Dev-DB wird verworfen"; dieses Gate legt das **Wie** fest: Der Phase-8-Erststart (im Zuge von `create_vault()`, bevor der neue Tresor in Betrieb geht) löscht `tasks.db` **samt** `tasks.db-journal`, `tasks.db-wal` und `tasks.db-shm` über den Secure-Delete-Pfad (bestmöglich überschreiben, dann entlinken; derselbe Pfad wie beim `.bak`-Wegräumen in N11.3 (c)), nie per blankem `os.remove` (ein `os.remove` hinterlässt auf SSD forensische Reste, dasselbe Argument, mit dem G6 die Temp-Kopien eliminiert). **Ehrliche Restgrenze, einmal sichtbar für den Nutzer:** Daten, die während der Dev-Phase geschrieben wurden, können auf einer SSD (Wear-Leveling) forensisch verbleiben, ebenso alte Export-Dateien aus der Dev-Zeit (eigene Dateien des Nutzers; die App sucht und löscht sie nicht, der Hinweis nennt sie); wer das ausschliessen muss, braucht ein frisches, vollverschlüsseltes System (BitLocker, G31/B.10.4). Dieser Hinweis wird beim Umstieg **einmal** angezeigt (nur wenn eine Dev-DB gefunden und entsorgt wurde), damit der Nutzer ihn bewusst gelesen hat. |
-> | **G34** | **9; Teilpunkt (b) SOFORT** | (b) `text_select=False` explizit gesetzt ✅ 2026-07-16 (`main.py` `create_window`); Rest offen für Phase 9: (a) DevTools/`NOATODO_DEBUG` im Release hart aus, (c) `AreBrowserAcceleratorKeysEnabled=false` (kein `Strg+P`) + `AreDefaultContextMenusEnabled=false`. Regressionstest für `text_select` folgt mit der Phase-9-Testliste (heute kein Test-Setup) | seit 2026-07-15 (Plananalyse A4/A6) | Release-`.exe` mit gesetztem `NOATODO_DEBUG=1` starten: keine DevTools erreichbar (F12 und Rechtsklick tot); `Strg+P` öffnet keinen Druckdialog; Rechtsklick zeigt kein WebView2-Kontextmenü; Task-/Listentext ist nicht selektierbar, Eingabefelder bleiben es (Regressionstest für `text_select=False`, läuft schon vor Phase 9). | **Release-Härtung: Debug-Schalter, DevTools, Kopier-/Auslass-Kanäle.** Zwei Befund-Gruppen: **(A4)** `NOATODO_DEBUG=1` aktiviert heute DevTools; respektierte die Phase-9-`.exe` dieselbe Env-Var, bekäme jeder mit kurzem Zugriff (K3) eine Konsole mit vollem `pywebview.api.*`-Zugriff auf die laufende App, inklusive `killswitch()` (Datenvernichtung ohne Passphrase, per G13 gesperrt erlaubt!). **(A6)** G23 härtet nur den Rail-Button-Pfad; daneben existieren Kopier-/Auslass-Kanäle: Textselektion plus natives `Strg+C` (PyWebView deaktiviert die Selektion nur per Default; `main.py` setzt `text_select` nicht explizit, der Schutz ist also unbeabsichtigt und ungetestet, und ein künftiges `text_select=True` "für Komfort" würde G23 lautlos aushebeln), Drag-out von markiertem Text in andere Apps, `Strg+P` (der WebView2-Browser-Accelerator öffnet den Druckdialog, "Als PDF drucken" exportiert die komplette Ansicht als Klartext-PDF an G21 vorbei) und das WebView2-Standard-Kontextmenü. Pflicht: **(a)** Der Release-Build ignoriert `NOATODO_DEBUG` hart (Build-Konstante: `_debug_enabled()` liefert im gefrorenen Build immer `False`), DevTools aus, zusätzlich `AreDevToolsEnabled=false` in den CoreWebView2-Settings, soweit über PyWebView erreichbar. **(b) SOFORT, nicht erst Phase 9:** `text_select=False` explizit in `create_window` setzen (aus dem unbeabsichtigten Default eine bewusste, getestete Entscheidung machen) plus Regressionstest. **(c)** Im Release `AreBrowserAcceleratorKeysEnabled=false` (tötet `Strg+P` und die übrigen Browser-Tasten; die App-Shortcuts aus B.5 laufen über den eigenen JS-Handler und bleiben unberührt) und `AreDefaultContextMenusEnabled=false`. **(d)** Der Rest wird nicht "gelöst", sondern steht ehrlich im Bedrohungsmodell (B.10.3 Punkt 8): Eingabefelder bleiben selektierbar (Phase 6.5 Punkt 3, akzeptiert), ihr natives `Strg+C` landet ungehärtet in Win+V-History und Cloud-Clipboard; das Foto vom Bildschirm bleibt Nicht-Ziel. |
-> | **🔴 G35** | **8** | offen | seit 2026-07-13 (N11.11, S5-Entscheid) | Es existiert im Code genau eine `teardown(reason)`-Routine, und für jeden der neun Ausgänge ist der N11.11-Nachweis einzeln erbracht (Debounce synchron geschrieben, Clipboard geleert, Schlüssel genullt, `PROFILE_DIR` gewischt, Funk nur auf Beenden-Wegen als letzter Schritt, Mutex frei). | **Gemeinsame Sperr-/Beenden-Sequenz.** Sperren, Beenden, Panik-Ende, Killswitch und Reset laufen durch genau **eine** Routine `teardown(reason)` in `security.py`, in der Reihenfolge aus N11.11.2: Idempotenz-Sperre, offene native Dialoge auflösen (U5), Eingaben einfrieren (G13), G17-Debounce abbrechen und ausstehende Änderungen synchron persistieren, Clipboard sofort leeren, wenn es noch App-Inhalt trägt (G23/V7), DB schließen, Schlüssel nullen (G25), erst dann (nur Killswitch/Reset) Dateien und Pepper löschen (U21), `PROFILE_DIR` wischen (G14), Funk-Zustand ganz zuletzt wiederherstellen (nur auf den Beenden-Wegen, N11.5/N11.10), Mutex freigeben. Jeder Ausgang (Lock-Button, `Ctrl+L`, Auto-Sperre, Off-Knopf, Panik-Finish, Killswitch, Reset, natives Fenster-X, `atexit`) ruft diese Routine; ein zweiter, handgeschriebener Beenden-/Sperr-Pfad ist ein Gate-Verstoss. Volltext in N11.11. |
 >
 > **Zusätzlich vorgezogen:** G12 (externe WebView-Navigation verweigern) ist mit
 > wenigen Zeilen umsetzbar und wird **vor** Phase 7 umgesetzt, nicht erst in
@@ -1101,6 +2413,154 @@ Diese Tabelle ist der geforderte Rückbezug ("jedes Gate referenziert seine Klas
 > verworfener Vorschlag behält seine Zeile und wird als verworfen markiert (siehe
 > G26: "keine Klasse", genau deshalb verworfen).
 
+### B.11 Unverschlüsselte Konfiguration (`config.json`)
+
+*(Wortgleich umgezogen in Umbau-Etappe 3 aus „N11.15 `config.json`: Schema, Fehlerfaelle, unerreichbarer Tresor (2026-07-13, U2-Entscheid) [Sec]“ samt N11.15.1 bis N11.15.6; der tote Zeiger „N11.16“ ist dabei auf die Entsperr-Fehlerlogik N6 in B.2 umgebogen (Umbauplan A.1). Register: Anhang 1.)*
+
+*Loest U2. Die unverschluesselte Konfig wurde in N11.3 (Tresor-Pfad), N11.4.1 (Rate-Limit)
+und N11.10 (Funk-Ausgangszustand) dreimal benutzt, ohne je definiert zu sein. Offen waren:
+Schema samt Versionsfeld, Verhalten bei fehlender/korrupter Datei, Verhalten bei
+unerreichbarem Tresor-Pfad (USB-Stick abgezogen), Wechseldatentraeger-/UNC-Pfade und der
+Store-Python-Redirect (Befund V8).*
+
+#### N11.15.1 Ort, Inhalt, Schema
+
+- **Ort:** `%LOCALAPPDATA%\NoaToDo\config.json`, aufgeloest ueber **eine** Hilfsfunktion
+  (`config_path()`), nie hartkodiert.
+- **Inhalt: nur nicht-geheime Startinfos.** Es liegen dort **niemals** Aufgaben-/Listentexte,
+  Passphrase, Schluessel, Pepper, Salt oder Argon2-Parameter (die gehoeren in den
+  Tresor-Header, G16, bzw. in den Credential Manager, G18). Wer die Datei liest, erfaehrt
+  **wo** der Tresor liegt, nicht was drin steht; das ist hingenommen (K1/K3 finden eine
+  `.enc`-Datei ohnehin).
+- **Verbindliches Schema (Version 1):**
+
+```json
+{
+  "version": 1,
+  "vault_path": "D:\\Tresor\\tasks.db.enc",
+  "radio_baseline": null,
+  "unlock_ratelimit": { "fails": 0, "stage": 0, "next_try_at": null, "locked_at": null, "duration": 0 }
+}
+```
+
+- `version` (int, Pflicht): Schema-Version. **Unbekannt oder groesser als bekannt** heisst:
+  eine neuere App hat geschrieben, die Datei wird **nicht** angefasst (siehe N11.15.2).
+- `vault_path` (str, Pflicht): absoluter Pfad auf `tasks.db.enc`.
+- `radio_baseline` (Objekt oder `null`, N11.10): gesetzt **nur**, solange die App den
+  Flugmodus selbst eingeschaltet hat, Form
+  `{ "wifi": true, "bluetooth": true, "set_at": "<UTC-ISO8601>" }`. Beim Wiederherstellen
+  im `teardown` (Schritt 10) wird der Eintrag auf `null` gesetzt. Findet ein Start hier
+  einen Rest (Absturz), stellt er den Funk-Ausgangszustand her und raeumt den Eintrag weg.
+- `unlock_ratelimit` (Objekt, N11.4.1): `{fails, stage, next_try_at, locked_at, duration}`,
+  geloescht nur durch erfolgreiches `unlock()` und durch `reset_vault()`.
+- **Schreiben immer atomar und vollstaendig:** `config.json.tmp` schreiben, `flush()` +
+  `os.fsync()`, dann `os.replace()` (dasselbe Verfahren wie G16). Ein Absturz mitten im
+  Schreiben darf nie eine halbe Datei hinterlassen. Einziger Schreiber ist die eine Instanz
+  (Single-Instance-Mutex, G19).
+
+#### N11.15.2 Fehlende, korrupte oder zu neue Datei
+
+- **Datei fehlt komplett** (frischer Rechner, nach Reset/Killswitch): **Erststart**, also
+  Onboarding (N11.13). Kein Fehlerbildschirm, das ist der Normalfall.
+- **Datei existiert, ist aber unbrauchbar** (kein gueltiges JSON, `version` unbekannt/zu
+  neu, Pflichtfeld fehlt oder hat den falschen Typ): **kein** stiller Erststart. Die Datei
+  wird **nicht ueberschrieben**, sondern nach `config.json.bad` umbenannt (genau eine
+  Generation), und der Boot endet im **Fehlerbildschirm** (N6) mit dem ehrlichen Text
+  „Konfiguration unlesbar, der Tresor-Pfad ist unbekannt" und **zwei** Auswegen:
+  1. **Tresor suchen**: nativer Datei-Dialog, der Nutzer zeigt auf seine `tasks.db.enc`;
+     der Pfad wird in eine frische `config.json` geschrieben, danach normaler Lock-Screen.
+  2. **Neuen Tresor anlegen**: Onboarding, **mit dem ausdruecklichen Hinweis, dass ein
+     eventuell vorhandener alter Tresor NICHT geloescht wird** und weiter dort liegt, wo er
+     liegt.
+  **Begruendung:** Ein stiller Erststart saehe fuer den Nutzer wie Datenverlust aus und
+  wuerde ihn dazu verleiten, einen zweiten Tresor anzulegen, waehrend der echte unberuehrt
+  auf der Platte liegt. Ehrlichkeit vor Bequemlichkeit.
+- **Ehrliche Konsequenz (steht schon in N11.4.1, B.8.4):** Wer die Datei loeschen **oder
+  beschaedigen** kann, setzt damit auch die Rate-Limit-Leiter zurueck (der `.bad`-Weg oben
+  schreibt nach dem Wiederfinden eine frische, leere Leiter). Das ist hingenommen; genau
+  dieser Angreifer kopiert lieber gleich den Tresor und raet offline (K1). Die Leiter wird
+  nie als Schutz gegen K1 verkauft (N11.4.1).
+
+#### N11.15.3 Tresor-Pfad unerreichbar (USB-Stick weg, Netzlaufwerk down)
+
+- **Unerreichbar ist NICHT dasselbe wie „kein Tresor".** Ist `vault_path` gesetzt, die Datei
+  aber nicht da (Laufwerk fehlt, Ordner geloescht, Netzlaufwerk offline), fuehrt das
+  **niemals** ins Onboarding, sondern in den **Fehlerbildschirm** (N6): „Tresor nicht
+  erreichbar" plus den Pfad, mit drei Auswegen: **Erneut versuchen** (Stick wieder
+  einstecken, ein Klick), **Pfad neu waehlen** (Datei-Dialog, falls der Tresor umgezogen
+  ist) und **Neuen Tresor anlegen** (Onboarding, wieder mit dem Hinweis, dass der alte
+  Tresor nicht geloescht wird).
+- **Erweiterung von `get_boot_state()` (N11.13):** Der Boot-Zustand ist damit
+  **vierwertig**: `{ state: 'onboarding'|'locked'|'unlocked'|'vault_error', vault_path,
+  reason }` mit `reason` aus `config_damaged`, `vault_unreachable`, `vault_damaged`. Das
+  ist eine Ergaenzung, kein Widerspruch: `get_state()` bleibt zweiwertig (G13), und die
+  drei alten Zustaende behalten ihre Bedeutung. Die Vokabeln sind dieselben wie in der
+  Entsperr-Fehlerlogik (N6, jetzt in B.2).
+
+#### N11.15.4 Wechseldatentraeger, Netz- und UNC-Pfade
+
+Erlaubt, aber **nur mit Warnung** bei der Wahl (dieselbe Stelle wie die Cloud-Warnung aus
+G32, `choose_vault_dir()`): Bei Wechseldatentraegern (`DRIVE_REMOVABLE`) und Netz-/UNC-Pfaden
+(`\\server\share`, `DRIVE_REMOTE`) warnt der Dialog, dass (a) die App bei fehlendem
+Laufwerk im Fehlerbildschirm landet (N11.15.3), (b) das sichere Ueberschreiben beim
+Killswitch/Reset dort **nicht** zuverlaessig ist (fremdes Dateisystem, Server-Cache,
+Schattenkopien), und (c) die Datei dort fuer andere leichter erreichbar ist (K1). Die
+Warnung ist Pflicht, das Verbot nicht. **Folge fuer G17:** Ein fehlgeschlagener Write-back
+(Stick mitten im Betrieb abgezogen) ist **kein** stiller Datenverlust, sondern fuehrt in den
+N6-Fehlerbildschirm mit der Moeglichkeit, den Tresor an einem anderen Ort zu speichern.
+
+#### N11.15.5 Store-Python-Redirect (Befund V8)
+
+Laeuft die App unter Microsoft-Store-Python (heutiges Entwickler-Setup), werden Schreibzugriffe
+auf `%LOCALAPPDATA%` umgeleitet; `config.json` liegt dann real unter
+`...\Packages\PythonSoftwareFoundation.Python.3.11_*\LocalCache\Local\NoaToDo\`. **Im Prozess
+ist das transparent** (dieselbe API sieht dieselbe Datei), fuer externes Werkzeug und fuer den
+spaeteren `.exe`-Build (Phase 9, **kein** Redirect) nicht. Regeln: (a) Der Pfad wird nur ueber
+`config_path()` aufgeloest, nie hartkodiert, auch nicht in Tools. (b) Es wird **keine
+Migration** gebaut: Wer vom Dev-Python zur `.exe` wechselt, findet keine Konfig, landet also
+im Onboarding und zeigt mit „Tresor suchen" (N11.15.2) auf seine vorhandene `tasks.db.enc`.
+Das ist bewusst so, ein Auto-Import aus einem fremden Paketpfad waere mehr Risiko als Nutzen.
+(c) Dasselbe gilt fuer `PROFILE_DIR` (G14), das denselben Redirect erlebt. (d) **Aufraeumen ja,
+Migration nein (V8, 2026-07-15):** Der Erststart der Phase-9-`.exe` entfernt die bekannten
+alten Redirect-Pfade **einmalig** (den umgeleiteten `NoaToDo\webview`-Ordner und eine dortige
+`config.json`), liest sie aber nie ein; eine `tasks.db.enc` wird dabei **niemals** angefasst
+(der Tresor liegt am vom Nutzer gewaehlten Ort, ein Loeschen waere Datenverlust). Ohne diesen
+Schritt blieben der alte umgeleitete Profilordner und die alte Konfig fuer immer liegen,
+niemand wischt sie je (G14-Luecke).
+
+#### N11.15.6 Onboarding zeigt auf einen Ordner mit vorhandenem Tresor (Datenverlust-Schutz)
+
+**Die Ratestelle (U1-Nachschlag, 2026-07-15):** Das Onboarding laeuft, wenn `config.json`
+fehlt (N11.15.2). Die Tresordatei `tasks.db.enc` kann dann aber physisch trotzdem am alten
+Ort liegen: genau der von N11.15.5 selbst erzeugte Fall (Wechsel Dev-Python zur `.exe`,
+Config weg, Tresor noch da), ebenso nach manuell geloeschter `config.json`. Waehlt der Nutzer
+im Onboarding-Schritt 1 diesen Ordner, war bisher offen, was `create_vault(path, passphrase)`
+tut. Ein blindes „`tasks.db.enc` unter `path` schreiben" wuerde den vorhandenen, verschluesselten
+Tresor **still und unwiderruflich ueberschreiben**, also echten Datenverlust ausloesen und
+zugleich das N11.15.2-Versprechen brechen („ein vorhandener alter Tresor wird NICHT geloescht").
+
+**Entscheidung (Security first, U1):** Ein bestehender Tresor wird beim Anlegen **nie**
+ueberschrieben. Zwei Riegel, Guertel und Hosentraeger:
+
+- **UI-Weiche in `choose_vault_dir()`:** Der Backend-Dialog prueft, ob im gewaehlten Ordner
+  schon eine `tasks.db.enc` liegt, und meldet `has_vault:true`. Der Onboarding-Screen bietet
+  dann **nicht** „neuen Tresor anlegen" an, sondern nur „**Diesen Tresor oeffnen**": der Pfad
+  wandert in eine frische `config.json`, und der Boot geht in den normalen **Lock-Screen**
+  (dasselbe Ergebnis wie „Tresor suchen", N11.15.2). Wer stattdessen wirklich neu anlegen will,
+  muss einen anderen, leeren Ort waehlen.
+- **Backend-Riegel in `create_vault()`:** Existiert unter `path` schon eine `tasks.db.enc`,
+  bricht die Methode **vor** jedem Schreiben mit `invalid` ab und ruehrt die Datei nicht an.
+  Das faengt jeden Aufruf ab, der an der UI-Weiche vorbeikommt (Bridge-Aufruf von Hand,
+  Renn-Fall, kuenftiger Code-Pfad). Der Schreibvorgang selbst bleibt atomar (`.tmp` +
+  `os.replace`, wie G16/N11.15.1), sodass auch ein Abbruch mittendrin nie eine halbe Datei
+  hinterlaesst.
+
+**Abgrenzung:** Das gilt nur fuer das **Anlegen** (Onboarding/`create_vault`). Der Reset
+(`reset_vault()`) loescht den Tresor bewusst und legt danach neu an, das ist gewollt und kein
+Widerspruch. Das Ueberschreiben beim regulaeren Write-back eines bereits geoeffneten Tresors
+(G16/G17) ist ebenfalls nicht gemeint, dort ist es der Sinn der Sache.
+
+
 ## TEIL C: Baufolge (Phase 0 bis 9)
 
 ### Phase 0: Projektgerüst & Umgebung
@@ -1132,6 +2592,19 @@ Diese Tabelle ist der geforderte Rückbezug ("jedes Gate referenziert seine Klas
    ChaCha20-Poly1305, Pflicht), `argon2-cffi` (Passphrase-Hash + Schlüsselableitung).
    Verschlüsselungs-Design: **Doppel-Kaskade, siehe B.7.**
 3. Virtuelle Umgebung anlegen, Abhängigkeiten installieren.
+
+**Abhaengigkeit fuer den echten Flugmodus (Etikett N11.5/U14, 2026-07-15; wortgleich umgezogen in Umbau-Etappe 3):**
+
+  - **Neue Abhaengigkeit, benannt und gepinnt (G11-relevant).** Python braucht ein
+    WinRT-Projektionspaket; heute fehlt das in Phase 0 / `requirements` / G11. Gewaehlt
+    werden die **modularen PyWinRT-Pakete** (kleinere Abhaengigkeitsflaeche als das
+    Sammelpaket `winsdk`, im Zweifel pro Sicherheit die schmalere Wahl):
+    `winrt-runtime`, `winrt-Windows.Devices.Radios`, `winrt-Windows.Devices.Enumeration`
+    sowie `winrt-Windows.Foundation` (fuer die `IAsyncOperation`-Awaits). Alle werden in
+    `requirements.txt` **und** exakt versionsgepinnt in `requirements.lock.txt`
+    aufgenommen und fallen unter die Pinning-/Supply-Chain-Pruefung aus **G11**.
+    `winsdk` bleibt nur die dokumentierte Rueckfalloption, falls die modularen Pakete auf
+    der Zielplattform nicht sauber installieren.
 
 > **🔒 PFLICHT-GATE für Phase 0: G11 (Supply Chain, Abhängigkeiten pinnen).**
 > Definition, Status und Prüfweg ausschliesslich in der normativen Gate-Tabelle in
@@ -1167,8 +2640,8 @@ leer (keine Demo-Daten, N11.1.4).
 4. **Keine Demo-Seed-Daten** (N11.1.4): ein frischer Tresor startet immer leer. Beim
    allerersten Start werden nur die Default-Settings geschrieben und der `seeded`-Marker
    gesetzt; es werden keine Beispiel-Listen mehr eingespielt. Der leere Zustand zeigt im
-   Frontend einen freundlichen Empty-State („Create your first list"). ANHANG 1 ist damit
-   hinfällig.
+   Frontend einen freundlichen Empty-State („Create your first list"). ANHANG 1 alt (jetzt in Anhang 3) ist
+   damit hinfällig.
 5. Alle `*_at`-Felder als ISO-8601-UTC-Strings.
 
 **Abnahme:** Ein kleines Testskript legt eine Liste + Aufgabe an, schaltet sie auf
@@ -1284,7 +2757,7 @@ interaktiv. Dies ist die Vanilla-Umsetzung der React-Komponenten.
 | Modals | `renderModal(kind)` | Status/Rename/Delete/Shortcuts/Settings (Panik ist kein Modal mehr, sondern das PanicPanel an der Rail, N10) |
 | `LockScreen` | `renderLock()` | Sperrbildschirm |
 | `Toasts` | `pushToast()` | Toast-Stack |
-| `Icons` | `Icons` (Objekt) | die SVG-Icons (siehe **Anhang 2**, 1:1 aus Konzept) |
+| `Icons` | `Icons` (Objekt) | die SVG-Icons (siehe **Anhang 4**, 1:1 aus Konzept) |
 
 1. **Zustand** im Frontend ist nur ein Cache (`state = { lists, activeId, settings,
    online, locked, menu, modal, focus, colorOpen, toasts }`). Wahrheit bleibt das
@@ -1368,7 +2841,7 @@ seit dem 2026-06-10 fertig und gehärtet (`copy_task`, siehe Punkt 5 unten).
 **Noch offen (Pflicht, KEINER dieser Punkte ist optional, je in der genannten Phase):**
 - **Undo beim Listen-Löschen (Phase 7):** `delete_list` löscht heute sofort und
   unwiderruflich. Pflicht: Toast "List deleted" mit "Undo"-Button (ca. 6 s
-  sichtbar). Umsetzung backendseitig **genau nach N11.2.1 (U9-Entscheid 2026-07-13):
+  sichtbar). Umsetzung backendseitig **genau nach N11.2.1 in B.2 (U9-Entscheid 2026-07-13):
   ein RAM-Puffer für die letzte gelöschte Liste, kein Soft-Delete** (die frühere
   „oder als `deleted_at`-Soft-Delete"-Variante ist gestrichen), `undo_delete_list(id)`
   stellt an der alten Position wieder her.
@@ -1445,13 +2918,32 @@ aus Phase 6.5 / Gate G23, es gibt bewusst kein Listen-Kopieren mehr.)
    (Drag and Drop der Listen in der Sidebar). Validierung wie `add_task` (G20).
    „Clear completed" und Volltextsuche werden nicht gebaut.
 
+#### Export-Härtung (Etikett G21) [Sec]
+
+*(Wortgleich hierher gezogen in Umbau-Etappe 6 aus der G21-Zeile der B.9-Gate-Tabelle; Status, Stand und Pruefweg des Gates stehen weiter in B.9.)*
+
+**Export-Härtung.** Audit-Befunde: eine Liste namens `CON` exportiert als `CON.md` (reservierter
+Windows-Gerätename), und Zeilenumbrüche im Task-Text brechen die Markdown-Struktur des Exports
+(eingeschleuste falsche `- [x]`-Zeilen/Überschriften). Pflicht in `export_list`: (a) Dateiname:
+reservierte Namen (CON, PRN, AUX, NUL, COM1-COM9, LPT1-LPT9; case-insensitive, auch mit Endung)
+mit `_`-Präfix entschärfen; führende/abschliessende Punkte und Leerzeichen entfernen; bleibt
+nichts übrig, Fallback `list`. (a2) **Verbotene Zeichen und Längenkappung (V6, 2026-07-15):**
+die unter Windows unzulässigen Zeichen `<`, `>`, `:`, `"`, `/`, `\`, `|`, `?`, `*` sowie
+`..`-Sequenzen im vorgeschlagenen Dateinamen durch `_` ersetzen (Listennamen sind Freitext) und
+das Ergebnis auf ca. 120 Zeichen kürzen. Reihenfolge: erst Zeichen ersetzen, dann kürzen, dann
+die Gerätenamen-Prüfung aus (a). Gilt für `export_list` **und** `export_all`. (b) Inhalt: in
+md/txt jede Aufgabe einzeilig ausgeben, `\r` und `\n` im Task-Text durch ein Leerzeichen
+ersetzen (kein Meta mehr, N11.1.3). (c) Echten Save-Dialog umsetzen
+(`window.create_file_dialog(webview.SAVE_DIALOG, save_filename=...)`) und die Datei wirklich
+schreiben. Stand heute schreibt der Export **keine** Datei, das Frontend zeigt nur einen Toast.
+
 > **🔒 PFLICHT-GATES für Phase 7 (keines optional; Definition, Status, Termin und
 > Prüfweg stehen ausschliesslich in der normativen Gate-Tabelle in B.9, diese
 > Liste nennt nur die Nummern; Regel aus Plananalyse S1):**
-> - **G20** (Validierung lokaler Eingaben an der Bridge)
-> - **G21** (Export-Härtung + echter Save-Dialog, gilt für `export_list` und `export_all`)
+> - **G20** (Validierung lokaler Eingaben an der Bridge; Volltext in B.2, Etikett G20)
+> - **G21** (Export-Härtung + echter Save-Dialog, gilt für `export_list` und `export_all`; Volltext oben in dieser Phase, Etikett G21)
 > - **🔴 G22** (ehrliche Sicherheits-Behauptungen in der ganzen UI; überfällig, Termin 2026-07-20)
-> - **🔴 G29** (Fehler-Hygiene, Fehlercode-Katalog B.2, Logging-Politik; Termin 2026-07-20, Volltext N11.12)
+> - **🔴 G29** (Fehler-Hygiene, Fehlercode-Katalog B.2, Logging-Politik; Termin 2026-07-20, Volltext in B.2, Etikett N11.12)
 > - **G12** (externe WebView-Navigation verweigern; vorgezogen, nicht erst Phase 8)
 > - **✅ G23** (Einzel-Task-Kopie, umgesetzt 2026-06-10; hier nur per Prüfweg verifizieren,
 >   neue Copy-Funktionen nehmen denselben Backend-Pfad)
@@ -1497,6 +2989,94 @@ liegt (G6).
 > im Zweifel der native Fallback (schlankes Lock-Fenster ohne WebView), der
 > prozess-interne WebView-Neustart ist als Fallback verworfen.
 
+**Der Zweitprofil-Spike im Wortlaut (Etikett N11.8.3, U3-Entscheid; Punkt 3 des frueheren N11.8, wortgleich hierher umgezogen in Umbau-Etappe 3; Register: Anhang 1):**
+
+3. **Eigenes kleines WebView2-Profil fuer den Lock-Screen.** *Loest "PROFILE_DIR bei
+   `lock()` sicher wischen" (G14) vs. "WebView2 haelt den Ordner offen, solange der
+   Lock-Screen laeuft".* Der Lock-Screen bekommt ein getrenntes, minimales Profil
+   `LOCK_PROFILE_DIR` (z.B. `%LOCALAPPDATA%\NoaToDo\webview-lock`) mit eigenem kleinem
+   HTML/CSS/JS **inklusive aller Lock-Screen-Animationen**; es sieht **nie**
+   Aufgabendaten. Beim Sperren: die Haupt-App-Ansicht abbauen (das WebView2, das
+   `PROFILE_DIR` offen haelt, schliessen), `PROFILE_DIR` freigeben und **sicher wischen**
+   (G14), der Lock-Screen uebernimmt aus `LOCK_PROFILE_DIR` (muss nie gewischt werden,
+   da inhaltsfrei). Beim Entsperren die Haupt-Ansicht mit `PROFILE_DIR` neu aufbauen und
+   frisch `get_state()` laden (N10). Praktisch zwei WebView2-Oberflaechen im selben
+   Prozess (Single-Instance-Mutex G19 bleibt einer). Der Startup-Cache-Purge
+   (`_purge_webview_cache`) gilt fuer beide Profile getrennt.
+
+   **Ungeloeste Grundannahme, Spike-Pflicht (U3): dieser Punkt ist als ERSTES in
+   Phase 8 zu klaeren, bevor irgendein anderer Baustein auf dem Zweitprofil aufsetzt.**
+   `private_mode` und `storage_path` sind bei PyWebView Parameter von `webview.start()`,
+   also **global pro Prozess**, nicht pro Fenster. Zwei Fenster mit zwei verschiedenen
+   Profilen im selben Prozess gibt die PyWebView-API damit moeglicherweise gar nicht
+   her; genau darauf baut dieser Punkt aber. **Grundhaltung des Spikes (pro
+   Sicherheit, im Zweifel): der Zwei-Profil-WebView-Weg ist keine dokumentierte
+   PyWebView-Faehigkeit und wird nur beschritten, wenn der Spike ihn positiv
+   BEWEIST; kann er es nicht, gilt ohne weitere Abwaegung der native Fallback unten.
+   Nicht annehmen, sondern beweisen.** Der Spike beantwortet diese Fragen:
+   1. **Zwei Profile im selben Prozess (Kernfrage, Beweis-, nicht Annahme-Pflicht):**
+      Laesst sich empirisch zeigen, dass PyWebView bzw. das darunterliegende WebView2
+      zwei Fenster mit getrennten `storage_path` betreibt UND dass `PROFILE_DIR`
+      dabei im gesperrten Zustand tatsaechlich **freigegeben und sicher gewischt** ist
+      (kein `msedgewebview2.exe` haelt es mehr offen)? Nur wenn **beides** bewiesen
+      ist, ist der WebView-Weg erlaubt. Bleibt auch nur einer der beiden Punkte offen
+      oder unsicher, ist der Fallback unten **verbindlich** (pro Sicherheit: ein nicht
+      beweisbar gewischtes `PROFILE_DIR` verletzt G14 still).
+   2. **js_api-Umfang des Lock-Fensters:** eigene, minimale Bridge nur mit dem, was
+      die G13-Allowlist gesperrt erlaubt (`unlock`, `quit_app`, die Reset-Methode
+      nach N11.3, `get_state` in der Gesperrt-Fassung), oder dieselbe volle
+      Api-Instanz, abgesichert allein durch G13? Festlegen (die minimale Bridge ist
+      die sauberere Linie, Defense-in-Depth).
+   3. **Taskbar-Verhalten:** Erzeugen Haupt- und Lock-Fenster zwei Taskbar-Eintraege
+      bzw. zwei Icons? Es darf fuer den Nutzer nur ein App-Eintrag sichtbar sein.
+   4. **Fensterzustand nach dem Entsperren (entschieden, U24, nur noch zu verifizieren):**
+      Nach dem Neuaufbau der Haupt-Ansicht kommt das Fenster **immer maximiert** zurueck
+      (der N11.6-Grundzustand) und **nie im Mini-Modus.** Fenstergroesse/Position und der
+      Mini-Zustand von vor der Sperre werden **bewusst nicht** ueber die Sperrgrenze
+      getragen (pro Sicherheit: der Lock setzt auf den neutralen Grundzustand zurueck, kein
+      Vor-Sperr-Fensterzustand ueberlebt; der Mini-Modus ist ohnehin Teil des von
+      `clearWorkspace()` verworfenen Workspace). Der Spike muss das nur noch **nachweisen**,
+      nicht mehr entscheiden. Der Fensterzustand nach **Mini-Ende ohne** Sperre ist separat
+      in N11.6 (B.4) entschieden (exakte Wiederherstellung der Vor-Mini-Bounds).
+   5. **X-Knopf des Lock-Fensters:** nimmt zwingend denselben Pfad wie der Off-Knopf,
+      also `teardown("quit")` (N11.11, G35). Es darf keinen Lock-Fenster-Ausgang
+      geben, der die gemeinsame Sequenz umgeht.
+   6. **Boot-Reihenfolge:** Bei vorhandenem Tresor startet zuerst das Lock-Fenster;
+      das Hauptfenster wird erst nach erfolgreichem Unlock erzeugt und ruft erst dann
+      `get_state()` (Start-Weiche aus N11.8.2, B.2, beachten).
+   7. **WebView2-Prozesse vor dem Wischen wirklich beendet:** Vor dem Freigeben und
+      Wischen von `PROFILE_DIR` ist zu bestaetigen, dass die `msedgewebview2.exe`, die
+      den Ordner offen hielten, beendet sind; sonst scheitert der Wisch an `0x800700AA`
+      (ERROR_BUSY) und `PROFILE_DIR` bliebe ungewischt (G14-Bruch). Der Spike legt den
+      verlaesslichen Weg fest (WebView-Teardown abwarten, notfalls verwaiste Prozesse
+      gezielt beenden, dann wischen).
+   8. **DevTools/Remote-Debugging am Lock-Fenster hart aus:** Das Lock-Fenster startet
+      **nie** mit offenem WebView2-DevTools/Remote-Debugging, auch wenn `NOATODO_DEBUG`
+      gesetzt ist (ein Debugger am Lock-Screen waere ein Umgehungspfad an G13 vorbei).
+      Festlegen und pruefen.
+   9. **Tastatur im gesperrten Zustand:** Wer den Lock-Screen rendert (WebView **oder**
+      nativer Fallback) muss die B.8-Regel umsetzen, dass jede druckbare Taste das
+      Passwortfeld fokussiert und das Zeichen dort landet und dass alle App-Shortcuts
+      gesperrt sind.
+
+   **Fallback (verbindlich, und im Zweifel der Default): natives Lock-Fenster ohne
+   WebView.** Ergibt Frage 1 nicht den vollen Beweis, wird der Lock-Screen ein
+   schlankes **natives Fenster ohne WebView** (WinForms: Logo, Passwortfeld, Off-Knopf,
+   Reset-Einstieg; die Web-Animationen entfallen dann bewusst). Der fruehere zweite
+   Vorschlag (prozess-interner Neustart des WebView-Teils mit eigenem
+   `LOCK_PROFILE_DIR`) ist als Fallback **verworfen**: er zieht eine zweite
+   Browser-Engine samt eigenem Cache in den gesperrten Zustand und vergroessert die
+   Flaeche, ohne einen Sicherheitsvorteil zu bieten. Der native Weg hat die kleinste,
+   vollstaendig pruefbare Flaeche: keine Engine kann `PROFILE_DIR` offen halten, es
+   existiert gar kein zweiter Cache, und Aufgabendaten koennen den Lock-Screen baulich
+   nicht erreichen. Im nativen Fallback gibt es folglich **kein** `LOCK_PROFILE_DIR`
+   (nichts zu wischen). Die Zielvorgabe ist in beiden Varianten fix und nicht
+   verhandelbar: **`PROFILE_DIR` ist im gesperrten Zustand freigegeben und sicher
+   gewischt (G14); was den Lock-Screen anzeigt, sieht nie Aufgabendaten und muss nie
+   gewischt werden.** Abnahme (G35-nah): vor Anzeige des Lock-Screens ist `PROFILE_DIR`
+   nachweislich freigegeben und gewischt; andernfalls ist der Build nicht
+   abnahmefaehig.
+
 **Tun:**
 1. **App-Sperre nach der Sperr-Politik aus B.8:** `lock()` setzt `locked=True`, verwirft
    die Schlüssel, packt die DB wieder zu (Schicht 2) und zeigt den LockScreen über allem.
@@ -1534,9 +3114,9 @@ liegt (G6).
    zusätzlich `atexit`/`try…finally` um `webview.start()` in `main.py`, das die
    Schlüssel auch bei einem unerwarteten Rückkehren aus dem Message-Loop nullt.
    **Diese gemeinsame Routine ist ab dem S5-Entscheid (2026-07-13) verbindlich
-   ausformuliert: `teardown(reason)` mit der nummerierten Soll-Sequenz aus N11.11
+   ausformuliert: `teardown(reason)` mit der nummerierten Soll-Sequenz aus N11.11 in B.8.5
    (Gate G35). Die Punkte 1 und 2 hier beschreiben nur noch das Was; das Wie, die
-   Reihenfolge und die Zuordnung Schritt/Ausgang stehen abschliessend in N11.11.**
+   Reihenfolge und die Zuordnung Schritt/Ausgang stehen abschliessend in N11.11 (B.8.5).**
 3. **Gemeinsame Sperr-/Beenden-Sequenz (N11.11, Gate G35):** Sperren, Beenden, Panik-Ende,
    Killswitch und Reset laufen durch **genau eine** Routine `teardown(reason)` in
    `security.py`, in der festgelegten Reihenfolge: Idempotenz-Sperre, offene native Dialoge
@@ -1595,7 +3175,7 @@ liegt (G6).
 >   Passphrase-Wechsel auf den Soll-Stand gehoben (N11.3 (d)). Ein `MemoryError` bei der
 >   Ableitung ist ein eigener Zustand (Fehlercode `memory`), nie „falsche Passphrase" und
 >   nie ein Absturz (N11.4.3). Das ist wichtiger als die zweite Cipher-Schicht.
->   **Die Passphrase-Regel selbst ist in N11.3 abschliessend entschieden und lautet:
+>   **Die Passphrase-Regel selbst ist in N11.3 (B.2) abschliessend entschieden und lautet:
 >   ausschliesslich Mindestlänge 12 Zeichen.** Kein Stärkemesser, keine Stärke-Anzeige,
 >   keine Zeichenklassen-Regeln, keine Wörterbuch-/Blacklist-Prüfung. Frühere Fassungen
 >   dieses Gates verlangten eine „erzwungene Passphrase-Stärke mit Stärke-Anzeige"; das
@@ -1619,7 +3199,7 @@ liegt (G6).
 > **🔒 PFLICHT-GATES G13 bis G19, G25, G28, G31 bis G33 und G35 für Phase 8 (G13-G25
 > aus dem Audit 2026-06-10, G28 aus N11.9, G31-G33 aus den A1-A3-Entscheiden vom
 > 2026-07-15, G35 aus dem S5-Entscheid/N11.11; vollständige Beschreibung in B.9
-> Nachtrag bzw. N11.9/N11.11; KEINES davon ist optional):**
+> bzw. an den Volltext-Ankern B.2 (G13), B.8.5 (G14, N11.11), B.7 (G16, N11.9); KEINES davon ist optional):**
 > - **🔴 G13, Lock serverseitig durchsetzen (als Allowlist):** Bei `locked=True`
 >   prüft der `bridge`-Decorator gegen eine **explizite Allowlist**, nicht gegen eine
 >   Ausnahmenliste:
@@ -1643,7 +3223,7 @@ liegt (G6).
 >   `change_passphrase()` steht bewusst **nicht** drin, es braucht den entsperrten
 >   Zustand.
 >   Heute ist die Sperre nur ein Frontend-Overlay (im Audit nachgewiesen:
->   `add_task`/`get_state` funktionieren gesperrt weiter). Normative Fassung: B.9.
+>   `add_task`/`get_state` funktionieren gesperrt weiter). Normative Fassung: B.2 (Etikett G13).
 > - **G14, WebView2 ohne Datenspuren (fester Profilordner umgesetzt 2026-06-20, sicheres Wischen offen für Phase 8):**
 >   **Erledigt (vorgezogen mit G19):** Der Privatmodus ist abgeschaltet. `main.py` startet
 >   PyWebView jetzt mit `private_mode=False` + `storage_path=PROFILE_DIR`
@@ -1693,10 +3273,10 @@ liegt (G6).
 >   `v`-Nummer und braucht einen Migrationspfad.
 > - **G16, `.enc`-Dateiformat + atomares Schreiben:** Header (Magic `NOA1`,
 >   Version, Argon2-Parameter (Typ, `memory_cost`, `time_cost`, `parallelism`,
->   `hash_len`; konkrete Soll-Werte in N11.4.3), Salt, Nonce), frische Nonce pro
+>   `hash_len`; konkrete Soll-Werte in N11.4.3, B.7), Salt, Nonce), frische Nonce pro
 >   Verschlüsselung, Schreiben über `.tmp` + `fsync` + `os.replace`, eine
 >   `.bak`-Generation. Der Header geht als `associated_data` in die AEAD ein (V1) und
->   die KDF-Parameter werden vor der Ableitung gegen den Akzeptanzbereich aus N11.4.3
+>   die KDF-Parameter werden vor der Ableitung gegen den Akzeptanzbereich aus N11.4.3 (B.7)
 >   geprüft (aufgeblähter oder unplausibler Kopf: `vault`, kein Argon2-Lauf). Ausserdem
 >   (V1): das frische `.tmp` vor der `.bak`-Rotation probeweise entschlüsseln, freien
 >   Plattenplatz vor dem Wrap prüfen; die zufällige 12-Byte-Nonce ist bei dieser
@@ -1748,7 +3328,7 @@ liegt (G6).
 > - **🔴 G35, gemeinsame Sperr-/Beenden-Sequenz (N11.11):** genau **eine**
 >   `teardown(reason)`-Routine in `security.py`, durch die **jeder** Ausgang läuft
 >   (Lock-Button, `Ctrl+L`, Auto-Sperre, Off-Knopf, Panik-Finish, Killswitch, Reset,
->   natives Fenster-X, `atexit`), in der Reihenfolge aus N11.11.2: Idempotenz, native
+>   natives Fenster-X, `atexit`), in der Reihenfolge aus N11.11.2 (B.8.5): Idempotenz, native
 >   Dialoge auflösen (U5), einfrieren (G13), G17-Debounce abbrechen und synchron
 >   persistieren, Clipboard leeren (V7), DB schließen, Schlüssel nullen (G25), erst dann
 >   löschen (Killswitch/Reset, U21), `PROFILE_DIR` wischen (G14), Funk-Wiederherstellung
@@ -1830,7 +3410,7 @@ sein, bevor man verteilt (sonst gibt man eine „Tresor-App" mit `DEV_AES_KEY` h
        nachweislich `locked` liefert, `get_state()` gesperrt nur `{"locked": true}`
        zurückgibt und `quit_app()`/`killswitch()`/die Onboarding-Methoden **nicht**
        blockiert werden (sie müssen
-       gerade im gesperrten Zustand funktionieren, siehe N10/N11.13). Der Test liest die
+       gerade im gesperrten Zustand funktionieren, siehe G13 in B.9, Etiketten N10/N11.13). Der Test liest die
        Methodenliste dynamisch aus der `Api`-Klasse, damit eine neu ergänzte Methode
        auffällt, statt still durchzurutschen.
      - **G28-Beweis automatisiert (V12):** ein pytest-Test speichert einen bekannten
@@ -1908,7 +3488,7 @@ sein, bevor man verteilt (sonst gibt man eine „Tresor-App" mit `DEV_AES_KEY` h
      Funktionsänderung veröffentlicht (Rebuild-Kadenz); der Browser-Anteil ist über
      die Evergreen-WebView2-Runtime automatisch versorgt.
 
-> **🔒 GATES (Phase 9): G27 (Volltext hier) und G34 (Volltext in B.9):**
+> **🔒 GATES (Phase 9): G27 und G34 (Volltext je hier):**
 > - **G27, Binary-Härtung gegen Reverse-Engineering + Manipulation.** Eine als Datei
 >   verteilte App ist grundsätzlich entpack- und disassemblierbar; das Sicherheitsmodell
 >   darf deshalb **nie** auf Code-Geheimhaltung beruhen (Kerckhoffs-Prinzip: die
@@ -1962,6 +3542,32 @@ sein, bevor man verteilt (sonst gibt man eine „Tresor-App" mit `DEV_AES_KEY` h
 >   (Debugger, Speicher-Dump): liest Schlüssel/Daten zur Laufzeit aus dem RAM, ohne den
 >   Code zu verstehen; dagegen helfen nicht Code-Hürden, sondern die schnelle Sperre,
 >   Panic und das RAM-Nullen (G25).
+>
+> - **G34, Release-Härtung: Debug-Schalter, DevTools, Kopier-/Auslass-Kanäle.** Zwei
+>   Befund-Gruppen: **(A4)** `NOATODO_DEBUG=1` aktiviert heute DevTools; respektierte die
+>   Phase-9-`.exe` dieselbe Env-Var, bekäme jeder mit kurzem Zugriff (K3) eine Konsole mit
+>   vollem `pywebview.api.*`-Zugriff auf die laufende App, inklusive `killswitch()`
+>   (Datenvernichtung ohne Passphrase, per G13 gesperrt erlaubt!). **(A6)** G23 härtet nur den
+>   Rail-Button-Pfad; daneben existieren Kopier-/Auslass-Kanäle: Textselektion plus natives
+>   `Strg+C` (PyWebView deaktiviert die Selektion nur per Default; `main.py` setzt `text_select`
+>   nicht explizit, der Schutz ist also unbeabsichtigt und ungetestet, und ein künftiges
+>   `text_select=True` "für Komfort" würde G23 lautlos aushebeln), Drag-out von markiertem Text
+>   in andere Apps, `Strg+P` (der WebView2-Browser-Accelerator öffnet den Druckdialog, "Als PDF
+>   drucken" exportiert die komplette Ansicht als Klartext-PDF an G21 vorbei) und das
+>   WebView2-Standard-Kontextmenü. Pflicht: **(a)** Der Release-Build ignoriert `NOATODO_DEBUG`
+>   hart (Build-Konstante: `_debug_enabled()` liefert im gefrorenen Build immer `False`),
+>   DevTools aus, zusätzlich `AreDevToolsEnabled=false` in den CoreWebView2-Settings, soweit
+>   über PyWebView erreichbar. **(b) SOFORT, nicht erst Phase 9:** `text_select=False` explizit
+>   in `create_window` setzen (aus dem unbeabsichtigten Default eine bewusste, getestete
+>   Entscheidung machen) plus Regressionstest. **(c)** Im Release
+>   `AreBrowserAcceleratorKeysEnabled=false` (tötet `Strg+P` und die übrigen Browser-Tasten; die
+>   App-Shortcuts aus B.5 laufen über den eigenen JS-Handler und bleiben unberührt) und
+>   `AreDefaultContextMenusEnabled=false`. **(d)** Der Rest wird nicht "gelöst", sondern steht
+>   ehrlich im Bedrohungsmodell (B.10.3 Punkt 8): Eingabefelder bleiben selektierbar (Phase 6.5
+>   Punkt 3, akzeptiert), ihr natives `Strg+C` landet ungehärtet in Win+V-History und
+>   Cloud-Clipboard; das Foto vom Bildschirm bleibt Nicht-Ziel. *(Wortgleich hierher gezogen in
+>   Umbau-Etappe 6 aus der G34-Zeile der B.9-Gate-Tabelle; Status, Stand und Pruefweg des Gates
+>   stehen weiter in B.9.)*
 
 **Abnahme:** `pytest` läuft grün; `NoaToDo.exe` startet auf einem frischen Windows-Profil
 ohne installiertes Python, legt bei fehlender DB einen neuen, gesperrten Tresor an und
@@ -1981,1455 +3587,125 @@ verhindert den Start mit einer Integritäts-Meldung.
 
 ---
 
-## NACHTRAG (2026-06-13): UX-Pflichten und -Erweiterungen aus dem UX/UI-Audit
 
-Nach dem lokal nutzbaren Meilenstein (Phase 6 + 6.5) wurde ein vollständiges
-UX/UI-Audit erstellt (`Planung/UX-UI Verbesserungen.md`, Stand 2026-06-12). Dieser
-Nachtrag überführt **alle Audit-Punkte, die noch zu bauende Features betreffen**, in
-den Bauplan, damit sie nicht verloren gehen. Reine Sofort-Korrekturen (Mac-Symbole,
-UI-Sprache) wurden am 2026-06-13 direkt im Code erledigt (siehe Entscheidung unten).
-Die verbleibenden **Gegenwarts-Mängel** (z.B. unehrliche Status-/Toast-Texte, fehlende
-Tastaturnavigation, A11y, Voll-Re-Render) sind nicht Teil dieses Nachtrags; sie stehen
-im Audit (Prioritäten P1 bis P3) und werden separat abgearbeitet. Querverweise in der
-Form „(UX x.y)" zeigen auf den jeweiligen Abschnitt im Audit.
+## TEIL D: Offene Entscheidungen & Erweiterungen
 
-**Sprach- und Plattform-Entscheidung (verbindlich, 2026-06-13):**
-- **UI-Sprache: durchgehend Englisch.** Die frühere Überlegung „Deutsch" wurde
-  verworfen. Alle sichtbaren UI-Strings sind englisch; die zuvor gemischten deutschen
-  Tooltips wurden am 2026-06-13 angeglichen (`frontend/app.js`, `index.html` jetzt
-  `lang="en"`). Code-Kommentare bleiben Deutsch (Entwickler-Sprache), das ist keine UI.
-- **Zielplattform: ausschließlich Windows.** In UI und Plan kommen **keine**
-  Mac-Tastensymbole (⌘, ⇧) mehr vor; Tastenkürzel werden als `Ctrl`/`Shift` dargestellt.
-  B.4, B.5 und B.8 wurden entsprechend bereinigt.
+### D.1 Privatsphäre: alles bleibt lokal
 
-**Was bereits im Plan steht (nur Querverweis, hier nicht erneut spezifiziert):**
-Profil-Menü aufräumen (UX 1.3) -> Phase 6.5; Export-Save-Dialog + ehrliches Feedback (UX 1.5)
--> Phase 7 / Gate G21c; Undo beim Listen-Löschen (UX 1.2, 3.3) -> Phase 6.5 + Phase 7;
-ehrlicher `get_status()` und Status-Modal (UX 1.4, 8.4) -> Gate G22 + Phase 8;
-Auto-Lock-Timeout (UX 7.6) -> B.8; serverseitige Lock-Durchsetzung -> Gate G13
-(Screenshot-Schutz / G26 wurde verworfen, siehe oben). Diese Punkte sind verbindlich
-an den genannten Stellen, hier nur zur Vollständigkeit gelistet.
+- **Lokal:** alle Aufgaben, alle Bearbeitungen, die gesamte SQLite-DB. Nichts verlässt
+  je den Rechner; es gibt keinen externen Dienst, keine Cloud-Anbindung und keinen Sync.
+- Im Windows Credential Manager (über `keyring`) liegt nur der DPAPI-Pepper der
+  Schlüsselableitung (siehe G18), keine Aufgabendaten.
 
-### N2. Persistente Offline-Statusanzeige (UX 4.2, 8.3)
-Der Online/Offline-Zustand ist heute fast unsichtbar (nur Globus-/Flugzeug-Icon in
-der oft versteckten Rail plus kurzer Toast). Das Konzept sah die `airplane-pill` als
-persistenten Banner vor; ihr CSS liegt ungenutzt im Stylesheet. Optionaler UX-Ausbau:
-- Eine **persistente Statuspille** im Hauptbereich (oder am Dock), sichtbar sobald
-  `online=false` („offline mode"). Der Schalter steuert seit N11.5 den **echten**
-  Windows-Flugmodus (das frühere „rein lokales Flag" ist überholt), umso wichtiger
-  ist die sichtbare Anzeige.
-- Damit entschärft sich auch UX 3.12 (versehentliches `G`/Offline ohne sichtbare Folge).
+### D.3 Mögliche spätere Erweiterungen (nicht im Kern-Scope)
 
-### N4. Phase 8: Echter Lock-Screen mit Passphrase (UX 8.1) [Sec]
-B.4 und Phase 8 nennen die Passphrase-Eingabe, aber nicht die UX-Details. Der heutige
-„4x tippen"-Platzhalter (`renderLock`, `lockTap`) wird ersetzt durch ein echtes
-Eingabefeld mit folgenden **Pflicht-Eigenschaften**:
-- Passwort-Feld mit Show/Hide-Umschalter.
-- Fehlerzustand bei falscher Passphrase: Shake + Meldung „wrong passphrase", **ohne**
-  preiszugeben, ob ein Tresor existiert (neutrale Meldung).
-- Warnung bei aktiver Feststelltaste (Caps Lock).
-- **Fortschritts-/Spinner-Zustand beim Entsperren:** Argon2id mit den Kosten aus
-  Gate G8 (256 MiB, `time_cost=3`, `parallelism=4`, N11.4.3) braucht spürbar Zeit; das
-  ist gewollt, also braucht es eine „unlocking…"-Anzeige, sonst wirkt die App
-  eingefroren. Scheitert die Speicher-Allokation (`MemoryError`), zeigt der Screen den
-  eigenen `memory`-Zustand („Not enough memory…", N11.4.3), **nicht** den
-  Falsch-Passwort-Shake.
-- **Rate-Limit-Anzeige** nach mehreren Fehlversuchen („try again in 30 s"); bremst
-  Offline-Rateversuche zusätzlich zur teuren KDF.
-- **Verbindliche Fehlerunterscheidung (falsche Passphrase / beschädigte Datei /
-  fehlender Tresor) samt Rückgabeformat steht in N6 (löst U7).** Kurz: `passphrase`
-  erzeugt Shake + neutrale Meldung, `vault` führt in den Fehlerbildschirm mit
-  `.bak`-Angebot, „kein Tresor" ist ein Boot-Zustand, kein `unlock`-Ergebnis.
-- Hängt an Gate G13 (gesperrt = Backend liefert `locked`), G15 (Prüfung über den
-  Poly1305-Tag) und G18 (DPAPI-Pepper): ohne Pepper bzw. richtige Passphrase scheitert
-  die ChaCha20-Entschlüsselung, die Fehlermeldung kommt aus dem AEAD-Tag.
+- Unterpunkte/Checklisten je Aufgabe.
+- Mehrere Akzent-/Theme-Presets, anpassbare Dichte je Liste.
+- **Fälligkeiten, reine Anzeige (nicht im Kern-Scope, siehe A.4 Punkt 6, Etikett N11.1.6).** Falls das je
+  gebaut wird: ein optionales Datum an der Aufgabe, das nur **angezeigt** wird (Chip in
+  der Zeile, evtl. eine Sortierung), **ohne** Erinnerungen, ohne Toasts, ohne
+  Hintergrund-Timer, ohne Wiederholungen, ohne Schlummern. Benachrichtigungen bleiben
+  gestrichen (N11.1.1), und ohne sie wäre eine Fälligkeit nur eine Notiz mit Datum.
+  Ausdrücklich **kein** Auftrag: kein `due_at` im Schema, kein Platzhalter, keine
+  Vorbereitung im Code, bis es einen neuen ausdrücklichen Entscheid gibt.
+- Wiederholende Aufgaben: nur zusammen mit dem obigen Punkt denkbar, heute gestrichen.
 
-### N5. Phase 8: Panik-Flow nur per Maus, kein Panik-Hotkey (UX 8.2) [Sec]
-*(Aktualisiert 2026-07-08, siehe N10: der Panik-Flow endet jetzt im Endschirm mit
-Finish/Killswitch, nicht mehr im Lock-Screen. Entschieden 2026-07-13, löst W5 der
-Plananalyse: der Hotkey `Ctrl+Shift+!` ist ersatzlos gestrichen.)*
-- Der volle Panik-Flow (Endschirm, Killswitch) bleibt **bewusst mehrstufig** und nur
-  per Maus über den Rail-Button erreichbar (Kippschalter + Confirm): die Mehrfach-
-  Bestätigung schützt vor versehentlichem Auslösen, gerade weil der Killswitch
-  unwiderruflich ist.
-- **Es gibt keinen Panik- oder Notfall-Hotkey.** Die früher geplante Belegung
-  `Ctrl+Shift+!` (zeitweise als Panik-Auslöser, zuletzt als verstärkte Sperre ohne
-  Rückfrage gedacht) ist ersatzlos entfernt und darf nicht wieder eingeführt werden.
-  Begründung: seit N10 ist ohnehin **jede** Sperre verstärkt (Raum-Bereinigung vor
-  dem Lock-Screen), `Ctrl+L` deckt den „schnell alles zu"-Fall damit vollständig und
-  ohne Datenverlust-Risiko ab; der Panik-Modus mit seinem unwiderruflichen Killswitch
-  gehört bewusst nicht auf die Tastatur. Im Code ist entsprechend kein solcher Hotkey
-  verdrahtet; die Layout-Tücke von `!` auf Nicht-DE-Layouts (U22 der Plananalyse)
-  entfällt damit ebenfalls.
+(Volltextsuche und automatische Backups wurden bewusst gestrichen, siehe N11.1.2 (A.4
+Punkt 2) und N11.7 (Register: Anhang 1). Fälligkeiten/Erinnerungen sind aus dem
+Kern-Scope gestrichen, siehe N11.1.6 (A.4 Punkt 6).)
 
-### N6. Phase 8: Entsperr-/Boot-Fehlerbildschirm (UX 6.3) [Sec]
-`boot()` rendert bei Fehlern heute ein nacktes `<pre>boot error</pre>`. Ab Phase 8 sind
-„falsche Passphrase" und „beschädigte/fehlende `tasks.db.enc`" reale Szenarien. Pflicht:
-ein gestalteter Fehlerzustand mit Handlungsoption (Retry, Pfadangabe, Hinweis auf die
-`.bak`-Generation aus Gate G16 und, bei vergessener Passphrase, auf den Reset-Weg aus
-N11.3; einen Pepper-Recovery-Export gibt es bewusst nicht). Der Nutzer darf bei einem
-AEAD-Fehler nie ratlos vor einem leeren Fenster stehen.
+**Roadmap-Erweiterungen aus dem UX-Nachtrag (Etikett N8, 2026-06-13; wortgleich umgezogen in Umbau-Etappe 3, ergaenzt D.3):**
 
-**Entscheidbare Fehlerlogik beim Entsperren (verbindlich, löst Plananalyse U7;
-entschieden 2026-07-15, im Zweifel pro Sicherheit).** Der AEAD-Tag allein kann „falsche
-Passphrase" und „manipulierte Datei" nicht trennen. Deshalb wird die Fehlerquelle **vor**
-der teuren Ableitung anhand des unverschlüsselten Container-Kopfs entschieden, in genau
-dieser Reihenfolge:
-1. **Datei fehlt am Entsperr-Pfad** (der Pfad aus `config.json` zeigt auf keine
-   `tasks.db.enc`): Rückgabe `vault`. **Kein** stilles Umschalten auf Onboarding.
-   Onboarding entscheidet ausschliesslich `get_boot_state()` beim Start (N11.8.2);
-   verschwindet die Datei zur Laufzeit, ist das ein Fehler (Fehlerbildschirm mit
-   Wiederholen und Reset), kein Freibrief, einen neuen Tresor anzulegen. Sicherheitsgrund:
-   sonst könnte das blosse Löschen der Datei den „neuen Tresor"-Weg erzwingen und den
-   alten Zustand verschleiern.
-2. **Kopf unlesbar** (Magic falsch, unbekannte Version, Länge/Struktur unplausibel,
-   Salt / Argon2-Parameter / Nonce fehlen oder sind fehlerhaft): Rückgabe `vault`,
-   Fehlerbildschirm „Vault cannot be opened" mit `.bak`-Angebot. Diese Prüfung liest
-   **nur** den bauartbedingt nicht geheimen Container-Kopf (Magic, Version, Salt,
-   KDF-Parameter, Nonce), nie Schlüsselmaterial, und läuft **ohne** Passphrase und
-   **ohne** Argon2.
-3. **Kopf lesbar, aber der AEAD-Tag schlägt fehl:** Rückgabe `passphrase`
-   („Wrong passphrase"). Nur dieser Fall ist ein Rateversuch.
-
-**Rückgabeformat: die kanonischen B.2-Codes, kein paralleles `reason`-Feld.** Der
-U7-Vorschlag `{ok:false, reason:'wrong_pass'|'locked_out'|'file_damaged'|'no_vault'}`
-wird **nicht** übernommen; er dupliziert die einzige Wahrheit aus B.2 und verletzt G29.
-Verbindliche Abbildung: falsche Passphrase -> `passphrase`; laufende Ladder ->
-`rate_limited` mit `retry_in`; fehlende oder beschädigte Datei bzw. fehlender Pepper ->
-`vault`; „kein Tresor" ist **kein** `unlock`-Ergebnis, sondern ein Boot-Zustand.
-`unlock()` liefert bei Erfolg `{ ok:true }`, sonst `{ error:<code>, retry_in?:<s> }`.
-
-**Sicherheitsregeln (im Zweifel pro Sicherheit):**
-- **Nur `passphrase` treibt die Rate-Limit-Ladder (N11.4) voran.** Ein `vault`-Ergebnis
-  ist kein Rateversuch und erhöht `fails`/`stage` nicht (bei kaputtem Kopf läuft die
-  AEAD-Prüfung gar nicht, es wird nichts geraten). So kann ein manipulierter Kopf die
-  Ladder weder zurücksetzen noch umgehen.
-- **Jede `passphrase`-Antwort trägt `retry_in: 2`** (die 2-s-Wartezeit aus N11.4); sind
-  die 3 Freiversuche verbraucht, werden weitere Versuche zu `rate_limited` mit der
-  Ladder-Dauer. Die Anzeige zeigt in beiden Fällen denselben Countdown.
-- **Die Meldung bleibt neutral (N4):** „Wrong passphrase" gibt nicht preis, wie nah die
-  Eingabe war; der Fehlerbildschirm gibt nicht preis, ob ein Tresor existiert (auf dem
-  Lock-Screen existiert er ohnehin).
-- **`.bak`-Wiederherstellung ist ein vollwertiger Entsperr-Versuch:** sie tauscht den
-  Container gegen die `.bak`-Generation (Gate G16) und ruft dieselbe Logik erneut auf,
-  **unter derselben Ladder** (kein Rate-Limit-Bypass). Die aktuelle (womöglich
-  beschädigte) Primärdatei wird dabei **erst überschrieben, wenn die `.bak` erfolgreich
-  entsperrt**, nie vorher, sonst zerstört ein Fehlversuch gegen `.bak` die letzte
-  vorhandene Datei.
-
-**Sekundärhinweis „vielleicht beschädigt" nach Schwelle.** Weil eine falsche Passphrase
-(Fall 3) und ein subtil manipulierter Inhalt (Kopf intakt, Body verfälscht) beide als
-`passphrase` erscheinen, blendet der Lock-Screen nach `DAMAGE_HINT_AFTER = 5`
-aufeinanderfolgenden `passphrase`-Ergebnissen zusätzlich den unaufdringlichen Hinweis ein:
-„Or the file may be damaged. Try a backup?" mit Verweis auf die `.bak`-Wiederherstellung.
-Der Hinweis ist rein informativ, ändert die neutrale Hauptmeldung nicht und schaltet
-keinen Weg an der Ladder vorbei.
-
-### N7. Neue Fähigkeiten mit Bridge-Erweiterung (einplanen, z.B. Phase 7 oder Folge-Iteration)
-Echte Funktionslücken einer Mehrlisten-App, je mit kleiner Backend-Ergänzung. Kein
-Sicherheitsthema, daher zeitlich flexibel, aber fest eingeplant:
-- **Aufgaben zwischen Listen verschieben (UX 3.7):** neue Bridge-Methode
-  `move_task(id, target_list_id)` (oder `edit_task` um `list_id` erweitern); Auslösung
-  per Drag auf einen Sidebar-Eintrag und per „Move to…" im Kontextmenü. Validierung wie
-  bei `add_task` (Gate G20), Zielposition ans Ende der Ziel-Liste.
-- **Listen umsortieren (UX 3.9):** das Schema hat `lists.position`, aber kein UI. Neue
-  Methode `reorder_lists(ordered_ids)` analog zu `reorder` (gleiche Typprüfung, Gate
-  G20), Drag & Drop in der Sidebar.
-- **„Clear completed" (UX 3.8):** ~~Sammel-Löschen aller erledigten Aufgaben einer
-  Liste, mit Bestätigung bzw. Undo (analog zum Listen-Undo aus Phase 7). Eigene Methode
-  (z.B. `clear_completed(list_id)`), die serverseitig löscht.~~ **wird nicht gebaut**
-  (Entscheidung N11.2/N11.7).
-
-### N8. Roadmap-Erweiterungen (ergänzt D.3)
 Bewusst kein Kern-Scope, aber als Produktrichtung festgehalten:
 - **Aufgaben-Detailansicht (UX 7.4):** ausklappbare Detailzeile (Beschreibung,
   Erstellt-Datum).
-- **Volltextsuche/Filter (UX 7.2):** ~~`Ctrl+F`-Overlay mit Fuzzy-Filter~~ **wird nicht
-  gebaut** (Entscheidung N11.7).
 - **Mini-Modus, Listenwechsel (UX 7.7, 3.14):** ein Dropdown im `mini-bar`-Titel zum
   Wechseln der Liste, ohne den Mini-Modus zu verlassen.
-- **Meta-Feld benennen/strukturieren (UX 7.3):** ~~erledigt~~ **hinfällig**: das
-  Freitext-`meta` wurde ersatzlos entfernt (N11.1.3).
 
-### N9. Einstellungen, Vorbereitung künftiger Phasen (UX 7.6)
-~~Ergänzend zu den schon geplanten Settings (Auto-Lock-Timeout B.8): **Startverhalten**
-(maximiert vs. letzte Fenstergröße) als Einstellung vorsehen.~~ **[Überholt durch
-N11.6: das Fenster startet fest maximiert, ohne Setting.]**
-Weiter gültig: Die bestehende Settings-Struktur (Zeile + Segment, B.6) trägt neue Keys
-ohne Umbau; jeder neue Key muss in die `set_setting`-Whitelist aus Gate G20
-aufgenommen werden.
-
-### N10. Verstärkter Lock, Off-Knopf und Panik-Endschirm mit Killswitch (2026-07-08) [Sec]
-Entscheidung vom 2026-07-08; ersetzt bzw. präzisiert Teile von B.4, B.8, N5 und
-Phase 8 Punkt 1/2. Die UI-Anteile sind bereits umgesetzt (Stand Phase 6.5); die
-Sicherheits-Anteile (echte Schlüssel, sicheres Wischen) bleiben Pflicht in Phase 8.
-
-**1. Lock wird verstärkt („Panik light").** Jede Sperre (Lock-Button, `Ctrl+L`,
-später die Auto-Sperre nach Inaktivität; die Windows-Sitzungssperre sperrt nicht, N11.8.4)
-macht zuerst das, was bisher nur Panik tat: Raum leeren (`state.lists` verwerfen, keine Liste offen, Menüs/Modals/Auswahl
-schließen). **N11.10 gilt vorrangig: offline geschaltet wird beim Sperren NICHT mehr,
-der Online-/Funkzustand bleibt exakt so, wie er gerade ist.** Erst dann erscheint der
-bekannte Lock-Screen mit der Passwort-Pille. Es werden dabei **keine Daten gelöscht**:
-das Backend bleibt die Wahrheit, nach dem Entsperren lädt das Frontend alles frisch per
-`get_state()` und startet wie mit leerer Arbeitsfläche (Sidebar zu, keine Liste offen).
-**[Gestrichen durch N11.10: „offline schalten" und „Offline bleibt die App, bis der
-Nutzer es bewusst wieder einschaltet." Die Sperre fasst den Online-Zustand nicht mehr
-an; nach dem Entsperren gilt der vorherige Zustand unverändert weiter.]**
-
-**2. Off-Knopf auf dem Lock-Screen.** Oben rechts ein klassischer Power-Knopf. Ein
-Klick beendet die App sofort über `quit_app()`, ohne Passphrase. Dabei werden
-zufällig hinterlassene Spuren vernichtet (heute: der Raum ist bereits bereinigt,
-der WebView2-Cache wird ohnehin beim nächsten Start gewischt; Phase 8: sicheres
-Wischen von `PROFILE_DIR` nach G14, Schlüssel nullen nach G25), aber ausdrücklich
-**keine Nutzer- und keine App-Daten gelöscht**. Die Passworteingabe bleibt daneben
-jederzeit möglich; der Off-Knopf ist nur der zweite Ausgang.
-
-**3. Panik-Endschirm mit zwei Ausgängen.** Der Panik-Einstieg bleibt mehrstufig
-(Rail-Knopf, Kippschalter „No/Yes", separate Confirm-Pille): mit dem Mehrmals-
-Bestätigen ist man gegen Versehen sicher unterwegs. Nach dem Bestätigen wird sofort
-real bereinigt (Raum leeren und Zustand verwerfen wie beim Lock, **zusätzlich**
-offline schalten; das Offline-Schalten gibt es seit N11.10 nur noch hier im
-Panik-Flow, nicht mehr beim Sperren) und der
-„Wipe"-Fortschrittsschirm gezeigt; danach der Endschirm mit der Aussage, die
-Maschine sei sicher gewiped (bewusste Außendarstellung). Zurück in die App führt
-von dort **kein Weg mehr**. Unten zwei Knöpfe:
-- **Links, Akzentfarbe: „Finish".** Beendet nur die App (`quit_app()`). Alle Daten
-  bleiben vollständig erhalten; der nächste Start ist ein normaler Start.
-- **Rechts, grau: „Killswitch",** zweistufig im Knopf selbst: der erste Klick fährt
-  den Schriftzug „Killswitch" nach rechts und ein „OK" fährt herein; erst der Klick
-  auf „OK" löst aus. Dann läuft ein Fortschrittsbalken mit Statuszeilen („Deleting
-  user data", „Deleting lists", …), währenddessen löscht `killswitch()` die
-  Datenbank-Inhalte **real und unwiderruflich** (alle `lists`/`tasks`
-  und `settings`, danach `VACUUM`, damit die gelöschten Zeilen nicht in freien
-  Seiten der Datei liegen bleiben). Anschließend beendet sich die App von selbst.
-
-**4. Nach dem Killswitch.** Der nächste Start verhält sich wie ein Erststart auf
-einem frischen Rechner, aber **ohne** die Demo-Seed-Daten: keine Listen, alles kann
-neu angelegt werden. **N11.8.1 gilt vorrangig: `killswitch()` ist ab Phase 8 eine reine Datei-Loeschung (`tasks.db.enc` + `.bak` + Metadaten + Pepper + Profile), schreibt KEINE Settings und keinen `seeded`-Marker mehr; der naechste Start ist mangels Datei automatisch ein leerer Erststart.** (Frueher, DB-basiert: schrieb Standard-Settings neu und setzte `seeded=true`.) Gelöscht wird nur der Inhalt der
-Datenbank, **nie das Programm selbst**. Nirgendwo dürfen danach Daten liegen, die
-auf die frühere Nutzung schließen lassen. Ehrliche Einordnung des heutigen Stands:
-Zeileninhalte sind weg und `VACUUM` baut die Datei neu auf, aber auf SSD/NTFS ist
-das noch kein forensisches Secure-Delete; erst die Phase-8-Härtung (In-Memory-DB
-nach G6, `.enc`-Neuaufbau nach G16, `PROFILE_DIR`-Wisch nach G14) macht die Zusage
-auch forensisch belastbar.
-
-**5. Bridge-Erweiterung und Phase-8-Folgen.** Neu in B.2: `quit_app()` und
-`killswitch()`. `killswitch()` ist nur aus dem Panik-Endschirm erreichbar; ein
-direkter Aufruf über eine XSS wäre Datenvernichtung per Fernzugriff, die
-`esc()`-Pflicht aus B.9 gilt hier also doppelt. Für Phase 8 gilt: Gate G13 ist als
-**Allowlist** formuliert (`ALLOWED_WHEN_LOCKED = {"unlock", "quit_app", "killswitch",
-"get_state", "get_boot_state", "choose_vault_dir", "create_vault", "reset_vault"}`,
-normative Fassung in B.9); `quit_app()` und `killswitch()` stehen dort
-neben `unlock()` **ausdrücklich als erlaubt** (beide sind destruktiv bzw. beendend,
-geben aber nie Daten preis; der Killswitch soll gerade ohne Passphrase funktionieren).
-Der Phase-8-Killswitch löscht dann `tasks.db.enc` samt `.bak`-Generation und
-Vault-Metadaten (Salt, Pepper-Verweis) direkt, wofür keine Schlüssel nötig sind.
+(Zwei hinfällige Punkte dieser Liste, Volltextsuche UX 7.2 und Meta-Feld UX 7.3,
+liegen durchgestrichen in Anhang 3, Umbau-Etappe 5.)
 
 ---
 
-## NACHTRAG N11 (2026-07-09): Entscheidungen aus der Luecken-Klaerung (verbindlich)
-
-Vorbemerkung: Dieser Nachtrag schliesst gezielt alle Stellen, an denen der Plan
-bisher offen war und eine ausfuehrende KI haette raten muessen. Alle Punkte sind
-vom Nutzer bestaetigt und **ueberschreiben** frueher anderslautende Formulierungen
-an den genannten Stellen. Im Zweifel gilt N11. Phasennummerierung nach der aktuellen
-Fassung: Sicherheit = **Phase 8**, Auslieferung/Build = **Phase 9** (die fruehere
-Benachrichtigungs-Phase ist entfallen, siehe N11.1.1).
-
-**Konsolidierungs-Stand (2026-07-13, Plananalyse S3):** Alle von diesem Nachtrag
-(und von N10) ueberschriebenen Stellen im Haupttext sind inzwischen direkt
-korrigiert bzw. ausdruecklich als gestrichen markiert. N10 und N11 dienen seither
-als **Aenderungsprotokoll** (Entscheidung, Datum, Begruendung), nicht mehr als
-vorrangige Korrekturschicht; die Vorrangregel oben bleibt nur als Sicherheitsnetz
-fuer uebersehene Reste. Neue Entscheidungen werden nach der Redaktionsregel in der
-Einleitung sofort an Ort und Stelle eingearbeitet und hier nur noch protokolliert.
-
-### N11.1 Ersatzlos gestrichene Features
-
-1. **Benachrichtigungen komplett entfernt** (wie zuvor der Microsoft-Sync). Es gibt
-   keine Benachrichtigungen mehr, weder In-App noch Windows-Toasts: kein `notify.py`,
-   keine Abhaengigkeit `winotify`, kein `on_notification`-Event, keine Glocken-Pille im
-   Header, keine `notify`/`notifyInApp`/`notifyWindows`-Settings. Die eigene Phase dafuer
-   ist entfallen und die Phasen wurden auf 0 bis 9 umnummeriert. In dieser Doku-Fassung
-   bereits vollzogen; einzige verbleibende Konsequenz: die **Header-Mitte bleibt leer**
-   (Brand links, Avatar rechts).
-
-2. **Backups gestrichen.** Kein automatisches Backup, kein Restore, kein Backup-Ordner.
-   Datensicherung laeuft ausschliesslich ueber den manuellen Export (Phase 7).
-   Ueberschreibt: D.3 Punkt "Automatische lokale Backups" und alle "Backup written"-
-   Beispiele. Die `.bak`-Generation aus Gate G16 bleibt, sie ist reine Absturzsicherung
-   beim atomaren Schreiben, **kein** Nutzer-Backup.
-
-3. **Meta-Feld der Aufgabe entfernt.** Eine Aufgabe hat nur noch `text` und `done`.
-   Das Freitext-Feld `meta` (bisher z.B. Buch-Autor) faellt ueberall weg: Anzeige
-   (keine Meta-Zeile mehr), Inline-Edit (nur noch Textfeld), `add_task`/`edit_task`
-   (kein `meta`-Argument/Feld mehr), Export (keine Meta-Klammer). In der DB wird die
-   Spalte nicht mehr verwendet. Ueberschreibt: B.1 (`tasks.meta`), B.2
-   (`add_task(list_id, text, meta?)` wird `add_task(list_id, text)`; `edit_task` nur noch
-   Text), B.4 (Meta-Zeile in `renderMain`/`renderTask`), Phase 6.5 Punkt 1 (Meta-Eingabe),
-   Phase 7 Punkt 1 ("Meta in Klammern"), G20/G21 (Meta-Laenge/Meta-Newline entfallen),
-   N8 "Meta-Feld benennen".
-
-4. **Demo-Seed-Daten entfernt.** Ein frischer Tresor startet **immer leer** (Erststart,
-   nach Reset, nach Killswitch). Es werden keine Beispiel-Listen mehr eingespielt; nur
-   die Default-Settings werden geschrieben. Der leere Zustand bekommt einen freundlichen
-   Empty-State (Hinweis "Create your first list"). Ueberschreibt: Phase 1 Punkt 4,
-   `seed_if_empty`-Demoinhalt, ANHANG 1.
-
-5. **JSON-Export entfernt.** Es gibt nur noch `txt` und `md`. Ueberschreibt: B.2
-   (`export_list(id, format)` Enum wird `'md'|'txt'`), Phase 7 Punkt 1.
-
-6. **Faelligkeiten und Erinnerungen ersatzlos gestrichen (Entscheid 2026-07-13, W15).**
-   Eine Aufgabe hat **kein** Faelligkeitsdatum, kein Start-/Enddatum, keine Uhrzeit,
-   keine Wiederholung, keine Erinnerung, keine Schlummerfunktion und keine
-   "heute/ueberfaellig"-Sicht. Das frueher vorhandene Feld `due_at` ist aus Schema und
-   Bridge entfernt und wird **nicht** wieder eingefuehrt. Eine Aufgabe ist genau `text`
-   + `done` (siehe Punkt 3).
-   - **Nicht gebaut werden:** DB-Spalte `due_at` (oder aehnlich benannt), ein
-     Datums-Argument in `add_task`/`edit_task`, ein Datumspicker oder Datums-Chip in der
-     Aufgabenzeile bzw. im Inline-Edit, Sortierung/Filter/Gruppierung nach Datum, eine
-     Faelligkeits-Spalte im Export, ein Hintergrund-Timer, der Termine prueft.
-   - **Warum:** Faelligkeiten sind ohne Benachrichtigungen (Punkt 1: ersatzlos gestrichen)
-     weitgehend zahnlos, und Benachrichtigungen kommen nicht zurueck. Die App ist eine
-     ruhige, lokale Liste, kein Terminplaner.
-   - **Ueberschreibt ausdruecklich das UX-Audit:** Dort stehen Faelligkeiten als
-     "Produktluecke Nummer 1". Dieser Punkt hat Vorrang. Wer das Audit abarbeitet,
-     ueberspringt diesen Befund und baut `due_at` **nicht** ein. Kein Spekulationsraum:
-     im Kern-Scope gibt es keine Termine.
-   - **Spaeter denkbar, aber nicht jetzt:** als reine Roadmap-Idee in D.3 notiert
-     (Anzeige-only, ohne Erinnerungen). Roadmap heisst: nicht Teil des Bauplans, kein
-     Schema-Platzhalter, keine Vorbereitung im Code. Erst wenn es einen neuen,
-     ausdruecklichen Entscheid gibt.
-
-### N11.2 Phase 7: Export, Undo, Verschiebe-Features
-
-- **Zweistufiger Export.** Der Rail-Button "Export" (bzw. `Ctrl+E`) speichert **nicht**
-  direkt, sondern oeffnet zuerst eine kleine Pille an der **linken Seite der rechten
-  Rail**. **Schritt 1: Umfang** ("nur aktuelle Liste" oder "alle Listen mit allen
-  Aufgaben"). **Schritt 2: Format** (`md` oder `txt`). Danach der Save-Dialog.
-- **md-Formatierung bei "alle Listen".** Sauber strukturiert: Listennamen als groessere
-  Ueberschrift (z.B. `#`), die einzelnen Aufgaben darunter kleiner (`- [ ]`/`- [x]`).
-  Bei "nur aktuelle Liste" wie bisher.
-- **Undo nur beim Listen-Loeschen** (Toast "List deleted" mit "Undo", ca. 6 s). Einzelne
-  Aufgaben werden weiterhin sofort und ohne Undo geloescht. "Clear completed" wird
-  **nicht** gebaut. **Die verbindliche Architektur (RAM-Puffer, kein Soft-Delete, genau
-  eine Loeschung, Wiederherstellung an alter Position, Verfall beim Sperren/Beenden) steht
-  in N11.2.1.**
-- **N7-Features hier mitbauen:** `move_task(id, target_list_id)` (Drag auf einen
-  Sidebar-Eintrag plus "Move to..."-Kontextmenue) und `reorder_lists(ordered_ids)`
-  (Drag and Drop in der Sidebar). Validierung wie `add_task` (G20). Volltextsuche und
-  "Clear completed" entfallen.
-
-#### N11.2.2 Randfaelle von `reorder`/`reorder_lists`/`move_task` (U11-Entscheid 2026-07-15) [Sec]
-
-*Loest U11 der Plananalyse: Es war offen, was bei unvollstaendigen `ordered_ids`, fremden
-IDs oder Duplikaten passiert, wie die `position` vergeben wird und ob eine verschobene
-erledigte Aufgabe ihren `done`-Status behaelt. Im Zweifel gilt "alles oder nichts" und die
-konsistente Neunummerierung; die Validierung faellt unter G20.*
-
-- **`reorder(list_id, ordered_ids)`:** `ordered_ids` muss **exakt** die Menge **aller**
-  Aufgaben-IDs dieser Liste sein, offene **und** erledigte zusammen (die Sektionstrennung
-  macht das Frontend beim Rendern anhand von `done`, nicht die Reihenfolge). Als Menge
-  gleich: keine fehlende, keine doppelte, keine fremde oder listenfremde ID, ein echtes
-  Array von Strings. **Jede** Abweichung -> `{"error":"invalid"}`, und es wird **nichts**
-  geschrieben (kein Teil-Reorder, keine "besten Bemuehungen"). Bei gueltiger Eingabe
-  vergibt das Backend `position` **neu als 0..n-1** in der uebergebenen Reihenfolge.
-- **`reorder_lists(ordered_ids)`:** dieselbe Regel auf die Listenmenge angewandt: exakt
-  alle Listen-IDs, sonst `invalid`; Neunummerierung 0..n-1.
-- **`move_task(id, target_list_id)`:** beide IDs werden geprueft. Fehlt die Aufgabe oder
-  die Zielliste -> `not_found`; ist `target_list_id` die aktuelle Liste der Aufgabe (oder
-  kein String) -> `invalid`. Die Aufgabe **behaelt ihren `done`-Status** und wird **ans
-  Ende ihrer Sektion in der Zielliste** gehaengt: sie bekommt die hoechste `position` der
-  Zielliste, und weil das Frontend je Sektion nach `position` sortiert, landet eine
-  erledigte am Ende der Erledigt-, eine offene am Ende der offenen Aufgaben. Danach werden
-  **Quell- und Zielliste** konsistent 0..n-1 durchnummeriert.
-- Alle drei sind rein lokal, loesen keine weitere Aktion aus und werden gegen
-  Nicht-Array-/Nicht-String-Eingaben gehaertet (G20).
-
-#### N11.2.1 Undo beim Listen-Loeschen: die verbindliche Architektur (U9-Entscheid 2026-07-13)
-
-**Die Ratestelle:** Der fruehere Plantext bot zwei Architekturen mit "oder" an ("im RAM des
-Backends **oder** als `deleted_at`-Soft-Delete"). Das war eine echte Ratestelle, dazu vier
-offene Detailfragen (wie viele Loeschungen gehalten, Wiederherstellung an welcher Position,
-wem gehoert der 6-s-Timer, was passiert beim Sperren/Beenden).
-
-**Entscheidung (verbindlich, Security first):**
-
-- **Genau RAM, kein Soft-Delete.** Die "oder Soft-Delete"-Variante ist **gestrichen**. B.1
-  bekommt **kein** `deleted_at`-Feld: ein solches Feld waere ein Schema-Eingriff, der **jede**
-  Abfrage in `db.py` mit einem `WHERE deleted_at IS NULL` belasten wuerde (eine vergessene
-  Stelle zeigt geloeschte Daten wieder an), und es wuerde geloeschten Aufgabentext dauerhaft im
-  Tresor liegen lassen, obwohl der Nutzer ihn geloescht hat. Der RAM-Puffer haelt geloeschte
-  Daten nur, solange die Sitzung entsperrt laeuft, genau wie alle anderen Aufgabendaten auch.
-- **Genau eine Loeschung.** Das Backend haelt **die letzte** geloeschte Liste samt allen ihren
-  Aufgaben (mit deren Text, `done`-Status und `position`) in **einem** In-RAM-Puffer. Kein
-  Stapel, keine Historie. Eine neue Loeschung **ueberschreibt** den Puffer und verwirft die
-  vorher gepufferte Liste endgueltig.
-- **Wiederherstellung an der alten Stelle.** `undo_delete_list(id)` fuegt die Liste an ihrer
-  gemerkten `position` wieder ein (nachfolgende Listen ruecken zurueck) und stellt die Aufgaben
-  mit ihren alten Positionen wieder her. Die IDs bleiben dieselben. Stimmt `id` **nicht** mit
-  der aktuell gepufferten Liste ueberein (der Puffer wurde inzwischen durch eine neue Loeschung
-  ersetzt oder ist verfallen), liefert die Methode `not_found`, und das Frontend laedt still
-  per `get_state()` neu; sie legt **nie** eine zweite Kopie an.
-- **Der Timer gehoert der UI, nicht dem Puffer.** Der 6-s-Toast "List deleted" mit "Undo" ist
-  **reine Frontend-Anzeige**. Der Backend-Puffer hat **keinen** eigenen Verfalls-Timer: er lebt,
-  bis er ueberschrieben (naechste Loeschung) oder verworfen wird (siehe naechster Punkt). Ein
-  **spaetes Undo** nach dem Verschwinden des Toasts darf deshalb gelingen, solange der Puffer
-  noch lebt; das ist gewollt und kein Fehler.
-- **Verfall beim Sperren/Beenden (sicherheitsrelevant).** Der Puffer ist fluechtiger
-  Sitzungs-RAM und wird bei **jedem** Austritt aus dem entsperrten Zustand verworfen: Lock,
-  Auto-Lock, Panik, Killswitch, Reset, Quit und App-Ende. Umgesetzt in der einen
-  `teardown(reason)`-Sequenz (N11.11.2, Schritt 7, zusammen mit dem Schluessel-Nullen), damit
-  eine **gesperrte** App **nie** geloeschten Aufgabentext im RAM haelt. Ein Undo im gesperrten
-  Zustand gibt es nicht: `undo_delete_list` steht **nicht** in der G13-Allowlist und liefert
-  gesperrt `locked`.
-
-### N11.3 Phase 8: Ersteinrichtung, Passphrase, Reset
-
-- **Keine Bestandsdaten-Uebernahme.** Beim Umstieg auf die echte Verschluesselung wird
-  die alte Dev-DB verworfen; der neue Tresor startet leer. Keine Migration.
-  **Wie** verworfen wird, regelt seit dem A3-Entscheid (2026-07-15) Gate G33 (normative
-  Zeile in B.9): `tasks.db` samt `-journal`/`-wal`/`-shm` wird beim ersten
-  `create_vault()` ueber den Secure-Delete-Pfad entsorgt (bestmoeglich ueberschreiben,
-  dann entlinken; derselbe Pfad wie beim `.bak`-Wegraeumen unter (c) unten), nie per
-  blankem `os.remove`; dazu ein Einmal-Hinweis an den Nutzer mit der ehrlichen
-  SSD-Restgrenze (Wear-Leveling; wer Dev-Reste ausschliessen muss, braucht ein
-  vollverschluesseltes System, G31/B.10.4).
-- **Tresor-Ort beim ersten Start waehlbar.** Der Nutzer legt den Speicherort von
-  `tasks.db.enc` bei der Einrichtung fest. Der Pfad kann nicht im Tresor stehen
-  (Henne-Ei-Problem), daher liegt er in einer kleinen **unverschluesselten Konfig**
-  (z.B. `%LOCALAPPDATA%\NoaToDo\config.json`), die nur diesen Pfad und nicht-geheime
-  Startinfos enthaelt, nie Aufgabendaten.
-- **Passphrase-Regel: ausschliesslich Mindestlaenge 12 Zeichen. Sonst nichts.** Die
-  einzige Pruefung beim Einrichten und beim Passphrase-Wechsel ist
-  `len(passphrase) >= 12`. Ausdruecklich **nicht** gebaut werden:
-  - kein Staerkemesser und keine Staerke-Anzeige (auch keine rein informative Balken-
-    oder Ampel-Anzeige, auch nicht "nur als Hinweis"),
-  - keine Zeichenklassen-Regeln (keine Pflicht zu Gross-/Kleinbuchstaben, Ziffern,
-    Sonderzeichen),
-  - keine Woerterbuch-, Blacklist- oder zxcvbn-artige Pruefung,
-  - keine Obergrenze ausser einer technischen Laengenschranke.
-
-  Gate G8 bleibt fuer die **Argon2id-Kosten** gueltig; die dort urspruenglich genannte
-  "erzwungene Passphrase-Staerke (Staerke-Anzeige beim Einrichten)" ist hiermit
-  **gestrichen**, nicht nur konkretisiert. Wer die Gate-Liste als Checkliste abarbeitet:
-  G8 ist erfuellt, sobald die Argon2id-Parameter stimmen und die Laengenpruefung
-  greift. Ein Staerkemesser waere ein Regelverstoss, kein Bonus.
-
-  **Ehrliche Konsequenz (bewusst akzeptiert):** `aaaaaaaaaaaa` ist eine gueltige
-  Passphrase. Waehlt der Nutzer so etwas, verteidigen nur noch die hohen
-  Argon2id-Kosten (jeder Rateversuch kostet Speicher und Zeit) und der DPAPI-Pepper
-  (ohne das Windows-Konto ist die gestohlene Datei auch mit korrekt geratener
-  Passphrase nicht zu oeffnen). Das ist eine bewusste Komfort-Entscheidung des
-  Nutzers gegen Gaengelung, kein uebersehener Mangel. Die deutliche Verlust-Warnung
-  unten bleibt der einzige erzieherische Text im Flow.
-- **Deutliche Verlust-Warnung bei der Einrichtung.** Klarer Hinweis, dass eine
-  vergessene Passphrase **nicht** wiederherstellbar ist und der einzige Ausweg der
-  Reset (mit Datenverlust) ist; der Nutzer muss das aktiv bestaetigen.
-- **Kein Pepper-Recovery-Export.** Ueberschreibt Gate G18: Der DPAPI-Pepper bleibt als
-  Zweitfaktor (Schutz der gestohlenen Datei), aber es gibt **keinen** Recovery-Export.
-  Bewusst akzeptierte Folge: Der Tresor ist an diesen Windows-PC/dieses Konto gebunden;
-  ohne dieses Konto ist er auch mit korrekter Passphrase nicht mehr zu oeffnen. Der
-  Einrichtungs-Flow enthaelt also **keinen** Recovery-Schritt mehr.
-- **Passphrase vergessen: Reset-Weg.** Kein Recovery, aber ein Reset auf dem Lock-Screen
-  loescht den Tresor unwiderruflich und startet neu. Ablauf: erst der **gleiche
-  zweistufige, bewusst umstaendliche Bestaetigungs-Mechanismus wie der Panik-Killswitch**
-  (Kippschalter, "OK"), danach muss der Nutzer das Wort **"RESET"** abtippen. Danach
-  verhaelt sich die App wie ein echter Erststart: **Speicherort neu abfragen UND neue
-  Passphrase** festlegen.
-- **Passphrase aenderbar** in den Einstellungen (alte Passphrase eingeben, neue mit
-  min. 12 Zeichen setzen; nur im entsperrten Zustand, ueber `change_passphrase(old, new)`,
-  N11.12). Der Tresor wird mit dem neuen Schluessel neu verpackt, verbindlich mit
-  diesen vier Details (Entscheid 2026-07-13, loest Plananalyse U8):
-  - **(a) Frisches Salt, frische Nonce (Pflicht).** Der Wechsel erzeugt ein neues,
-    zufaelliges Argon2-Salt; die frische Nonce liefert ohnehin jedes Verschluesseln
-    (G16). Vom alten Schluesselmaterial wird nichts weiterverwendet.
-  - **(b) Der DPAPI-Pepper bleibt.** Er ist konto-gebunden, nicht passphrase-gebunden
-    (G18), und wird beim Wechsel **nicht** rotiert. Einen neuen Pepper gibt es nur
-    ueber Reset bzw. Tresor-Neuanlage.
-  - **(c) Die `.bak`-Generation wird sofort mitgezogen (sicherheitsrelevant).** Die
-    G16-Rotation wuerde beim Neuverpacken ausgerechnet den **alten** Stand (mit der
-    alten Passphrase lesbar) als `tasks.db.enc.bak` liegen lassen. Deshalb: im selben
-    Zug wie das neue `tasks.db.enc` wird die `.bak`-Generation mit dem **neuen**
-    Schluessel neu geschrieben (bevorzugt, so bleibt die G16-Absturzsicherung erhalten)
-    oder, falls nicht neu geschrieben, geloescht; nach Abschluss des Wechsels darf keine
-    Datei mehr existieren, die mit der alten Passphrase entschluesselbar ist. Wer
-    wegen einer kompromittierten Passphrase wechselt, waere sonst genau ueber `.bak`
-    weiter angreifbar. **Das Wegraeumen des alten Stands laeuft ueber denselben
-    Secure-Delete-Pfad wie der uebrige Tresor-Abbau (ueberschreiben, dann entlinken),
-    nicht ueber ein blankes `os.remove`**, sonst blieben die alt-lesbaren Chiffrat-Bytes
-    in freigegebenen Sektoren rekonstruierbar. Ehrliche Restgrenze (gehoert ins
-    Bedrohungsmodell): auf SSDs mit Wear-Leveling ist auch das Ueberschreiben nicht
-    garantiert; die letzte Deckung des rekonstruierten `.bak` bleibt dann der
-    DPAPI-Pepper (ohne das Windows-Konto ist auch der alte Stand nicht zu oeffnen).
-    Pruefweg: fester Phase-9-Testfall (siehe Phase 9, Krypto-Tests).
-  - **(d) KDF-Upgrade-Pfad.** Beim Wechsel werden die Argon2id-Parameter auf den
-    aktuellen Soll-Stand aus G8 gehoben (im `.enc`-Header koennen aeltere Werte
-    stehen). Der Passphrase-Wechsel ist damit zugleich der definierte Weg, veraltete
-    KDF-Kosten anzuheben; einen separaten Migrationsmechanismus gibt es nicht.
-
-### N11.4 Phase 8: Auto-Sperre und Entsperr-Rate-Limit
-
-- **Auto-Sperre nach Inaktivitaet: einstellbar, Default 15 min.** Presets in den
-  Einstellungen (z.B. 1/5/15/30/60 min) plus "nie" zum Abschalten. Konkretisiert B.8.
-- **Rate-Limit bei falscher Passphrase (konkret):**
-  - Nach **jedem** Fehlversuch 2 s Zwangspause bis zum naechsten Versuch.
-  - **3 freie Versuche**, dann greift die Eskalations-Leiter.
-  - **Leiter:** 10 s, 30 s, 1 min, 5 min, 15 min, 30 min, 1 h, 5 h, 10 h (danach bleibt
-    es bei 10 h).
-  - **Jede Stufe erlaubt 2 Fehlversuche**, bevor auf die naechste (laengere) Stufe
-    hochgeschaltet wird.
-  - Gilt zusaetzlich zur ohnehin langsamen Argon2id-Ableitung (G8). Anzeige gemaess N4
-    ("try again in ...").
-
-#### N11.4.1 Der Rate-Limit-Zustand wird persistiert (2026-07-13, U6-Entscheid) [Sec]
-
-*Loest U6 der Plananalyse: Die Leiter lag bisher nur im RAM. Der Lock-Screen hat einen
-prominenten Off-Knopf, also braucht ein Rater genau zwei Klicks (beenden, neu starten),
-um jede Sperrzeit zu loeschen; die Leiter war damit wirkungslos. Zugleich ist die Wanduhr
-manipulierbar (Systemzeit vorstellen) und die monotone Uhr ueberlebt keinen Neustart.*
-
-- **Persistiert wird `{fails, stage, next_try_at, locked_at, duration}`** in `config.json`
-  (unverschluesselt, ausserhalb des Tresors, denn er ist beim Entsperren ja gerade zu;
-  das exakte Gesamt-Schema der Datei steht in N11.15.1, Befund U2 erledigt). Der Zustand
-  ueberlebt Beenden und Neustart: Wer im 30-min-Riegel steckt und die App neu startet,
-  steckt weiter im 30-min-Riegel. Die App enthaelt **keinen** Weg, den Zustand aus der
-  UI zu loeschen.
-- **Zurueckgesetzt wird nur durch Erfolg:** Ein erfolgreiches `unlock()` setzt
-  `fails = 0`, `stage = 0` und loescht `next_try_at`. Auch der `reset_vault()`-Weg
-  raeumt ihn auf (er loescht ohnehin alles, N11.11 Schritt 8).
-- **Uhrbasis, zwei Uhren, bewusst getrennt:**
-  - **Innerhalb einer Sitzung** zaehlt die **monotone** Uhr (`time.monotonic()`); sie ist
-    gegen jedes Verstellen der Systemzeit immun.
-  - **Ueber einen Neustart hinweg** gibt es nur die Wanduhr: `next_try_at` und
-    `locked_at` werden als UTC-Zeitstempel geschrieben, dazu die `duration` der laufenden
-    Stufe.
-  - **Rueckwaerts-Sprung-Regel:** Ist beim Start `jetzt < locked_at` (die Systemuhr wurde
-    zurueckgestellt) oder fehlen/widersprechen sich die Werte, wird die laufende Sperrzeit
-    **komplett neu gestartet** (`locked_at = jetzt`, `next_try_at = jetzt + duration`),
-    nicht etwa verkuerzt. Im Zweifel immer zugunsten der Sperre. Ein Vorwaerts-Sprung
-    (Uhr vorstellen) laesst die Sperre ablaufen; das ist hingenommen, siehe die
-    Ehrlichkeits-Notiz unten.
-  - Fehlt oder ist `config.json` unlesbar, gilt der Zustand als "voll gesperrt auf der
-    zuletzt bekannten Stufe" nur, wenn die Datei existiert und kaputt ist; fehlt sie ganz
-    (frischer Rechner), ist das ein Erststart und es gibt nichts zu bremsen (die genaue
-    Fehlerbehandlung der Datei steht in N11.15.2: kaputte Datei nach `config.json.bad`,
-    Fehlerbildschirm, danach frische, leere Leiter).
-- **Reihenfolge: erst zaehlen und schreiben, dann pruefen (pro Sicherheit).** Ein
-  Fehlversuch wird gezaehlt (`fails += 1`, Stufe/`duration`/`next_try_at`/`locked_at` neu)
-  und `config.json` wird **synchron und atomar (N11.15.1) geschrieben, BEVOR** die teure
-  Argon2id-Ableitung und die AEAD-Pruefung ueberhaupt starten und **bevor** irgendeine
-  Antwort ans Frontend geht. Sonst gaebe es denselben billigen Ausweg wie ueber den
-  Off-Knopf: Versuch schicken, den Prozess toeten, solange die Pruefung noch laeuft, und der
-  Fehlschlag landet nie auf Platte. Nur ein **erfolgreiches** `unlock()` setzt anschliessend
-  zurueck; jeder andere Ausgang (falsch, Absturz, Kill, Stromausfall) laesst den bereits
-  erhoehten Stand stehen.
-- **Eine deterministische Stufenfunktion, ein Codepfad.** Aus `fails` allein ergeben sich
-  Stufe, `duration` und `next_try_at` durch **eine** reine Funktion, die im laufenden Betrieb
-  und beim Start (aus dem persistierten `fails`) identisch rechnet, damit kein Pfad die Leiter
-  anders auslegt: die ersten 3 Fehlversuche sind frei (nur die 2-s-Pause aus N11.4), ab dem 4.
-  greift die Leiter, und **je 2 weitere Fehlversuche** schalten eine Stufe hoch (Fehlversuch
-  4-5 -> 10 s, 6-7 -> 30 s, 8-9 -> 1 min, ... bis 10 h, dann Deckel). `stage` ist damit nur
-  eine redundante, bequeme Spiegelung von `fails`; widersprechen sich beide in einer geladenen
-  Datei, gilt der **hoehere** Wert (im Zweifel zugunsten der Sperre).
-- **Innerhalb der Sitzung die laengere Restzeit (pro Sicherheit).** Solange die App laeuft,
-  existieren beide Uhren; die noch zu wartende Sperrzeit ist `max(monoton abgeleitet, aus der
-  Wanduhr abgeleitet)`, nie die kuerzere. So verkuerzt weder ein Vorstellen der Systemuhr noch
-  ein Eingriff an der monotonen Uhr die Wartezeit. (Der reine Neustart-Fall, in dem nur die
-  Wanduhr vorliegt, bleibt wie oben geregelt: Rueckwaerts-Sprung -> Sperre komplett neu.)
-- **Ehrliche Einordnung (gehoert ins Bedrohungsmodell, K3):** Die Leiter bremst den
-  **beilaeufigen Rater am Geraet** (Mitbewohner, Kollege, die zehn Minuten Zeit haben).
-  Sie ist **kein** Schutz gegen den ernsthaften Angreifer: Der kopiert `tasks.db.enc` und
-  raet **offline**, wo weder Leiter noch Auto-Sperre existieren. Dagegen stehen
-  ausschliesslich die Argon2id-Kosten (G8) und der DPAPI-Pepper (G18). Ebenso ehrlich:
-  Wer Dateizugriff hat, kann `config.json` loeschen und die Leiter zuruecksetzen, aber
-  genau dieser Angreifer kopiert lieber gleich den Tresor und raet offline. Die Leiter
-  wird deshalb nie als Schutz gegen K1 **verkauft**.
-
-#### N11.4.2 Was "Inaktivitaet" der Auto-Sperre heisst (2026-07-15, U4-Entscheid) [Sec]
-
-*Loest U4 der Plananalyse: "Inaktivitaet" war undefiniert. Nur Bridge-Aufrufe zu zaehlen
-waere falsch (15 Minuten eine Liste **lesen** ohne Klick spraeche die Sperre mitten im
-Gebrauch aus); die globale System-Idle-Zeit (GetLastInputInfo) waere das andere Extrem
-(die App sperrte nie, solange irgendwo auf dem PC getippt wird, auch wenn NoaToDo
-stundenlang unberuehrt offen liegt: genau das Szenario, das N11.8.4 absichern will). Im
-Zweifel gilt hier durchweg die sicherere Richtung.*
-
-- **Aktivitaet = Eingabe-Ereignisse im DOM des App-Fensters:** Maus-Bewegung/Klick,
-  Tastatur, Wheel/Scroll, Touch. **Nicht** die globale System-Idle-Zeit, **nicht** allein
-  Bridge-Aufrufe. Ein Fenster ohne Fokus bekommt keine solchen Ereignisse, also haelt ein
-  im Hintergrund liegendes NoaToDo sich **nicht** selbst wach.
-- **Meldung gedrosselt ueber `activity_ping()`.** Das Frontend meldet Aktivitaet mit einer
-  fuehrenden Flanke (das erste Ereignis feuert sofort), danach **hoechstens alle 30 s** ein
-  weiterer Ping. Die Drosselung meldet nur *unter*, verschiebt die Sperre also nie nach
-  hinten, hoechstens (um bis zu die Drossel-Spanne) nach **vorn**. Das ist die gewollte
-  Richtung; der kuerzeste Preset (1 min) sperrt damit im Zweifel etwas frueher, nie
-  spaeter.
-- **Der Backend-Timer ist die alleinige Autoritaet und fail-safe.** Ein Hintergrund-Timer
-  (monotone Uhr `time.monotonic()`, eigener Thread, N11.8.4) tickt (z.B. jede Sekunde) und
-  ruft bei `now - last_activity > timeout` die gemeinsame `teardown(reason='autolock')`
-  (N11.11). `activity_ping()` setzt **nur** `last_activity` auf die **Backend**-Uhr; es
-  nimmt **keinen** Zeitwert vom Frontend entgegen (dessen Uhr ist ungeprueft), kann
-  `last_activity` **nie in die Zukunft** setzen und den Timer **nicht** abschalten.
-  Bleiben die Pings aus, weil das Frontend haengt, abstuerzt oder per XSS stillgelegt
-  wird, sperrt die App. **Das Frontend kann die Sperre nur *aufschieben*, nie
-  *verhindern*.** Genau diese Richtung ist gewollt.
-- **Nur `activity_ping` zaehlt.** **Kein** anderer Bridge-Aufruf setzt den Timer zurueck.
-  Ein Hintergrund-Poll (z.B. `get_wifi_signal()` alle paar Sekunden fuer das Rail-Icon)
-  haelt die App also **nicht** wach; nur echte Nutzer-Eingabe tut das.
-- **Kein Lese-Ausnahme.** 15 Minuten eine Liste lesen ohne jede Eingabe fuehrt zur Sperre.
-  Bewusst so, zugunsten der Sicherheit.
-- **Gesperrt kein Ping.** `activity_ping` steht **nicht** in `ALLOWED_WHEN_LOCKED` (G13):
-  gesperrt liefert es `locked` und ruehrt `last_activity` nicht an. Eine gesperrte App
-  laesst sich so nicht "wachhalten".
-- **Initialisierung.** `last_activity` wird beim Entsperren bzw. Tresor-Oeffnen auf jetzt
-  gesetzt; eine frisch entsperrte, danach unberuehrte App sperrt nach Ablauf des Timeouts.
-- **`autoLock = 0` (nie).** Der Timer ist dann aus; es sperren nur noch Lock-Button /
-  `Ctrl+L`, die Panik und der **Prozess-Neustart** (der immer gesperrt startet, B.8).
-  "Nie" heisst also nicht "nie eine Sperre".
-- **Setting-Aenderung greift live.** Ein kleinerer Timeout wird beim naechsten Tick gegen
-  das bestehende `last_activity` geprueft und kann sofort sperren (sichere Richtung).
-- **Offener nativer Dialog ist keine Aktivitaet (Verweis N11.11.5, Punkt 6).** Der Timer
-  laeuft weiter, die Ping-Schleife ruht solange; feuert die Sperre bei offenem Dialog,
-  gilt die aufgeteilte Sequenz aus N11.11.5.
-- **Ehrliche Einordnung.** `activity_ping` ist **keine** Sicherheitsgrenze gegen ein
-  *kompromittiertes* Frontend (XSS = RCE per Sicherheitsmodell; dann hat der Angreifer
-  ohnehin `pywebview.api.*`-Vollzugriff). Die Sperr-Garantie kommt allein aus dem
-  autoritativen, fail-safe Backend-Timer; der Ping regelt nur die **Bequemlichkeit**
-  (nicht mitten im aktiven Gebrauch sperren).
-
-#### N11.4.3 Konkrete Argon2id-Parameter und der MemoryError-Randfall (2026-07-15, U17-Entscheid) [Sec]
-
-*Loest U17. G8 nannte bisher nur Spannen ("Memory >= 256 bis 512 MB, time_cost >= 3,
-parallelism passend"); in den G16-Header muessen aber feste Zahlen, sonst raet die
-umsetzende Seite. Zusaetzlich kann eine zu grosse Speicher-Allokation auf einer
-RAM-knappen Maschine scheitern, und weil der Tresor per Pepper genau an diesen PC
-gebunden ist (G18), waere er dort dann nicht zu oeffnen; ein `MemoryError` mitten im
-Entsperren darf weder als "falsche Passphrase" erscheinen noch die App abstuerzen
-lassen. Im Zweifel pro Sicherheit, wobei **Verfuegbarkeit** (kein dauerhafter
-Selbst-Aussperr, kein Datenverlust) hier ausdruecklich als Sicherheitsziel zaehlt.*
-
-- **Fest verdrahtete Soll-Parameter (der einzige Wahrheitswert; G8 wird damit konkret):**
-  - Typ **Argon2id**, Version **0x13** (Argon2 v1.3),
-  - `memory_cost = 262144` KiB (**256 MiB**),
-  - `time_cost = 3`,
-  - `parallelism = 4`,
-  - `hash_len = 32` (das eine Master-Secret; die Aufteilung in `aes_key`/`chacha_key`
-    macht danach HKDF, G15),
-  - `salt = 16` Byte, pro Tresor zufaellig, im Header (G16).
-
-  **Warum 256 MiB und nicht 512:** Der Tresor ist per DPAPI-Pepper an dieses
-  Windows-Konto gebunden (G18); ein Angreifer ohne das Konto kann die gestohlene Datei
-  gar nicht offline angreifen, gegen ihn wirkt der Pepper, nicht die Argon2-Speichermenge.
-  Der Zugewinn von 512 gegenueber 256 MiB (Faktor 2 an Offline-Kosten) ist damit gering,
-  das Aussperr-Risiko aus genau diesem Befund dagegen real. 256 MiB liegt weit ueber den
-  OWASP-Mindestwerten, allokiert auf jeder modernen Windows-Maschine zuverlaessig und wird
-  nur **einmal** gebraucht (beide Schluessel stammen aus demselben Argon2-Durchlauf).
-  Verfuegbarkeit zaehlt hier als Sicherheitsziel: ein dauerhaft nicht mehr zu oeffnender
-  Tresor ist ein Datenverlust, kein Schutz.
-
-- **Die Parameter stehen im `.enc`-Header (G16) und werden authentifiziert (V1).** Der
-  Header (Magic, Version, Typ, `memory_cost`, `time_cost`, `parallelism`, `hash_len`,
-  Salt, Nonce) geht als `associated_data` in ChaCha20-Poly1305 ein; eine nachtraegliche
-  Manipulation der Parameter macht die Entschluesselung zum sauberen AEAD-Fehler. Der
-  Header ist bauartbedingt nicht geheim (er enthaelt nie Schluesselmaterial).
-
-- **Akzeptanzbereich gegen einen aufgeblaehten Header (DoS-Schutz, pro Sicherheit).** Die
-  KDF-Parameter werden **vor** der Allokation gegen einen festen Bereich geprueft:
-  `memory_cost` in **64 MiB bis 512 MiB**, `time_cost` **1 bis 10**, `parallelism`
-  **1 bis 16**, `hash_len == 32`, Version `0x13`, Typ Argon2id. Liegt ein Wert
-  ausserhalb, gilt der Kopf als **unlesbar** im Sinne von N6 Schritt 2: Rueckgabe `vault`
-  (Fehlerbildschirm), **kein** Argon2-Lauf, **kein** Rateversuch. Ohne diese Klammer
-  koennte ein manipulierter Header (z.B. `memory_cost = 16 GiB`) beim naechsten Entsperren
-  eine garantierte Speicher-Erschoepfung erzwingen; die AEAD-Pruefung liefe erst **nach**
-  Argon2 und kaeme zu spaet. Die Obergrenze 512 MiB ist zugleich die Kappe fuer den
-  Schaden eines solchen Versuchs und wird nur zusammen mit dem Default angehoben. (Ein
-  nach unten manipulierter Header liefe ohnehin in den AEAD-Fehler, weil ein anderer
-  Schluessel entstuende; die Untergrenze ist Guertel-und-Hosentraeger und faengt
-  zusaetzlich Korruption ab.)
-
-- **`MemoryError` im Normalfall (korrekte Parameter, Maschine momentan zu knapp) ist ein
-  eigener Zustand, nie "falsche Passphrase".** Die Argon2-Ableitung in `unlock()`,
-  `create_vault()` und `change_passphrase()` wird in `try/except` gegen `MemoryError` (und
-  die entsprechende Allokations-Ausnahme von `argon2-cffi`) gekapselt, **vor** der
-  generischen `internal`-Auffanglinie des `@bridge`-Decorators. Bei Ausloesung:
-  - **kein Absturz** der App; die laufende Sitzung bleibt intakt (bei `unlock` bleibt die
-    App gesperrt, bei `change_passphrase` unveraendert entsperrt, bei `create_vault` im
-    Onboarding-Schritt);
-  - Rueckgabe des **neuen Fehlercodes `memory`** (B.2), nicht `passphrase`, nicht
-    `internal`, nicht `vault`;
-  - **die Rate-Limit-Leiter (N11.4) wird nicht vorangetrieben**: ein Speicher-Engpass ist
-    kein Rateversuch, sonst sperrte sich der rechtmaessige Nutzer unter Speicherdruck
-    selbst in die Eskalations-Leiter (wieder ein Verfuegbarkeits-Schaden);
-  - kein Schluesselmaterial und keine Tresor-Datei werden angefasst; eine etwaige
-    Teil-Allokation wird freigegeben.
-
-- **Frontend-Verhalten von `memory`:** inline im jeweiligen Auth-Screen (Lock-Screen bzw.
-  Onboarding-/Passphrase-aendern-Dialog), Text "Not enough memory. Close other apps and
-  try again.", mit Wiederholen-Moeglichkeit; **kein** Shake (es ist keine falsche
-  Passphrase), **kein** Reset-Angebot (der Tresor ist intakt, ein Reset waere hier ein
-  grundloser Datenverlust), **kein** Countdown. Nach dem Freigeben von Speicher fuehrt
-  derselbe Versuch normal zum Ziel.
-
-- **Anhebung nur ueber den Passphrase-Wechsel (N11.3 (d)).** Aeltere, niedrigere
-  Header-Werte werden nicht automatisch migriert; der KDF-Upgrade-Pfad aus N11.3 (d) hebt
-  sie beim naechsten Passphrase-Wechsel auf den dann geltenden Soll-Stand. Wird der Default
-  je erhoeht, wandert die Akzeptanz-Obergrenze im selben Build mit.
-
-### N11.5 Echter Flugmodus statt Deko-Schalter
-
-- Der Online/Offline-Schalter (Flugzeug/Globus, `set_online`, Taste `G`) **bleibt** und
-  wird **funktional:** offline schalten heisst, den **echten Windows-Flugmodus**
-  einzuschalten, also **alle Funkgeraete** (WLAN, Bluetooth, was vorhanden ist)
-  auszuschalten; online schalten aktiviert sie wieder. Umsetzung ueber die
-  Windows-Radio-APIs (WinRT `Windows.Devices.Radios` bzw. Radio-Management), eine
-  einmalige Nutzerzustimmung ist akzeptabel. `get_wifi_signal()` bleibt und zeigt real
-  den Zustand. Ueberschreibt B.2/B.4 ("rein lokaler Schalter, kein Netzwerkverkehr").
-- **Technische Basis, verbindlich (U14-Entscheid, 2026-07-15).**
-  - **"Flugmodus einschalten" heisst technisch "alle Radios aus".** Der System-Flugmodus
-    als *ein* Flag ist ueber keine oeffentliche API schaltbar; schaltbar sind nur die
-    einzelnen Funkgeraete. Umsetzung ist daher **Radio-Enumeration + `SetStateAsync` je
-    Radio**, nicht das Setzen eines Flugmodus-Flags. Der Wortlaut "Windows-Flugmodus"
-    oben ist als genau das zu lesen (Windows blendet das Flugzeug-Symbol ohnehin erst
-    ein, wenn wirklich alle Radios aus sind). Konkret: `Radio.GetRadiosAsync()`
-    aufzaehlen, nach `RadioKind` filtern (`WiFi`, `Bluetooth`, `MobileBroadband`; `Other`
-    und GPS/`FM` werden nicht angefasst), je Treffer `SetStateAsync(RadioState.Off)` bzw.
-    `.On`, danach `.State` je Radio zurueckgelesen (verifizierte Realitaet, siehe
-    U15-`{online, partial}`-Vertrag oben).
-  - **Neue Abhaengigkeit, benannt und gepinnt (G11-relevant).** Python braucht ein
-    WinRT-Projektionspaket; heute fehlt das in Phase 0 / `requirements` / G11. Gewaehlt
-    werden die **modularen PyWinRT-Pakete** (kleinere Abhaengigkeitsflaeche als das
-    Sammelpaket `winsdk`, im Zweifel pro Sicherheit die schmalere Wahl):
-    `winrt-runtime`, `winrt-Windows.Devices.Radios`, `winrt-Windows.Devices.Enumeration`
-    sowie `winrt-Windows.Foundation` (fuer die `IAsyncOperation`-Awaits). Alle werden in
-    `requirements.txt` **und** exakt versionsgepinnt in `requirements.lock.txt`
-    aufgenommen und fallen unter die Pinning-/Supply-Chain-Pruefung aus **G11**.
-    `winsdk` bleibt nur die dokumentierte Rueckfalloption, falls die modularen Pakete auf
-    der Zielplattform nicht sauber installieren.
-  - **Verweigerter Zugriff degradiert sichtbar statt still zu scheitern.** Vor dem ersten
-    Schalten wird `Radio.RequestAccessAsync()` einmalig ausgewertet. Ist das Ergebnis
-    **nicht** `Allowed` (also `DeniedByUser`, `DeniedBySystem` oder `Unspecified`), wird
-    **kein** Radio angefasst: der Schalter geht in einen sichtbar degradierten Zustand
-    (Tooltip **"no radio access"**, statischer englischer Text nach G29), der reale
-    Funk-Zustand bleibt **unveraendert** und die Pille zeigt weiter den tatsaechlichen
-    Zustand. `set_online` liefert in diesem Fall `{ online:<real>, partial:true }` und
-    aendert nichts. Ein blosses stilles Fehlschlagen (die App "schaltet offline", ohne
-    dass ein Radio ausgeht) ist ausdruecklich verboten, das waere genau die verbotene
-    Falschbehauptung "dunkel" aus dem U15-Aggregations-Vertrag.
-  - **Kein Sicherheits-Riegel (B.10).** Auch mit echter Hardware bleibt der Schalter ein
-    Privatsphaere-/Bequemlichkeits-Werkzeug gegen beilaeufiges Funken, kein Schutz gegen
-    Schadsoftware, die Radios selbst wieder anschalten koennte; er darf nur nie behaupten,
-    dunkel zu sein, wenn er es nicht ist.
-- **Zustand nur beim Beenden wiederherstellen, als letzter Schritt (praezisiert durch
-  N11.10).** Beim Beenden (Off-Knopf/`quit_app`, Panik-Finish, Killswitch-Ende,
-  Fenster-X) wird der Funk-Zustand von **vor** dem App-Start wiederhergestellt (hat die
-  App den Flugmodus eingeschaltet, wird er wieder ausgeschaltet). Das passiert **ganz
-  zuletzt:** erst die Raum-Bereinigung und alle uebrigen Schritte (N10), am Ende die
-  Wiederherstellung des Systemzustands. **Beim Sperren passiert dagegen KEINE
-  Funk-Aenderung, in keiner Richtung: weder offline schalten noch wiederherstellen
-  (N11.10); der Zustand bleibt einfach stehen und gilt nach dem Entsperren unveraendert
-  weiter.**
-- **Externe Aenderungen spiegeln.** Aendert der Nutzer den Flugmodus in den
-  Windows-Einstellungen, passt sich die App-Anzeige an. Umsetzung **ereignisbasiert**
-  (sofortige Reaktion auf die Windows-Radio-Statusaenderung) mit einer seltenen
-  Gegenpruefung als Rueckfalllinie. Der Nutzerwunsch "alle 30 s abfragen" wird durch die
-  sofortige Ereignis-Erkennung erfuellt und uebertroffen.
-- **`set_online`-Vertrag bei echter Hardware (U15-Entscheid, 2026-07-15).** Der Aufruf ist
-  asynchron und kann je Funkgeraet einzeln scheitern (WLAN geht aus, Bluetooth verweigert):
-  - **Antwort erst nach Abschluss, nie feuern-und-vergessen.** `set_online(flag)` schaltet
-    jedes Ziel-Radio (`SetStateAsync`), **liest danach den echten Zustand aller Radios neu
-    ein** und antwortet erst dann. Der zurueckgegebene Zustand ist immer die **verifizierte
-    Realitaet**, nie die blosse Absicht.
-  - **Rueckgabe `{ online, partial }`** (ersetzt das alte `{ online }` in B.2). `partial:true`
-    heisst: nicht jedes Ziel-Radio hat gehorcht.
-  - **Sicherheits-Aggregation, Offline ist die schutzrelevante Richtung.** Beim
-    Offline-Schalten gilt `online:true`, **sobald auch nur ein Radio noch an ist.** Die App
-    behauptet also **nie** "offline/dunkel", solange irgendein Funkgeraet noch sendet; die
-    Pille zeigt dann weiter online, `partial:true`. Beim Online-Schalten (unkritische
-    Richtung) genuegt ein aktives Radio fuer `online:true`. Im Zweifel immer die ehrlichere,
-    weniger "sichere" Anzeige.
-  - **UI bei Teil-Erfolg:** ein `pushToast` mit **statischem englischem Text** (G29), der das
-    verweigernde Radio benennt, z.B. "Bluetooth could not be turned off". Die Pille springt
-    auf den real erreichten Zustand, nicht auf den gewuenschten.
-  - **Kein Doppel-Schalten.** Hoechstens **eine** Radio-Operation gleichzeitig; waehrend eine
-    laeuft, ist die Pille im Warte-Zustand und weitere `G`-/Klick-Ausloeser werden ignoriert
-    (kein Ueberlappen, kein inkonsistenter Mischzustand).
-  - **Verweigerter Gesamt-Zugriff** (`RequestAccessAsync` -> Denied) ist Sache von **U14**:
-    der Schalter degradiert sichtbar (Tooltip "no radio access"), der reale Zustand bleibt
-    unveraendert stehen.
-  - **Ehrliche Einordnung:** Der Schalter ist ein Privatsphaere-/Bequemlichkeits-Werkzeug,
-    **kein** Sicherheits-Riegel gegen Schadsoftware (B.10). Er darf nur nie *behaupten*,
-    dunkel zu sein, wenn er es nicht ist.
-- **`get_wifi_signal()`-Kadenz (U15).** Rein kosmetisch (Balken im Rail-WLAN-Icon). Das
-  Frontend pollt **alle 10 s**, aber **nur** wenn (a) online, (b) das Fenster sichtbar ist
-  (nicht minimiert) und (c) die App entsperrt ist; es **pausiert** bei offline (nichts
-  anzuzeigen), bei verstecktem/minimiertem Fenster und im Lock-Screen (Bridge eingefroren,
-  G13). Die Verbindung an/aus kommt ohnehin ereignisbasiert (oben), nur die Balkenstaerke
-  braucht den Poll. Ein `get_wifi_signal`-Aufruf zaehlt **nicht** als Aktivitaet fuer die
-  Auto-Sperre (U4): den Timer setzt allein `activity_ping` zurueck, nie ein kosmetischer
-  Hintergrund-Poll.
-
-### N11.6 Theme, Header, Profil, Fenster, Ton
-
-- **Theme folgt automatisch Windows** (hell/dunkel), mit **sofortiger** Reaktion auf die
-  Windows-Theme-Aenderung (ereignisbasiert ueber `WM_SETTINGCHANGE` bzw. den Registry-
-  Wert `AppsUseLightTheme`), plus **eine seltene Gegenpruefung alle 60 s** als
-  Rueckfalllinie (Intervall festgelegt 2026-07-15, loest Plananalyse U16; das Ereignis
-  bleibt der Hauptweg). Beim Start sofort das korrekte Theme, kein Nachziehen.
-  **Manueller Override bleibt:** `Ctrl+J` bzw. der Theme-Schalter setzt bewusst ein festes
-  Theme, bis der Nutzer wieder auf "automatisch" stellt. Die drei bisher offenen Details
-  sind entschieden (U16):
-  - **`Ctrl+J` aus `theme=auto` heraus** setzt den Override auf das **Gegenteil des
-    aktuell angezeigten (effektiven) Themes**: zeigt die App gerade hell, schaltet es auf
-    festes Dunkel und umgekehrt. Aus einem festen Theme heraus schaltet `Ctrl+J` auf das
-    jeweils andere feste Theme.
-  - **Zurueck zu `auto`** geht **nur** ueber das Appearance-Segment in den Einstellungen
-    (`Auto`|`Light`|`Dark`); `Ctrl+J` kehrt nie von selbst nach `auto` zurueck, es bewegt
-    sich ausschliesslich zwischen den beiden festen Themes.
-  - **Intervall der Gegenpruefung: 60 s** (siehe oben).
-
-  Der Settings-Key `dark` wird dazu durch `theme` mit den Werten
-  `auto`|`light`|`dark` ersetzt (Default `auto`); in die G20-Whitelist aufnehmen.
-- **Header-Mitte bleibt leer** (die frühere Benachrichtigungs-Pille faellt ersatzlos
-  weg). Brand links, Avatar rechts.
-- **Profil-Menue eindampfen.** Der fest eingetippte Name ("Noa Andersen") und tote
-  Eintraege raus. Es bleibt nur, was echt funktioniert: "Export database" wird der neue
-  Alle-Listen-Export (N11.2), optional ein Link zu den Einstellungen. Alles andere
-  entfernen.
-- **Fenster startet maximiert** (fest verdrahtet, kein Setting noetig). Ueberschreibt N9
-  "maximiert vs letzte Groesse".
-- **Fensterzustand um den Mini-Modus (U24-Entscheid, 2026-07-15).** Beim Wechsel in den
-  Mini-Modus werden die aktuellen Fenster-Bounds (Position, Groesse, Maximiert-Flag)
-  gemerkt; beim Verlassen des Mini-Modus (Rail-Knopf oder `Esc`) werden **genau diese**
-  wiederhergestellt (reines WinForms-Bounds-Merken in `set_mini`, ueber den UI-Thread, kein
-  Setting, keine Spike-Abhaengigkeit). **Der Mini-Modus ueberlebt keine Sperre:** nach dem
-  Entsperren ist das Fenster immer maximiert und nie mini (der Vor-Sperr-Fensterzustand wird
-  pro Sicherheit bewusst nicht ueber die Sperrgrenze getragen, N11.8.3 Spike-Frage 4).
-- **Erledigt-Ton abschaltbar.** Der synthetisierte Blip beim Abhaken bleibt Default an,
-  ist aber in den Einstellungen abschaltbar. Neuer Settings-Key `sound` (bool, Default
-  `true`); in die G20-Whitelist aufnehmen.
-
-### N11.7 Settings-Whitelist und Roadmap-Folgen
-
-- **Settings-Whitelist (G20) neu:** entfernt werden `notify`, `notifyInApp`,
-  `notifyWindows` (bereits weg) und das ohnehin unbenutzte `toolbar`; hinzu kommen
-  `theme` (`auto`/`light`/`dark`), `sound` (bool), `autoLock` (Minuten, `0` = nie).
-  Weiter gueltig: `accent`, `density`, `sidebar`, `railPinned`, `sidebarWidth`. Der
-  `seeded`-Marker bleibt Backend-Marker (verhindert kuenftiges Demo-Seeding generell,
-  da ohnehin nie geseedet wird). `dark` entfaellt zugunsten von `theme` (N11.6).
-- **N8-Roadmap:** Volltextsuche wird **nicht** gebaut; die Aufgaben-Detailansicht bleibt
-  Roadmap (spaeter); die Meta-Feld-Frage ist durch die Entfernung (N11.1.3) erledigt.
-
-### N11.8 Phase 8: Sicherheits-Widersprueche aufgeloest [Sec]
-
-Vier Stellen, an denen sich spaetere Phasen bisher gegenseitig widersprachen. Diese
-Entscheidungen ueberschreiben die genannten Passagen; im Zweifel Security first.
-
-1. **Killswitch wird auf reine Datei-Loeschung umgebaut (Prioritaet).**
-   *Ueberschreibt N10.4 (Killswitch "schreibt Standard-Settings neu und setzt
-   `seeded=true`") und die heutige `db.killswitch()`-Implementierung.* Der aktuelle
-   `killswitch()` oeffnet die DB und loescht Zeilen. Das ist mit dem gesperrten
-   Phase-8-Zustand unvereinbar (keine Schluessel im RAM, DB ist nur ein ChaCha20-Blob)
-   und mit G13, das den Aufruf gerade im gesperrten Zustand erlaubt. Ab Phase 8 ist der
-   Killswitch daher **keine DB-Operation, sondern eine Datei-Operation:** `tasks.db.enc`
-   samt `.bak` und Vault-Metadaten loeschen, den DPAPI-Pepper aus dem Credential Manager
-   entfernen (`keyring.delete_password`, G18), `PROFILE_DIR` (und `LOCK_PROFILE_DIR`,
-   Punkt 3) wischen (G14), dann beenden. **Keine Schluessel noetig.** Der `seeded`-Marker
-   wird dabei **nicht** geschrieben (der Datei-Killswitch beruehrt die DB nicht mehr); er
-   bleibt der passive Backend-Guard aus N11.7. Weil es ohnehin keine Demo-Seed-Daten mehr
-   gibt (N11.1.4), ist der naechste Start nach dem Killswitch automatisch ein **leerer
-   Erststart** (Punkt 2).
-
-2. **Start-Weiche eindeutig:** Beim Start entscheidet **allein die Existenz von
-   `tasks.db.enc`** (Pfad aus `config.json`, N11.3): vorhanden -> Lock-Screen (nur
-   Passphrase, N4); fehlt (frischer Rechner, nach Reset, nach Killswitch) -> Onboarding
-   (Speicherort waehlen, Passphrase min. 12, leeren Tresor anlegen; N11.3, N11.1.4).
-   *Praezisiert die Absolut-Formulierung "startet immer im Lock-Screen" in B.8.*
-
-3. **Eigenes kleines WebView2-Profil fuer den Lock-Screen.** *Loest "PROFILE_DIR bei
-   `lock()` sicher wischen" (G14) vs. "WebView2 haelt den Ordner offen, solange der
-   Lock-Screen laeuft".* Der Lock-Screen bekommt ein getrenntes, minimales Profil
-   `LOCK_PROFILE_DIR` (z.B. `%LOCALAPPDATA%\NoaToDo\webview-lock`) mit eigenem kleinem
-   HTML/CSS/JS **inklusive aller Lock-Screen-Animationen**; es sieht **nie**
-   Aufgabendaten. Beim Sperren: die Haupt-App-Ansicht abbauen (das WebView2, das
-   `PROFILE_DIR` offen haelt, schliessen), `PROFILE_DIR` freigeben und **sicher wischen**
-   (G14), der Lock-Screen uebernimmt aus `LOCK_PROFILE_DIR` (muss nie gewischt werden,
-   da inhaltsfrei). Beim Entsperren die Haupt-Ansicht mit `PROFILE_DIR` neu aufbauen und
-   frisch `get_state()` laden (N10). Praktisch zwei WebView2-Oberflaechen im selben
-   Prozess (Single-Instance-Mutex G19 bleibt einer). Der Startup-Cache-Purge
-   (`_purge_webview_cache`) gilt fuer beide Profile getrennt.
-
-   **Ungeloeste Grundannahme, Spike-Pflicht (U3): dieser Punkt ist als ERSTES in
-   Phase 8 zu klaeren, bevor irgendein anderer Baustein auf dem Zweitprofil aufsetzt.**
-   `private_mode` und `storage_path` sind bei PyWebView Parameter von `webview.start()`,
-   also **global pro Prozess**, nicht pro Fenster. Zwei Fenster mit zwei verschiedenen
-   Profilen im selben Prozess gibt die PyWebView-API damit moeglicherweise gar nicht
-   her; genau darauf baut dieser Punkt aber. **Grundhaltung des Spikes (pro
-   Sicherheit, im Zweifel): der Zwei-Profil-WebView-Weg ist keine dokumentierte
-   PyWebView-Faehigkeit und wird nur beschritten, wenn der Spike ihn positiv
-   BEWEIST; kann er es nicht, gilt ohne weitere Abwaegung der native Fallback unten.
-   Nicht annehmen, sondern beweisen.** Der Spike beantwortet diese Fragen:
-   1. **Zwei Profile im selben Prozess (Kernfrage, Beweis-, nicht Annahme-Pflicht):**
-      Laesst sich empirisch zeigen, dass PyWebView bzw. das darunterliegende WebView2
-      zwei Fenster mit getrennten `storage_path` betreibt UND dass `PROFILE_DIR`
-      dabei im gesperrten Zustand tatsaechlich **freigegeben und sicher gewischt** ist
-      (kein `msedgewebview2.exe` haelt es mehr offen)? Nur wenn **beides** bewiesen
-      ist, ist der WebView-Weg erlaubt. Bleibt auch nur einer der beiden Punkte offen
-      oder unsicher, ist der Fallback unten **verbindlich** (pro Sicherheit: ein nicht
-      beweisbar gewischtes `PROFILE_DIR` verletzt G14 still).
-   2. **js_api-Umfang des Lock-Fensters:** eigene, minimale Bridge nur mit dem, was
-      die G13-Allowlist gesperrt erlaubt (`unlock`, `quit_app`, die Reset-Methode
-      nach N11.3, `get_state` in der Gesperrt-Fassung), oder dieselbe volle
-      Api-Instanz, abgesichert allein durch G13? Festlegen (die minimale Bridge ist
-      die sauberere Linie, Defense-in-Depth).
-   3. **Taskbar-Verhalten:** Erzeugen Haupt- und Lock-Fenster zwei Taskbar-Eintraege
-      bzw. zwei Icons? Es darf fuer den Nutzer nur ein App-Eintrag sichtbar sein.
-   4. **Fensterzustand nach dem Entsperren (entschieden, U24, nur noch zu verifizieren):**
-      Nach dem Neuaufbau der Haupt-Ansicht kommt das Fenster **immer maximiert** zurueck
-      (der N11.6-Grundzustand) und **nie im Mini-Modus.** Fenstergroesse/Position und der
-      Mini-Zustand von vor der Sperre werden **bewusst nicht** ueber die Sperrgrenze
-      getragen (pro Sicherheit: der Lock setzt auf den neutralen Grundzustand zurueck, kein
-      Vor-Sperr-Fensterzustand ueberlebt; der Mini-Modus ist ohnehin Teil des von
-      `clearWorkspace()` verworfenen Workspace). Der Spike muss das nur noch **nachweisen**,
-      nicht mehr entscheiden. Der Fensterzustand nach **Mini-Ende ohne** Sperre ist separat
-      in N11.6 entschieden (exakte Wiederherstellung der Vor-Mini-Bounds).
-   5. **X-Knopf des Lock-Fensters:** nimmt zwingend denselben Pfad wie der Off-Knopf,
-      also `teardown("quit")` (N11.11, G35). Es darf keinen Lock-Fenster-Ausgang
-      geben, der die gemeinsame Sequenz umgeht.
-   6. **Boot-Reihenfolge:** Bei vorhandenem Tresor startet zuerst das Lock-Fenster;
-      das Hauptfenster wird erst nach erfolgreichem Unlock erzeugt und ruft erst dann
-      `get_state()` (Start-Weiche aus N11.8.2 beachten).
-   7. **WebView2-Prozesse vor dem Wischen wirklich beendet:** Vor dem Freigeben und
-      Wischen von `PROFILE_DIR` ist zu bestaetigen, dass die `msedgewebview2.exe`, die
-      den Ordner offen hielten, beendet sind; sonst scheitert der Wisch an `0x800700AA`
-      (ERROR_BUSY) und `PROFILE_DIR` bliebe ungewischt (G14-Bruch). Der Spike legt den
-      verlaesslichen Weg fest (WebView-Teardown abwarten, notfalls verwaiste Prozesse
-      gezielt beenden, dann wischen).
-   8. **DevTools/Remote-Debugging am Lock-Fenster hart aus:** Das Lock-Fenster startet
-      **nie** mit offenem WebView2-DevTools/Remote-Debugging, auch wenn `NOATODO_DEBUG`
-      gesetzt ist (ein Debugger am Lock-Screen waere ein Umgehungspfad an G13 vorbei).
-      Festlegen und pruefen.
-   9. **Tastatur im gesperrten Zustand:** Wer den Lock-Screen rendert (WebView **oder**
-      nativer Fallback) muss die B.8-Regel umsetzen, dass jede druckbare Taste das
-      Passwortfeld fokussiert und das Zeichen dort landet und dass alle App-Shortcuts
-      gesperrt sind.
-
-   **Fallback (verbindlich, und im Zweifel der Default): natives Lock-Fenster ohne
-   WebView.** Ergibt Frage 1 nicht den vollen Beweis, wird der Lock-Screen ein
-   schlankes **natives Fenster ohne WebView** (WinForms: Logo, Passwortfeld, Off-Knopf,
-   Reset-Einstieg; die Web-Animationen entfallen dann bewusst). Der fruehere zweite
-   Vorschlag (prozess-interner Neustart des WebView-Teils mit eigenem
-   `LOCK_PROFILE_DIR`) ist als Fallback **verworfen**: er zieht eine zweite
-   Browser-Engine samt eigenem Cache in den gesperrten Zustand und vergroessert die
-   Flaeche, ohne einen Sicherheitsvorteil zu bieten. Der native Weg hat die kleinste,
-   vollstaendig pruefbare Flaeche: keine Engine kann `PROFILE_DIR` offen halten, es
-   existiert gar kein zweiter Cache, und Aufgabendaten koennen den Lock-Screen baulich
-   nicht erreichen. Im nativen Fallback gibt es folglich **kein** `LOCK_PROFILE_DIR`
-   (nichts zu wischen). Die Zielvorgabe ist in beiden Varianten fix und nicht
-   verhandelbar: **`PROFILE_DIR` ist im gesperrten Zustand freigegeben und sicher
-   gewischt (G14); was den Lock-Screen anzeigt, sieht nie Aufgabendaten und muss nie
-   gewischt werden.** Abnahme (G35-nah): vor Anzeige des Lock-Screens ist `PROFILE_DIR`
-   nachweislich freigegeben und gewischt; andernfalls ist der Build nicht
-   abnahmefaehig.
-
-4. **Windows-Sitzungssperre (Win+L) loest KEINE App-Sperre aus.** *Ueberschreibt die
-   "Windows-Sperre"-Zeile in der B.8-Tabelle, die B.8-Kernregel und den
-   `WTSRegisterSessionNotification`/`WM_WTSSESSION_CHANGE`-Absatz in B.8/Phase 8; der
-   Platzhalter in `main.py` und in Phase 3 wird entfernt, nicht verdrahtet.* Win+L tut
-   fuer NoaToDo **nichts**. Die verlaessliche Sperre ist allein die **Auto-Sperre nach
-   Inaktivitaet** (N11.4), und die ist **garantiert, auch waehrend der PC gesperrt ist:**
-   ein Hintergrund-Timer (monotone Uhr, eigener Thread) laeuft **unabhaengig von
-   Fensterfokus und Windows-Sitzungszustand** weiter und feuert nach Ablauf des Timeouts
-   (Default 15 min, N11.4), auch wenn der PC zwischenzeitlich per Win+L gesperrt wurde.
-   Kommt der Nutzer zurueck, ist NoaToDo garantiert gesperrt. Ein reiner **Fokuswechsel
-   sperrt nicht** (B.8 bleibt hier gueltig), ebenso wenig Minimieren/Verschieben; **nur**
-   der abgelaufene Timeout sperrt.
-
-### N11.9 Phase 8: Verschluesselung, beide Schichten bleiben Pflicht [Sec]
-
-*Loest den Konflikt Gate G6 (In-Memory, nie eine entschluesselte Datei auf der Platte)
-vs. B.7 (beide Schichten immer am Ruhezustand). Ersetzt die B.7-Ehrlichkeits-Notiz und
-praezisiert die "Alternative fuer Puristen".*
-
-- **Am Ruhezustand liegt weiterhin genau ein Artefakt:** `tasks.db.enc` = ChaCha20-
-  Poly1305( SQLCipher-AES-256-Datenbank-Image ). **Beide Schichten sind darin real
-  vorhanden** (innerer Blob AES, aeussere Huelle ChaCha20). B.7 bleibt voll erfuellt.
-- **Die Arbeitskopie beim Entsperren ist NIE eine Klartext-Datei.** Bevorzugt in-memory
-  (`:memory:`, G6). Gibt die gewaehlte SQLCipher-Build-Variante das verlaessliche
-  Serialisieren des verschluesselten Images aus `:memory:` nicht her, ist der
-  verbindliche Fallback eine **SQLCipher-verschluesselte** Arbeitsdatei in einem
-  ACL-beschraenkten Temp-/RAM-Disk-Pfad. Diese Datei ist am Ruhezustand **AES-Chiffretext,
-  kein Klartext** (SQLCipher entschluesselt Seiten nur in den RAM, auch Journal/WAL sind
-  verschluesselt). G6s eigentliche Sorge (Klartext-Temp-Forensik auf SSD) ist damit
-  gegenstandslos: selbst wenn Secure-Delete auf SSD versagt, bleibt nur Chiffretext.
-  Die Wahl "nie Klartext auf Platte" schlaegt im Zweifel die Wahl "unbedingt reines
-  `:memory:`", weil das Sicherheitsziel so oder so erreicht ist.
-- **G17-Write-back ist in BEIDEN Varianten identisch (U19), damit hier nichts
-  geraten wird.** Persistenzziel am Ruhezustand ist **immer** `tasks.db.enc`, auch im
-  Fallback-Modus: der G17-Debounce (ca. 3 s nach der letzten Aenderung, spaetestens
-  alle 30 s, U20) schreibt in beiden Faellen das gesamte `tasks.db.enc` neu
-  (`.tmp` + `fsync` + `os.replace`, eine `.bak`-Generation, G16). Die
-  SQLCipher-Arbeitsdatei des Fallbacks ist **kein** zweites Persistenzziel und **nie**
-  die Quelle der Wahrheit am Ruhezustand, sondern ein **reines Betriebsmittel**: sie
-  wird beim Entsperren frisch aus `tasks.db.enc` erzeugt, bei Lock/Panik/Quit
-  abgebaut (Teardown N11.11) und beim Start **kommentarlos geloescht/ersetzt**, falls
-  eine verwaiste (evtl. veraltete) Kopie eines Absturzes herumliegt. **Keine
-  Crash-Recovery aus der Arbeitsdatei:** nach einem Absturz wird sie **verworfen**, nie
-  gelesen; der Wiederherstellungsstand ist ausschliesslich das zuletzt debounced
-  geschriebene `tasks.db.enc` (bzw. dessen `.bak`, G16). Damit gilt G17 in beiden
-  Modi woertlich und es gibt keinen Pfad, auf dem ein moeglicherweise verfaelschtes
-  Betriebsmittel als Wahrheit durchgeht (pro Sicherheit: nur das authentifizierte
-  `.enc` ist Quelle).
-- **Ehrliche Neuformulierung (ersetzt die B.7-Notiz "live nur AES"):** Am Ruhezustand
-  schuetzen **beide** Schichten. Waehrend die App entsperrt laeuft, existiert der
-  Klartext ausschliesslich fluechtig im RAM (SQLite-Page-Cache), wie bei jeder App;
-  dagegen helfen schnelle Sperre, Auto-Sperre und Panik, nicht die Cipher.
-- **Neues Pflicht-Gate G28 (Verschluesselungs-Beweis, Phase 8):** Vor Phase-8-Abschluss
-  ist zu **beweisen**, dass die Arbeits-/Zwischendatei tatsaechlich AES-verschluesselt
-  ist: das Oeffnen des inneren Images **ohne** `aes_key` muss fehlschlagen (kein
-  SQLite-Klartext-Header, kein lesbarer Task-Text im Roh-Byte-Dump). Schlaegt der Beweis
-  fuer den `:memory:`-Serialize-Weg fehl, ist der verschluesselte-Temp-Datei-Fallback
-  verbindlich. Kein Auslieferungsbuild ohne bestandenen Beweis. **Automatisierung
-  (V12, 2026-07-15):** der Beweis ist als pytest-Test in der Phase-9-Testliste
-  verankert (Scan des Arbeits-Artefakts auf den SQLite-Klartext-Header
-  `SQLite format 3` und einen bekannten Task-String, jeder Fund ist ein Fail),
-  damit er nicht als Einmal-Handgriff verrottet.
-
-### N11.10 Sperre schaltet nicht mehr offline (2026-07-13, W1-Entscheid) [Sec]
-
-*Loest den Widerspruch W1 der Plananalyse (N10.1 "jede Sperre schaltet offline, und
-offline bleibt es" vs. N11.5 "beim Sperren wird der Funk-Zustand von vor dem App-Start
-wiederhergestellt"). Entscheidung: Linie 1, entkoppeln. Ueberschreibt N10.1 (den
-Offline-Teil), die B.8-Tabelle/Verschaerfung und die N11.5-Wiederherstellungsregel
-fuer den Sperr-Fall.*
-
-- **Die Sperre schaltet die App NICHT mehr offline.** Das gilt fuer **jede** Sperre:
-  Lock-Button, `Ctrl+L` und Auto-Sperre nach Inaktivitaet (N11.4). Beim Sperren bleibt der
-  Online-/Funkzustand **exakt so, wie er gerade ist**, in keiner Richtung angefasst:
-  es wird **weder** der Flugmodus eingeschaltet **noch** ein frueherer Funk-Zustand
-  wiederhergestellt. Das Internet bleibt normal verfuegbar; nach dem Entsperren gilt
-  derselbe Zustand unveraendert weiter.
-- **Begruendung:** Seit N11.5 heisst "offline" nicht mehr "lokales Flag", sondern echte
-  Funkgeraete des ganzen PCs aus (WLAN, Bluetooth). Eine Sperre, die offline schaltet,
-  wuerde mit dem Auto-Lock-Default (15 min Inaktivitaet) alle 15 Minuten das WLAN und
-  Bluetooth des gesamten Rechners abschalten, etwa waehrend nebenan ein Video streamt.
-  Die App hat seit der Sync-Entfernung zudem keinerlei eigene Netzwerkfunktion mehr,
-  das Offline-Schalten beim Sperren schuetzt also nichts App-eigenes.
-- **Die Raum-Bereinigung beim Sperren bleibt vollstaendig erhalten** (N10.1: Ansicht
-  leeren, `state.lists` verwerfen, Menues/Modals/Auswahl schliessen, dann Lock-Screen).
-  Es entfaellt **nur** der Offline-Schritt.
-- **Funk geschaltet wird nur noch an zwei Stellen:** (1) beim **expliziten
-  Nutzer-Toggle** (Flugzeug/Globus-Pill bzw. Taste `G`, N11.5) und (2) im
-  **Panik-Flow** (bewusste, mehrstufig bestaetigte Notfall-Aktion; dort bleibt das
-  Offline-Schalten wie in N10.3 beschrieben). Die Wiederherstellung des Funk-Zustands
-  von vor dem App-Start passiert **nur noch beim Beenden** (als letzter Schritt,
-  N11.5), nie beim Sperren.
-- **Crash-Fall (Praezisierung aus dem W1-Entscheid):** Stuerzt die App ab, bleibt der
-  Funk ehrlich so geschaltet, wie er zuletzt war (die Wiederherstellung laeuft nur im
-  sauberen Beenden-Pfad). Damit das nicht dauerhaft haengen bleibt, wird der gemerkte
-  Funk-Ausgangszustand beim Einschalten des Flugmodus durch die App in `config.json`
-  persistiert (N11.3, nicht nur im RAM); findet der naechste Start dort einen nicht
-  aufgeraeumten Eintrag, stellt er den Ausgangszustand wieder her und loescht den
-  Eintrag.
-- **Umsetzungsfolge fuer den heutigen Code:** `clearWorkspace()` in `app.js` schaltet
-  derzeit auch offline. Kuenftig darf der **Lock-Pfad** (`doLock()`, Auto-Lock)
-  den Online-Zustand nicht mehr anfassen; nur der **Panik-Flow**
-  (Confirm im Panik-Panel) behaelt das Offline-Schalten.
-
-### N11.11 Die gemeinsame Sperr-/Beenden-Sequenz (2026-07-13, S5-Entscheid, Gate G35) [Sec]
-
-*Loest Befund S5 der Plananalyse: die Ablaeufe Sperren, Beenden, Panik, Killswitch und
-Reset waren ueber fuenf Stellen verstreut (B.8, N10, N11.5, N11.8.1/N11.8.3, Phase 8
-Punkt 2) und nirgends als eine pruefbare Sequenz definiert; mehrere Schritte standen
-ueberhaupt nirgends. Dieser Abschnitt ist ab sofort die **einzige Wahrheit** fuer alle
-Ausgaenge und bindet zugleich U5, U21, V7 und V8 ein. Er praezisiert die genannten
-Stellen, widerspricht ihnen aber nicht.*
-
-#### N11.11.1 Eine Funktion, alle Ausgaenge
-
-In `backend/security.py` entsteht **genau eine** Routine:
-
-```python
-def teardown(reason: Reason) -> None: ...
-# Reason = "lock" | "autolock" | "quit" | "panic_finish" | "killswitch" | "reset" | "atexit"
-```
-
-**Alle** Ausgaenge rufen ausschliesslich sie, keiner baut seinen eigenen Ablauf:
-Lock-Button/`Ctrl+L` (`lock`), Auto-Sperre (`autolock`), Off-Knopf des Lock-Screens
-(`quit`), Panik-Endschirm "Finish" (`quit`), Killswitch-Ende (`killswitch`),
-Lock-Screen-Reset (`reset`), **natives Fenster-X** (`quit`, per `closing`-Handler, siehe
-Phase 8 Punkt 2) und die Rueckfalllinie `atexit`/`try…finally` um `webview.start()`
-(`atexit`). Der Panik-Confirm selbst ist **kein** Ausgang: er raeumt den Raum, schaltet
-offline (N11.10) und fuehrt in den Endschirm; erst dessen Knoepfe rufen `teardown`.
-
-**Nicht verhandelbar:** Wer einen neuen Ausgang baut (neuer Knopf, neuer Hotkey, neues
-Fenster-Ereignis), ruft `teardown`. Ein zweiter, handgeschriebener Beenden-Pfad ist ein
-Gate-Verstoss (G35), auch wenn er "dasselbe" tut.
-
-#### N11.11.2 Die Soll-Sequenz (verbindliche Reihenfolge)
-
-`teardown(reason)` laeuft **immer** in dieser Reihenfolge; welche Schritte fuer welchen
-Grund gelten, steht in der Tabelle in N11.11.3. Die Reihenfolge ist selbst
-sicherheitsrelevant (Schritt 7 darf nie vor Schritt 5/6 laufen, U21; Schritt 10 ist
-immer der letzte, N11.5).
-
-1. **Eintritt absichern (Idempotenz).** Ein Prozess-weites Flag plus Lock: `teardown`
-   laeuft **hoechstens einmal** durch. Ein zweiter Aufruf (X waehrend die Auto-Sperre
-   schon laeuft, `atexit` nach `quit_app`) kehrt sofort zurueck oder wartet auf den
-   laufenden Durchlauf. Ein `lock`, das ein `quit` ueberholt, wird verworfen: ein
-   begonnenes Beenden gewinnt immer gegen ein begonnenes Sperren.
-2. **Offene native Dialoge aufloesen (U5).** Ist ein nativer Dialog offen (Export-Save,
-   Onboarding-Ordnerwahl), darf **nie** unter ihm das Hauptfenster abgebaut werden
-   (N11.8.3). Kurzfassung der Regel: **jeder Grund ausser `autolock`** bricht den Dialog
-   sofort ab (Cancel) und faehrt fort (der Nutzer steht davor, er hat es selbst
-   ausgeloest); **`autolock`** laeuft trotzdem sofort bis Schritt 7 durch (die Daten
-   werden gesichert, die Ansicht wird gesperrt) und schiebt **nur die nativen Schritte
-   9 bis 11** auf, bis der Dialog zu ist, wobei die Sequenz den Dialog selbst
-   schliesst, statt auf ihn zu warten. **Der vollstaendige Ablauf samt der
-   Angriffsvektoren, die eine naive Aufschiebung erst erzeugen wuerde, steht in
-   N11.11.5; er ist Teil dieses Schrittes und nicht optional.**
-3. **Eingaben einfrieren.** Backend setzt sofort `locked = True` (bzw. `shutting_down`),
-   damit ab hier jede Bridge-Methode ausserhalb der G13-Allowlist `{"error": "locked"}`
-   liefert und keine neue Mutation mehr hereinkommt. Frontend leert den Raum
-   (`clearWorkspace()`: Listen, Auswahl, Menues, Modals, Eingaben; **ohne** den
-   Online-Zustand anzufassen, N11.10).
-4. **Timer stoppen und ausstehende Aenderungen synchron persistieren (G17).** Den
-   Auto-Sperr-Timer und den **G17-Debounce-Timer abbrechen**; steht noch eine ungesicherte
-   Aenderung an, wird sie **synchron** und **vor** allen weiteren Schritten nach
-   `tasks.db.enc` geschrieben (atomar nach G16). `teardown` wartet auf den Abschluss, kein
-   Feuern-und-Vergessen. Fuer `killswitch` und `reset` entfaellt dieser Schritt
-   ersatzlos (die Daten werden ohnehin sofort geloescht; ein letzter Write-back waere
-   sinnlose Schreiblast auf genau die Datei, die gleich stirbt). **Fehlerfall:** Scheitert
-   das Schreiben bei `lock`/`autolock`/`quit`, bricht die Sequenz ab und zeigt den
-   N6-Fehlerbildschirm; es wird **nicht** weitergewischt und **nicht** beendet (sonst
-   kostet der Beenden-Pfad Daten). Die `.bak`-Generation aus G16 bleibt unangetastet.
-5. **Clipboard sofort leeren (V7, G23).** Traegt das Windows-Clipboard noch App-Inhalt
-   (dieselbe Pruefung "ist es noch unser Inhalt", die schon der 60-s-Auto-Clear nutzt),
-   wird es **jetzt** geleert und der 60-s-Timer abgebrochen. Sonst laege bis zu eine
-   Minute Aufgabentext im Clipboard, waehrend die App laengst gesperrt oder beendet ist.
-   Fremder Inhalt (der Nutzer hat inzwischen etwas anderes kopiert) bleibt unangetastet.
-6. **DB schliessen.** SQLCipher-Verbindung sauber schliessen, In-Memory-Image freigeben,
-   eine allfaellige **verschluesselte** Arbeitsdatei (N11.9-Fallback) loeschen. Erst
-   danach darf irgendetwas an Dateien angefasst werden (U21).
-7. **Schluessel nullen (G25) und fluechtige RAM-Puffer verwerfen.** `aes_key`,
-   `chacha_key`, Master-Secret und die RAM-Kopie des Pepper als `bytearray` ueberschreiben
-   und verwerfen; die Passphrase ist ohnehin direkt nach der Ableitung verworfen. **Hier
-   wird auch der Undo-Puffer der letzten geloeschten Liste (N11.2.1) verworfen**, damit eine
-   gesperrte App nie geloeschten Aufgabentext im RAM haelt. Ab hier ist der Prozess
-   schluessellos. Gilt auch fuer `lock`/`autolock`: eine Sperre ohne Schluessel-Nullen (und
-   ohne Verwerfen dieses Puffers) waere keine.
-8. **Nur `killswitch` und `reset`: loeschen.** Erst **nach** Schritt 6 und 7 (offene
-   Handles, U21): `tasks.db.enc` samt `.bak` und Vault-Metadaten loeschen, den
-   DPAPI-Pepper aus dem Credential Manager entfernen (`keyring.delete_password`, G18),
-   den Vault-Eintrag in `config.json` (und den Rate-Limit-Zustand, U6) verwerfen. Der
-   Killswitch ist ab Phase 8 eine reine **Datei**-Operation und braucht keine Schluessel
-   (N11.8.1), funktioniert also gesperrt wie entsperrt; im entsperrten Zustand sorgen
-   6 und 7 dafuer, dass er nicht gegen offene Handles laeuft. **Dokumentierter
-   Nebeneffekt:** Mit dem Pepper sterben auch alle **frueher kopierten** `.enc`-Staende
-   endgueltig, selbst wenn der Angreifer spaeter die Passphrase erfuehre (U21).
-   Unterschied der beiden Gruende: `killswitch` beendet danach den Prozess (Schritte 9
-   bis 11), `reset` beendet **nicht**, sondern springt in das Onboarding (Speicherort
-   waehlen, neue Passphrase, frischer Pepper, N11.3) und die Sequenz endet hier.
-9. **WebView2-Profil freigeben und sicher wischen (G14).** Die Haupt-Ansicht abbauen
-   (das WebView2, das `PROFILE_DIR` offen haelt, schliessen), dann `PROFILE_DIR` sicher
-   wischen. **`LOCK_PROFILE_DIR` wird nie gewischt** (inhaltsfrei, N11.8.3). Bei
-   `lock`/`autolock` uebernimmt danach der Lock-Screen aus `LOCK_PROFILE_DIR`, und die
-   Sequenz **endet hier** (Schritte 10 und 11 sind Beenden-Schritte). Gewischt wird immer
-   der **real beschriebene** Pfad, nicht der literale: unter Store-Python liegt er
-   umgeleitet unter `...\Packages\PythonSoftwareFoundation.Python.3.11_*\LocalCache\Local\`
-   (V8).
-10. **Funk-Zustand wiederherstellen (N11.5/N11.10), als letzter fachlicher Schritt.** Nur
-    auf den Beenden-Gruenden (`quit`, `killswitch`, `atexit`): hat die App den Flugmodus
-    eingeschaltet, wird der beim Start gemerkte Zustand wiederhergestellt und der
-    Merker in `config.json` geloescht. **Beim Sperren passiert hier nichts** (N11.10, die
-    Sequenz ist da ohnehin schon beendet). Zuletzt, damit der Raum erst geraeumt ist,
-    bevor die Funkgeraete wieder angehen.
-11. **Prozess-Ende.** Single-Instance-Mutex (G19) freigeben, verbleibende Handles
-    schliessen, WinForms-Form ueber `BeginInvoke` auf dem UI-Thread schliessen, Prozess
-    beenden.
-
-**Fehlerregel fuer die Schritte 5 bis 11:** Sie laufen **best effort**. Scheitert einer
-(Clipboard-API belegt, Profilordner gesperrt, Radio-API verweigert), wird er
-uebersprungen und die Sequenz laeuft weiter; **nie** darf ein gescheiterter Schritt die
-folgenden verhindern, sonst bleibt ausgerechnet im Fehlerfall der Schluessel im RAM oder
-das Profil ungewischt. Einzige Ausnahme ist Schritt 4 (Datenverlust, siehe dort).
-
-#### N11.11.3 Welcher Schritt gilt fuer welchen Ausgang
-
-| Schritt | `lock` / `autolock` | `quit` (Off, Finish, Fenster-X) | `killswitch` | `reset` | `atexit` |
-|---|---|---|---|---|---|
-| 1 Idempotenz | ja | ja | ja | ja | ja |
-| 2 Dialog aufloesen | `autolock`: Schritte 3-7 sofort, 9-11 aufgeschoben, Dialog wird geschlossen (N11.11.5) | Cancel | Cancel | Cancel | entfaellt |
-| 3 Einfrieren | ja | ja | ja | ja | ja |
-| 4 Debounce-Flush | ja | ja | **nein** | **nein** | ja (falls moeglich) |
-| 5 Clipboard leeren | ja | ja | ja | ja | ja |
-| 6 DB schliessen | ja | ja | ja (entsperrt) | ja (entsperrt) | ja |
-| 7 Schluessel nullen | ja | ja | ja | ja | **ja (Pflicht)** |
-| 8 Dateien/Pepper loeschen | nein | nein | **ja** | **ja** | nein |
-| 9 `PROFILE_DIR` wischen | ja, dann Lock-Screen | ja | ja | ja | ja (falls moeglich) |
-| 10 Funk wiederherstellen | **nein** (N11.10) | ja | ja | nein (App laeuft weiter) | ja |
-| 11 Prozess-Ende | nein (Lock-Screen) | ja | ja | **nein** (Onboarding) | ja |
-
-`atexit` ist die Rueckfalllinie fuer den Fall, dass der Message-Loop unerwartet
-zurueckkehrt: Es laeuft dieselbe Funktion, aber nur noch, was ohne UI moeglich ist. Die
-Pflichtschritte dort sind 5, 7, 10 und 11 (Clipboard, Schluessel, Funk, Mutex).
-
-#### N11.11.4 Neues Pflicht-Gate G35
-
-> **🔒 G35 (Phase 8), gemeinsame Sperr-/Beenden-Sequenz:** Es gibt **genau eine**
-> `teardown(reason)`-Routine, und **jeder** Ausgang (Lock-Button, `Ctrl+L`, Auto-Sperre,
-> Off-Knopf, Panik-Finish, Killswitch, Reset, natives Fenster-X, `atexit`) laeuft
-> ausschliesslich durch sie, in der Reihenfolge aus N11.11.2. Abnahme: Fuer **jeden** der
-> neun Ausgaenge ist nachzuweisen, dass (a) ein ausstehender G17-Debounce synchron
-> geschrieben wurde (ausser Killswitch/Reset), (b) das Clipboard keinen App-Inhalt mehr
-> traegt, (c) die Schluessel genullt sind, (d) `PROFILE_DIR` gewischt ist, (e) der
-> Funk-Zustand nur auf den Beenden-Wegen und nur als letzter Schritt wiederhergestellt
-> wurde, (f) der Mutex freigegeben ist. Ein zweiter, handgeschriebener Beenden-/Sperr-Pfad
-> im Code ist ein Gate-Verstoss.
->
-> **Ergaenzung (U5, siehe N11.11.5):** Die Abnahme gilt zusaetzlich fuer den Fall
-> "Auto-Sperre feuert, waehrend ein nativer Dialog offen ist". Nachzuweisen ist, dass
-> dabei (g) das Hauptfenster **nicht** unter dem modalen Dialog abgebaut wird, (h) die
-> Schluessel trotzdem sofort genullt sind, (i) der Dialog geschlossen und sein Ergebnis
-> verworfen wird (keine Export-Datei entsteht nach dem Sperren) und (j) die Sperre sich
-> durch einen offenen Dialog **nicht unbegrenzt hinausschieben** laesst.
-
----
-
-### N11.11.5 Native Dialoge und die aufgeschobene Auto-Sperre (2026-07-13, U5-Entscheid) [Sec]
-
-*Loest U5 der Plananalyse. Native Dialoge (Export-Save-Dialog aus G21, Ordnerwahl im
-Onboarding aus N11.3) sind die einzige Stelle, an der ein **modales Windows-Fenster** dem
-Hauptfenster gehoert. Feuert die Auto-Sperre (N11.4, Default 15 min) genau dann, baut die
-Sequenz in Schritt 9 die WebView-Ansicht unter einem noch offenen modalen Dialog ab: im
-guenstigen Fall haengt die App, im ungueenstigen stuerzt sie ab und hinterlaesst genau den
-Zustand, den die Sperre verhindern sollte (Schluessel im RAM eines abgestuerzten Prozesses,
-ungewischtes `PROFILE_DIR`, WER-Dump, A1). Angreiferklasse: **K3** (kurzer physischer
-Zugriff), siehe B.10.2.*
-
-#### N11.11.5.1 Die naive Loesung waere ein neues Loch
-
-Der naheliegende Patch ("Flag um `create_file_dialog`, Sperre aufschieben, nach dem
-Schliessen nachholen") behebt den Absturz und **oeffnet dabei drei neue Wege**. Sie sind
-hier benannt, weil genau diese Art von Folgeschaden die Regel aus B.10 verlangt, jede
-Massnahme gegen ihre Angreiferklasse zu pruefen:
-
-1. **Die Auto-Sperre laesst sich beliebig lange aushebeln (K3).** Ein offener Dialog wuerde
-   die Sperre auf unbestimmte Zeit aufschieben. Wer kurz Zugriff auf den entsperrten
-   Rechner hat, drueckt `Ctrl+E`, laesst den Save-Dialog offen stehen und geht: Die App
-   sperrt **nie** wieder, und die Aufgaben stehen weiter sichtbar im Hauptfenster hinter
-   dem Dialog. Damit waere ausgerechnet die einzige verlaessliche Sperre (N11.8.4) durch
-   einen Mausklick abschaltbar. **Dasselbe passiert versehentlich:** Nutzer laesst den
-   Dialog offen, klappt den Laptop zu, die App bleibt entsperrt.
-2. **Ein Export, der nach dem Sperren noch schreibt.** Kehrt der Dialog nach der Sperre
-   zurueck und die Sequenz nimmt sein Ergebnis noch entgegen, schreibt eine **gesperrte**
-   App eine Klartext-Datei mit Aufgaben auf die Platte, an G13 vorbei (der Inhalt lag beim
-   Aufruf schon im Speicher der Methode, der `locked`-Check des Decorators hat sie laengst
-   durchgelassen).
-3. **Das Flag als Dauerzustand.** Bleibt das Flag durch eine Ausnahme, einen abgestuerzten
-   Dialog oder einen zweiten, parallel geoeffneten Dialog haengen, ist die Auto-Sperre
-   dauerhaft tot, ohne dass es jemand merkt (der schlimmste Fehlerfall: ein Schutz, der
-   still nicht mehr laeuft).
-
-#### N11.11.5.2 Verbindliche Regel: nicht "aufschieben", sondern **aufteilen**
-
-Der Kern der Loesung: **Gefaehrlich ist nur der native Teil der Sequenz, nicht die
-Sperre selbst.** Schritte 3 bis 7 (einfrieren, Write-back, Clipboard, DB schliessen,
-Schluessel nullen) sind reine Python-/DOM-Operationen und beruehren kein natives Fenster;
-sie laufen problemlos, waehrend ein modaler Dialog offen ist. Nur die Schritte 9 bis 11
-(WebView-Ansicht abbauen, `PROFILE_DIR` wischen, Form schliessen) duerfen das nicht.
-
-Feuert `autolock` bei offenem Dialog, gilt daher:
-
-1. **Sofort und ohne Aufschub laufen die Schritte 1 bis 7.** Nach wenigen Millisekunden
-   ist die App gesperrt (`locked = True`, G13-Allowlist greift), der ausstehende
-   Write-back ist geschrieben (G17/G16), das Clipboard ist geleert (V7), die DB ist zu
-   und **die Schluessel sind genullt** (G25). Ab hier gibt es nichts mehr zu holen, egal
-   wie lange der Dialog noch steht.
-2. **Die Ansicht wird sofort zugemacht.** Das Frontend bekommt `onLocked()` und rendert
-   `clearWorkspace()` plus Lock-Screen. Das ist reines DOM im schon laufenden WebView
-   (`evaluate_js`), also **keine** native Fensteroperation; hinter dem Dialog steht damit
-   der Lock-Screen und keine Aufgabenliste mehr. **Nachweispflicht in Phase 8:** dass
-   `evaluate_js` waehrend eines offenen modalen Dialogs zuverlaessig durchkommt (der
-   modale Dialog pumpt die Nachrichtenschleife weiter, gesendete Nachrichten laufen also;
-   sollte es in der Praxis doch haengen, gilt Punkt 3 zuerst und die Ansicht wird erst
-   danach umgestellt).
-3. **Die Sequenz schliesst den Dialog selbst, sie wartet nicht auf ihn** (Antwort auf
-   Angriffsvektor 1). Auf dem UI-Thread (nur dort, `_run_on_ui_thread`) wird der offene
-   modale Dialog beendet (Best effort: `WM_CLOSE`/`EndDialog` an das Dialog-Fenster,
-   ermittelt ueber das Besitzer-Fenster des Hauptformulars). Das entspricht einem "Abbrechen"
-   und ist verlustfrei: der Nutzer verliert nur einen Dateinamen, keine Daten.
-4. **Erst wenn kein Dialog mehr offen ist, laufen die Schritte 9 bis 11** (Ansicht abbauen,
-   `PROFILE_DIR` wischen, Lock-Screen aus `LOCK_PROFILE_DIR`). Gelingt Punkt 3 nicht
-   (kein Handle, Dialog reagiert nicht), bleibt genau dieser Rest geparkt und laeuft, sobald
-   der Dialog zurueckkehrt. **Das ist vertretbar, weil die Sperre inhaltlich schon
-   vollzogen ist:** ohne Schluessel und ohne offene DB haengt an den geparkten Schritten
-   kein Geheimnis mehr, nur noch Aufraeumarbeit (der WebView2-Cache, den ohnehin auch der
-   naechste Start purgen wuerde).
-5. **Das Ergebnis des Dialogs ist nichtig** (Antwort auf Angriffsvektor 2). Kehrt
-   `create_file_dialog` zurueck, nachdem eine Sperre gefeuert hat, wird der gewaehlte Pfad
-   **verworfen**, es wird **keine Datei geschrieben**, der schon aufgebaute Export-Inhalt
-   wird aus dem Speicher genullt, und die Bridge-Methode liefert `{"error": "locked"}`
-   (stumm im Frontend, B.2). Gleiches gilt fuer die Onboarding-Ordnerwahl: nach einer
-   zwischenzeitlichen Sperre/Teardown wird kein Tresor angelegt.
-6. **Der offene Dialog ist keine Aktivitaet.** Er setzt den Auto-Sperr-Timer **nicht**
-   zurueck (U4 definiert Aktivitaet als Eingabe im App-Fenster), und Interaktion **im**
-   nativen Dialog zaehlt ausdruecklich auch nicht. Ein offener Dialog verzoegert die
-   Sperre also nicht, er verzoegert nur ihre letzten drei Schritte.
-
-#### N11.11.5.3 Dialog-Buchfuehrung (Antwort auf Angriffsvektor 3)
-
-- **Hoechstens ein nativer Dialog gleichzeitig.** Jeder Aufruf von `create_file_dialog`
-  laeuft in `api.py` durch **einen** gemeinsamen Kontextmanager (`_native_dialog(...)`),
-  der ein Prozess-Flag samt Zeitstempel setzt und es im `finally` **immer** wieder
-  freigibt, auch bei Ausnahme. Ist das Flag schon gesetzt, wird der zweite Dialog gar
-  nicht geoeffnet, sondern die Methode liefert `{"error": "busy"}` (B.2). Damit kann weder
-  ein Doppelklick noch ein Bridge-Aufruf an der UI vorbei (XSS, DevTools) Dialoge stapeln
-  und so eine Kette bauen, die nie endet.
-- **Kein eigener Dialog-Pfad.** Wer einen neuen nativen Dialog einfuehrt, benutzt diesen
-  Kontextmanager. Ein `create_file_dialog` ohne ihn ist ein G35-Verstoss, genau wie ein
-  zweiter Beenden-Pfad.
-- **Waechter gegen ein haengendes Flag.** Der Auto-Sperr-Thread prueft bei jedem Tick: Ist
-  das Flag gesetzt, aber **kein** modales Fenster mehr vorhanden (oder steht das Flag
-  laenger, als ein Dialog plausibel offen sein kann), gilt es als verwaist, wird
-  zurueckgesetzt und die geparkten Schritte laufen an. Ein stiller Dauer-Aufschub darf es
-  nicht geben.
-- **Sichtbar im Status-Modal (G22-Geist):** Steht die Sperre wegen eines Dialogs im
-  Zustand "gesperrt, Aufraeumen geparkt", meldet `get_status()` das ehrlich, statt "alles
-  sauber" zu behaupten.
-
-#### N11.11.5.4 Was ausdruecklich **nicht** gilt
-
-- **Kein Aufschub fuer irgendetwas ausser `autolock`.** Lock-Button, `Ctrl+L`, Panik,
-  Killswitch, Reset, Off-Knopf, Fenster-X: alle brechen den Dialog sofort ab und laufen
-  durch. Bei ihnen steht der Nutzer davor, ein Aufschub waere nur ein Weg, die eigene
-  Panik-Taste zu verzoegern.
-- **Kein "Auto-Sperre wird uebersprungen, weil der Nutzer ja gerade exportiert".** Ein
-  offener Dialog ist kein Anwesenheitsbeweis; genau darauf baut Angriffsvektor 1.
-- **Keine Verlaengerung der Sperrfrist,** solange ein Dialog offen ist. Der Timer laeuft
-  unveraendert. (2026-07-13, S6-Entscheid, Gate G29) [Sec]
-
-*Loest S6 der Plananalyse. Mit dem Sync fiel das alte Gate G10 ("Fehlermeldungen ohne
-Geheimnisse") weg, obwohl sein Kern rein lokal weitergilt. Heute gibt der
-`@bridge`-Decorator `str(exc)` ans Frontend (`api.py`), d.h. schon eine banale `OSError`
-traegt absolute Pfade samt Windows-Benutzernamen als Toast auf den Bildschirm (bei
-Screen-Sharing auf fremde Bildschirme). Ausserdem fehlten ein kanonischer Fehlercode-Katalog
-und jede Aussage darueber, ob und wo das Backend loggt. Angreiferklassen: K3 (kurzer
-physischer Zugriff, abgelesener Bildschirm) und K5 (Reverse-Engineer, der Interna
-geschenkt bekommt), siehe B.10.6.*
-
-#### N11.12.1 Generische Fehler nach vorne, Details nur in den RAM
-
-- **Kein `str(exc)` ans Frontend, nie.** Der `@bridge`-Decorator faengt weiterhin jede
-  Ausnahme, gibt aber ausschliesslich `{"error": <Code>, "message": <statischer Text>}`
-  zurueck; bei `internal` zusaetzlich `{"ref": "<4 Hexzeichen>"}`. Die statischen Texte und
-  die Codes stehen in **B.2** (Fehlercode-Katalog), das ist die einzige Wahrheit.
-- **Verboten in jeder Meldung, die das Backend verlaesst:** Aufgaben-/Listentext,
-  Passphrase, abgeleitete Schluessel, Pepper, Datei-Pfade, Tracebacks, SQL-Fragmente,
-  Exception-Text der darunterliegenden Bibliothek.
-- **In-Memory-Ringpuffer (Diagnose):** `Api` haelt einen Ringpuffer der letzten **50**
-  Fehler, ausschliesslich im RAM (`collections.deque(maxlen=50)`), nie auf der Platte.
-  Ein Eintrag ist: Zeitstempel, Bridge-Methodenname, Fehlercode, Exception-Klassenname,
-  `ref` und eine **redigierte** Kurzmeldung. Redigieren heisst: jeder Pfad
-  (alles, was wie `X:\...` oder `\\...` oder `/...` aussieht) wird durch `<path>` ersetzt,
-  die Meldung auf 200 Zeichen gekuerzt. Aufgabentext gelangt gar nicht erst hinein: der
-  Puffer speichert **niemals** Argumente der Bridge-Methode.
-- **Einsehbar nur im Status-Modal** ("Recent errors", eingeklappt, mit Kopier-Knopf ueber
-  den gehaerteten Backend-Clipboard-Pfad aus G23). Damit hat der Nutzer eine echte
-  Fehlersuche, ohne dass Details ungefragt ins Bild springen.
-- **Der Ringpuffer wird in Schritt 3 der `teardown(reason)`-Sequenz (N11.11) geleert**,
-  also bei Sperre, Panik, Killswitch, Reset und Beenden. Ein gesperrter Bildschirm zeigt
-  keine Diagnose-Historie mehr an.
-
-#### N11.12.2 Logging-Politik (verbindlich)
-
-- **Im Release gibt es kein persistentes Logfile.** Kein `logging.FileHandler`, kein
-  `basicConfig(filename=...)`, keine Absturz-Tracebacks in eine Datei, kein
-  `faulthandler.enable(file=...)`, keine Crash-Reports nach aussen (es gibt ohnehin kein
-  Netz, N11.5). Eine Tresor-App, die nebenher eine Klartext-Logdatei schreibt, unterlaeuft
-  beide Verschluesselungsschichten.
-- **Konsolen-Ausgaben nur als Entwickler-Modus:** Die vorhandenen `print()`-Zeilen
-  (`[NoaToDo] Start ...`) bleiben erlaubt, solange sie **nur** Programm-Zustand melden.
-  Ausfuehrliche Diagnose haengt an `NOATODO_DEBUG=1` (schon vorhanden fuer die DevTools)
-  und darf auch dann weder Passphrase noch Schluessel noch Aufgabentext ausgeben.
-- **Der ausgelieferte Build laeuft nie im Debug-Modus:** in Phase 9 wird geprueft, dass
-  `NOATODO_DEBUG` im Build nicht gesetzt ist und die DevTools aus sind (Abnahmepunkt
-  dort ergaenzt).
-- **Windows-eigene Kanaele:** Es wird nichts ins Windows-Ereignisprotokoll geschrieben und
-  keine Telemetrie erhoben. (Was WebView2 selbst protokolliert, deckt G14 ab: der
-  Profilordner wird gewischt.)
-
-#### N11.12.3 Neues Pflicht-Gate G29
-
-> **🔒 G29 (SOFORT, spaetestens mit Phase 7), Fehler-Hygiene:** (a) Der `@bridge`-Decorator
-> gibt **nur** Codes und statische Texte aus dem Katalog in B.2 zurueck, nie `str(exc)`,
-> nie Pfade, nie Tracebacks, nie Nutzertext. (b) Der Fehlercode-Katalog in B.2 ist
-> vollstaendig und wird bei jedem neuen Code mitgepflegt; ein Code ohne Zeile dort darf
-> nicht ans Frontend. (c) Details landen ausschliesslich im redigierten In-Memory-Ringpuffer
-> (50 Eintraege, Status-Modal, Leerung in `teardown`). (d) Im Release existiert kein
-> persistentes Logfile. **Abnahme:** Ein kuenstlich erzeugter `OSError` in einer
-> Bridge-Methode zeigt im UI nur "Something went wrong." samt `ref`, im Ringpuffer steht
-> `<path>` statt des echten Pfades, und im gesamten Repo findet sich kein `FileHandler`
-> und kein `basicConfig(filename=...)`.
-
----
-
-### N11.13 Einrichtung, Tresor-Verwaltung und der dreiwertige Boot-Zustand (2026-07-13, U1-Entscheid) [Sec]
-
-*Loest U1 der Plananalyse. B.2 nannte sich "vollstaendige Methodenliste", hatte aber
-keine einzige Methode fuer Tresor anlegen, Speicherort waehlen, Passphrase aendern und
-Reset, und `get_state().locked` kann den dritten Boot-Zustand ("es gibt noch keinen
-Tresor", N11.8.2) gar nicht ausdruecken; B.4 hatte keinen Onboarding-Abschnitt. Ohne das
-haette die ausfuehrende KI die halbe Phase 8 frei geraten. Die Vertraege stehen jetzt in
-B.2 (Methoden + Fehlercodes) und B.4 (Screens); dieser Abschnitt haelt die Entscheidungen
-dahinter fest.*
-
-- **Der Boot-Zustand ist dreiwertig, nicht zweiwertig.** Neue Bridge-Methode
-  `get_boot_state()` -> `{ state: 'onboarding'|'locked'|'unlocked', vault_path }`. Sie ist
-  der **erste und einzige** Aufruf beim Start; das Frontend rendert vorher nichts. Die
-  Weiche ist genau die aus N11.8.2 (allein die Existenz von `tasks.db.enc` am Pfad aus
-  `config.json` entscheidet). `get_state()` bleibt, wie es ist (Gesamtzustand **nach** dem
-  Entsperren, gesperrt nur `{"locked": true}`); es wird **nicht** um einen dritten Zustand
-  aufgebohrt, damit die G13-Regel "gesperrt gibt `get_state` nichts heraus" scharf bleibt.
-- **Vier neue Methoden fuer Einrichtung und Verwaltung** (Vertraege in B.2):
-  `choose_vault_dir()` (nativer Ordner-Dialog im Backend, prueft Schreibbarkeit, warnt bei
-  Cloud-Pfaden, G32), `create_vault(path, passphrase)` (Pepper + Salt + Argon2-Parameter
-  erzeugen, leere DB, `tasks.db.enc` schreiben, Pfad in `config.json`; danach entsperrt),
-  `change_passphrase(old, new)` (Einstellungen, nur entsperrt) und `reset_vault()`
-  (Lock-Screen, der Ausweg der vergessenen Passphrase).
-- **G13-Allowlist waechst um genau vier Namen:** `get_boot_state`, `choose_vault_dir`,
-  `create_vault`, `reset_vault`. Begruendung: Alle vier muessen **ohne Schluessel**
-  laufen (es gibt noch keinen Tresor, oder die Passphrase ist vergessen) und geben nie
-  Daten heraus; `reset_vault` loescht nur. `change_passphrase` steht bewusst **nicht**
-  drin: es braucht die Schluessel und damit den entsperrten Zustand. Das ist genau der
-  von G13 vorgesehene Weg, eine Methode **bewusst** freizuschalten, statt die
-  Ausnahmenliste driften zu lassen.
-- **`reset_vault()` ist kein eigener Loesch-Pfad.** Es ruft die gemeinsame Sequenz aus
-  N11.11 mit `reason='reset'`: DB schliessen, Schluessel nullen, dann erst
-  `tasks.db.enc` + `.bak` + Vault-Metadaten + DPAPI-Pepper loeschen, `PROFILE_DIR`
-  wischen, danach **nicht** beenden, sondern in das Onboarding springen (Schritte 6 bis 9
-  der Sequenz, kein Schritt 10/11). Im UI ist es wie der Killswitch abgesichert
-  (Bestaetigung, dann `RESET` tippen), erreichbar ueber einen unauffaelligen
-  "Forgot passphrase?"-Link im Lock-Screen.
-- **Die Verlust-Warnung ist Pflichttext mit aktiver Bestaetigung** (B.4, Onboarding-Screen
-  2). Sie nennt **beides**: keine Wiederherstellung bei vergessener Passphrase **und** die
-  Bindung an dieses Windows-Konto (anderer PC / neu aufgesetztes Profil = Datenverlust,
-  auch mit korrekter Passphrase, V2/G18). Ohne gesetzte Checkbox kein Weiter; kein
-  vorangekreuztes Haekchen.
-- **Neue Fehlercodes waren nicht noetig:** zu kurze Passphrase und untauglicher Pfad sind
-  `invalid`, falsche alte Passphrase ist `passphrase` (samt Rate-Limit, N11.4), ein
-  abgebrochener Ordner-Dialog ist `canceled`, ein unerreichbarer oder kaputter Tresor ist
-  `vault` (Fehlerbildschirm N6 mit Wiederholen und Reset). Der Katalog in B.2 bleibt
-  unveraendert gueltig.
-- **Seit 2026-07-15 entschieden (war offen):** das genaue `config.json`-Schema samt Verhalten
-  bei fehlender/korrupter Datei und unerreichbarem Vault-Pfad (Befund U2) steht jetzt
-  vollstaendig in **N11.15**. (Die vier Details des Passphrase-Wechsels, Befund U8, sind seit
-  dem 2026-07-13 entschieden und stehen direkt in N11.3: frisches Salt/Nonce, Pepper
-  bleibt, `.bak` sofort mitziehen, Argon2-Parameter auf G8-Soll heben.)
-
----
-
-### N11.14 Triage des UX/UI-Audits (2026-07-13, S7-Entscheid)
+## ANHANG 1: Entscheidungsregister (N10 + N11 als Protokoll)
+
+*(Umbau-Etappe 3, 2026-07-16: Dieses Register loest die frueheren Nachtrag-Bloecke N2 bis N10 und N11.1 bis N11.15 als reines Aenderungsprotokoll ab. Jede ID ist ein stabiles Etikett (Umbauplan, Abschnitt 4): die Spalte „Norm jetzt in“ zeigt auf den einen normativen Ort; Blocktexte, deren Norm schon im Haupttext stand, liegen wortgleich als Historie in Anhang 3. Neue Entscheidungen bekommen die naechste freie Nummer in derselben Systematik, ihr Inhalt geht sofort in den Vertrag, hier kommt nur die Protokollzeile dazu.)*
+
+| ID | Datum | Thema | Norm jetzt in |
+|---|---|---|---|
+| Kopf UX-Nachtrag | 2026-06-13 | UI durchgehend Englisch; Zielplattform ausschliesslich Windows, keine Mac-Symbole | A.5 (Historie: Anhang 3) |
+| N2 | 2026-06-13 | Persistente Offline-Statusanzeige (UX 4.2, 8.3) | B.4 |
+| N4 | 2026-06-13 | Echter Lock-Screen mit Passphrase, UX-Pflichten (UX 8.1) | B.4 |
+| N5 / W5 | 2026-07-13 | Panik-Flow nur per Maus, kein Panik-Hotkey; `Ctrl+Shift+!` ersatzlos gestrichen | B.5 (Historie: Anhang 3) |
+| N6 / U7 | 2026-07-15 | Entsperr-/Boot-Fehlerbildschirm und entscheidbare Entsperr-Fehlerlogik | B.2 (`unlock()`) + B.4 |
+| N7 | 2026-06-13 | `move_task`/`reorder_lists`; „Clear completed“ gestrichen | B.2 + Phase 7 (Historie: Anhang 3) |
+| N8 | 2026-06-13 | Roadmap-Erweiterungen | Teil D (D.3) |
+| N9 | 2026-06-13 | Startverhalten-Setting; ueberholt durch N11.6 (Fenster startet fest maximiert) | Anhang 3 (ueberholt) |
+| N10.1 | 2026-07-08 | Verstaerkte Sperre („Panik light“), Raum-Bereinigung | B.8.2 |
+| N10.2 | 2026-07-08 | Off-Knopf auf dem Lock-Screen | B.4 |
+| N10.3 | 2026-07-08 | Panik-Endschirm mit Finish/Killswitch | B.4 (Abwaegung: B.10.5) |
+| N10.4 | 2026-07-08 | Verhalten nach dem Killswitch | B.8.7 |
+| N10.5 | 2026-07-08 | Bridge-Erweiterung `quit_app`/`killswitch`, G13-Folgen | B.2 + B.9 (G13) (Historie: Anhang 3) |
+| N11.1.1-N11.1.6 | 2026-07-09 (N11.1.6: 2026-07-13, W15) | Ersatzlos gestrichene Features (Benachrichtigungen, Backups, Meta, Seed, JSON-Export, Faelligkeiten) | A.4 |
+| N11.2 / U10, U12 | 2026-07-09 | Zweistufiger Export (md/txt), Undo nur beim Listen-Loeschen | Phase 7 + B.2 (Historie: Anhang 3) |
+| N11.2.1 / U9 | 2026-07-13 | Undo-Architektur: RAM-Puffer, kein Soft-Delete | B.2 |
+| N11.2.2 / U11 | 2026-07-15 | Randfaelle von `reorder`/`reorder_lists`/`move_task` | B.2 (Validierung: G20) |
+| N11.3 / U8 | 2026-07-09, U8-Details 2026-07-13 | Ersteinrichtung, Passphrase-Regel (nur Mindestlaenge 12), Reset, Passphrase-Wechsel (a bis d) | B.2 (+ B.4 Onboarding, B.7/G8 KDF-Upgrade) |
+| N11.4 | 2026-07-09 | Auto-Sperre-Default und Entsperr-Rate-Limit-Leiter | B.8.3 + B.8.4 |
+| N11.4.1 / U6 | 2026-07-13 | Rate-Limit-Zustand persistiert (config.json, zwei Uhren, persist-before-verify) | B.8.4 (+ B.11) |
+| N11.4.2 / U4 | 2026-07-15 | Definition der „Inaktivitaet“ der Auto-Sperre | B.8.3 |
+| N11.4.3 / U17 | 2026-07-15 | Fest verdrahtete Argon2id-Parameter und der MemoryError-Randfall | B.7 (+ Code `memory` in B.2) |
+| N11.5 / U14, U15 | 2026-07-09, praezisiert 2026-07-15 | Echter Windows-Flugmodus, `set_online`-/`get_wifi_signal`-Vertrag | B.2 (+ B.4; Abhaengigkeiten: Phase 0) |
+| N11.6 / U16, U24 | 2026-07-09, praezisiert 2026-07-15 | Theme folgt Windows, Header, Profil, Fenster maximiert, Ton, Mini-Bounds | B.6 + B.4 (+ B.5 `Ctrl+J`) |
+| N11.7 | 2026-07-09 | Settings-Whitelist neu; Roadmap-Folgen (keine Volltextsuche) | B.6 + G20 (Historie: Anhang 3) |
+| N11.8.1 | 2026-07-09 | Killswitch = reine Datei-Operation | B.8.7 |
+| N11.8.2 | 2026-07-09 | Start-Weiche: allein die Existenz von `tasks.db.enc` entscheidet | B.2 (`get_boot_state`) (Historie: Anhang 3) |
+| N11.8.3 / U3 | 2026-07-09 | Zweitprofil-Spike (neun Fragen) und nativer Fallback | Phase 8 |
+| N11.8.4 | 2026-07-09 | Win+L loest keine App-Sperre aus | B.8.1 (Historie: Anhang 3) |
+| N11.9 / G28 | 2026-07-09 | Beide Verschluesselungs-Schichten, Arbeitskopie nie Klartext, Write-back identisch (U19/U20) | B.7 |
+| N11.10 / W1 | 2026-07-13 | Sperre schaltet nicht mehr offline | B.8.2 |
+| N11.11 (.1-.4) / S5, G35 | 2026-07-13 | `teardown(reason)`: eine Funktion, Soll-Sequenz, Schritt-/Ausgangs-Tabelle | B.8.5 |
+| N11.11.5 (.1-.4) / U5 | 2026-07-13 | Native Dialoge und die aufgeteilte Auto-Sperre | B.8.6 |
+| N11.12 (.1-.3) / S6, G29 | 2026-07-13 | Fehler-Hygiene, Ringpuffer, Logging-Politik | B.2 |
+| N11.13 / U1 | 2026-07-13 | Onboarding-/Tresor-Bridge, dreiwertiger Boot-Zustand | B.2 + B.4 (Historie: Anhang 3) |
+| N11.14 / S7 | 2026-07-13 | Triage des UX/UI-Audits | Anhang 2 |
+| N11.15 (.1-.6) / U2, V8 | 2026-07-13, .5/.6: 2026-07-15 | `config.json`: Schema, Fehlerfaelle, unerreichbarer Tresor, Redirect, Ueberschreib-Schutz | B.11 |
+
+
+
+### Herkunft der Sicherheits-Gates (Einleitungstexte der früheren zwei B.9-Tabellen)
+
+Bis Umbau-Etappe 2 (2026-07-16) standen die Gates in B.9 in zwei Tabellen: dem
+Grundset aus dem Security-Review und der Nachtragstabelle „NACHTRAG: Gates G13 bis
+G35 (Code-Audit + Testlauf vom 2026-06-10, seither fortgeschrieben)". Die beiden
+historischen Einleitungstexte (wann welches Gate kam), wortgleich hierher verschoben:
+
+Zur ersten Tabelle: Aus dem Security-Review (2026-06-08) ergab sich eine klare
+Trennung in „sofort erledigt" und „muss in der jeweiligen Phase erledigt werden".
+
+Zur Nachtragstabelle: Ein vollständiges Code-Audit (Code-Review aller Module plus
+23 automatisierte Checks gegen die echte Bridge-API auf einer Wegwerf-DB) hat
+weitere Pflichtpunkte ergeben. Sie gelten zusätzlich zu den übrigen Gates; die
+Phasen-Abschnitte listen nur noch die Gate-Nummern mit Stichwort und Verweis
+auf diese Tabelle (normative Quelle, siehe Regel oben). Die Tabelle wird seit dem
+Audit fortgeschrieben (behebt Plananalyse W18): G24 wurde mit der
+Microsoft-Integration entfernt, G26 (Screenshot-Schutz, verworfen) und G27 kamen
+später hinzu, G28 (Verschlüsselungs-Beweis) stammt aus N11.9 (2026-07-09)
+und ist hier nur zusammengefasst (Volltext in N11.9). Am 2026-07-13 kamen aus
+der Plananalyse dazu: G29 (Fehler-Hygiene, S6, Volltext in N11.12), G30
+(Bedrohungsmodell, S4, Volltext in **B.10**) und G35 (gemeinsame
+Sperr-/Beenden-Sequenz, S5, Volltext in N11.11). Am 2026-07-15 wurden die
+Angriffsvektoren-Befunde A1 bis A7 der Plananalyse (Teil 5) entschieden und
+eingearbeitet: **G31** (RAM-auf-Platte-Lecks, A1), **G32** (Tresor-Ort und
+Cloud-Warnung, A2), **G33** (Dev-Altdaten, A3) und **G34** (Release-Härtung,
+A4/A6) stehen jetzt als Gates in dieser Tabelle (die Zeile hier ist jeweils der
+normative Volltext); A5 (Frontend-Integrität) ist als Ergänzung in G27
+eingearbeitet, A7 (Fenstertitel) als verbindliche Regel in B.4 (bewusst kein
+eigenes Gate, eine Zeile Regel genügt).
+
+## ANHANG 2: Audit-Status (Triage des UX/UI-Audits)
+
+*(Wortgleich umgezogen in Umbau-Etappe 3 aus „N11.14 Triage des UX/UI-Audits (2026-07-13, S7-Entscheid)“. Register: Anhang 1.)*
 
 *Loest S7 der Plananalyse. Der Bauplan verwies bisher pauschal auf das Audit
 (`Planung/weiteres/UX-UI Verbesserungen.md`, Stand 2026-06-12, "wird separat
@@ -3507,183 +3783,244 @@ gilt vor dem Audit-Dokument: bei Widerspruch gewinnt diese Tabelle.*
 Audit-Punkt umsetzt oder verwirft, aendert **diese** Tabelle (Status + ein Satz). Ein
 Audit-Punkt ohne Zeile hier gilt als nicht entschieden und wird nicht gebaut.
 
----
 
-### N11.15 `config.json`: Schema, Fehlerfaelle, unerreichbarer Tresor (2026-07-13, U2-Entscheid) [Sec]
+## ANHANG 3: Historie / hinfällige Stände
 
-*Loest U2. Die unverschluesselte Konfig wurde in N11.3 (Tresor-Pfad), N11.4.1 (Rate-Limit)
-und N11.10 (Funk-Ausgangszustand) dreimal benutzt, ohne je definiert zu sein. Offen waren:
-Schema samt Versionsfeld, Verhalten bei fehlender/korrupter Datei, Verhalten bei
-unerreichbarem Tresor-Pfad (USB-Stick abgezogen), Wechseldatentraeger-/UNC-Pfade und der
-Store-Python-Redirect (Befund V8).*
+> **Gefüllt (Umbau-Etappen 3 und 5, 2026-07-16):** Hier liegt die Historie: die in
+> Etappe 3 eingedampften Nachtrag-Blöcke, seit Etappe 5 auch die durchgestrichenen
+> bzw. überholten Reste aus dem Baupfad und ANHANG 1 alt (Seed-Daten). Teil A bis C
+> enthält keine hinfälligen Passagen mehr, nur noch Verweise hierher.
 
-#### N11.15.1 Ort, Inhalt, Schema
+### Eingedampfte Nachtrag-Bloecke (Umbau-Etappe 3)
 
-- **Ort:** `%LOCALAPPDATA%\NoaToDo\config.json`, aufgeloest ueber **eine** Hilfsfunktion
-  (`config_path()`), nie hartkodiert.
-- **Inhalt: nur nicht-geheime Startinfos.** Es liegen dort **niemals** Aufgaben-/Listentexte,
-  Passphrase, Schluessel, Pepper, Salt oder Argon2-Parameter (die gehoeren in den
-  Tresor-Header, G16, bzw. in den Credential Manager, G18). Wer die Datei liest, erfaehrt
-  **wo** der Tresor liegt, nicht was drin steht; das ist hingenommen (K1/K3 finden eine
-  `.enc`-Datei ohnehin).
-- **Verbindliches Schema (Version 1):**
+Die folgenden Bloecke sind reine Historie: ihre Norm steht vollstaendig im Haupttext (Zeiger je Zeile im Entscheidungsregister, Anhang 1). Die Blocktexte sind wortgleich hierher verschoben, damit nichts geloescht wird (Umbauplan, G-Erhalt-4).
 
-```json
-{
-  "version": 1,
-  "vault_path": "D:\\Tresor\\tasks.db.enc",
-  "radio_baseline": null,
-  "unlock_ratelimit": { "fails": 0, "stage": 0, "next_try_at": null, "locked_at": null, "duration": 0 }
-}
-```
+#### NACHTRAG (2026-06-13): UX-Pflichten und -Erweiterungen aus dem UX/UI-Audit (Kopf)
 
-- `version` (int, Pflicht): Schema-Version. **Unbekannt oder groesser als bekannt** heisst:
-  eine neuere App hat geschrieben, die Datei wird **nicht** angefasst (siehe N11.15.2).
-- `vault_path` (str, Pflicht): absoluter Pfad auf `tasks.db.enc`.
-- `radio_baseline` (Objekt oder `null`, N11.10): gesetzt **nur**, solange die App den
-  Flugmodus selbst eingeschaltet hat, Form
-  `{ "wifi": true, "bluetooth": true, "set_at": "<UTC-ISO8601>" }`. Beim Wiederherstellen
-  im `teardown` (Schritt 10) wird der Eintrag auf `null` gesetzt. Findet ein Start hier
-  einen Rest (Absturz), stellt er den Funk-Ausgangszustand her und raeumt den Eintrag weg.
-- `unlock_ratelimit` (Objekt, N11.4.1): `{fails, stage, next_try_at, locked_at, duration}`,
-  geloescht nur durch erfolgreiches `unlock()` und durch `reset_vault()`.
-- **Schreiben immer atomar und vollstaendig:** `config.json.tmp` schreiben, `flush()` +
-  `os.fsync()`, dann `os.replace()` (dasselbe Verfahren wie G16). Ein Absturz mitten im
-  Schreiben darf nie eine halbe Datei hinterlassen. Einziger Schreiber ist die eine Instanz
-  (Single-Instance-Mutex, G19).
+Nach dem lokal nutzbaren Meilenstein (Phase 6 + 6.5) wurde ein vollständiges
+UX/UI-Audit erstellt (`Planung/UX-UI Verbesserungen.md`, Stand 2026-06-12). Dieser
+Nachtrag überführt **alle Audit-Punkte, die noch zu bauende Features betreffen**, in
+den Bauplan, damit sie nicht verloren gehen. Reine Sofort-Korrekturen (Mac-Symbole,
+UI-Sprache) wurden am 2026-06-13 direkt im Code erledigt (siehe Entscheidung unten).
+Die verbleibenden **Gegenwarts-Mängel** (z.B. unehrliche Status-/Toast-Texte, fehlende
+Tastaturnavigation, A11y, Voll-Re-Render) sind nicht Teil dieses Nachtrags; sie stehen
+im Audit (Prioritäten P1 bis P3) und werden separat abgearbeitet. Querverweise in der
+Form „(UX x.y)" zeigen auf den jeweiligen Abschnitt im Audit.
 
-#### N11.15.2 Fehlende, korrupte oder zu neue Datei
+**Was bereits im Plan steht (nur Querverweis, hier nicht erneut spezifiziert):**
+Profil-Menü aufräumen (UX 1.3) -> Phase 6.5; Export-Save-Dialog + ehrliches Feedback (UX 1.5)
+-> Phase 7 / Gate G21c; Undo beim Listen-Löschen (UX 1.2, 3.3) -> Phase 6.5 + Phase 7;
+ehrlicher `get_status()` und Status-Modal (UX 1.4, 8.4) -> Gate G22 + Phase 8;
+Auto-Lock-Timeout (UX 7.6) -> B.8; serverseitige Lock-Durchsetzung -> Gate G13
+(Screenshot-Schutz / G26 wurde verworfen, siehe oben). Diese Punkte sind verbindlich
+an den genannten Stellen, hier nur zur Vollständigkeit gelistet.
 
-- **Datei fehlt komplett** (frischer Rechner, nach Reset/Killswitch): **Erststart**, also
-  Onboarding (N11.13). Kein Fehlerbildschirm, das ist der Normalfall.
-- **Datei existiert, ist aber unbrauchbar** (kein gueltiges JSON, `version` unbekannt/zu
-  neu, Pflichtfeld fehlt oder hat den falschen Typ): **kein** stiller Erststart. Die Datei
-  wird **nicht ueberschrieben**, sondern nach `config.json.bad` umbenannt (genau eine
-  Generation), und der Boot endet im **Fehlerbildschirm** (N6) mit dem ehrlichen Text
-  „Konfiguration unlesbar, der Tresor-Pfad ist unbekannt" und **zwei** Auswegen:
-  1. **Tresor suchen**: nativer Datei-Dialog, der Nutzer zeigt auf seine `tasks.db.enc`;
-     der Pfad wird in eine frische `config.json` geschrieben, danach normaler Lock-Screen.
-  2. **Neuen Tresor anlegen**: Onboarding, **mit dem ausdruecklichen Hinweis, dass ein
-     eventuell vorhandener alter Tresor NICHT geloescht wird** und weiter dort liegt, wo er
-     liegt.
-  **Begruendung:** Ein stiller Erststart saehe fuer den Nutzer wie Datenverlust aus und
-  wuerde ihn dazu verleiten, einen zweiten Tresor anzulegen, waehrend der echte unberuehrt
-  auf der Platte liegt. Ehrlichkeit vor Bequemlichkeit.
-- **Ehrliche Konsequenz (steht schon in N11.4.1):** Wer die Datei loeschen **oder
-  beschaedigen** kann, setzt damit auch die Rate-Limit-Leiter zurueck (der `.bad`-Weg oben
-  schreibt nach dem Wiederfinden eine frische, leere Leiter). Das ist hingenommen; genau
-  dieser Angreifer kopiert lieber gleich den Tresor und raet offline (K1). Die Leiter wird
-  nie als Schutz gegen K1 verkauft (N11.4.1).
+#### N5. Phase 8: Panik-Flow nur per Maus, kein Panik-Hotkey (UX 8.2) [Sec]
 
-#### N11.15.3 Tresor-Pfad unerreichbar (USB-Stick weg, Netzlaufwerk down)
+*(Aktualisiert 2026-07-08, siehe N10: der Panik-Flow endet jetzt im Endschirm mit
+Finish/Killswitch, nicht mehr im Lock-Screen. Entschieden 2026-07-13, löst W5 der
+Plananalyse: der Hotkey `Ctrl+Shift+!` ist ersatzlos gestrichen.)*
+- Der volle Panik-Flow (Endschirm, Killswitch) bleibt **bewusst mehrstufig** und nur
+  per Maus über den Rail-Button erreichbar (Kippschalter + Confirm): die Mehrfach-
+  Bestätigung schützt vor versehentlichem Auslösen, gerade weil der Killswitch
+  unwiderruflich ist.
+- **Es gibt keinen Panik- oder Notfall-Hotkey.** Die früher geplante Belegung
+  `Ctrl+Shift+!` (zeitweise als Panik-Auslöser, zuletzt als verstärkte Sperre ohne
+  Rückfrage gedacht) ist ersatzlos entfernt und darf nicht wieder eingeführt werden.
+  Begründung: seit N10 ist ohnehin **jede** Sperre verstärkt (Raum-Bereinigung vor
+  dem Lock-Screen), `Ctrl+L` deckt den „schnell alles zu"-Fall damit vollständig und
+  ohne Datenverlust-Risiko ab; der Panik-Modus mit seinem unwiderruflichen Killswitch
+  gehört bewusst nicht auf die Tastatur. Im Code ist entsprechend kein solcher Hotkey
+  verdrahtet; die Layout-Tücke von `!` auf Nicht-DE-Layouts (U22 der Plananalyse)
+  entfällt damit ebenfalls.
 
-- **Unerreichbar ist NICHT dasselbe wie „kein Tresor".** Ist `vault_path` gesetzt, die Datei
-  aber nicht da (Laufwerk fehlt, Ordner geloescht, Netzlaufwerk offline), fuehrt das
-  **niemals** ins Onboarding, sondern in den **Fehlerbildschirm** (N6): „Tresor nicht
-  erreichbar" plus den Pfad, mit drei Auswegen: **Erneut versuchen** (Stick wieder
-  einstecken, ein Klick), **Pfad neu waehlen** (Datei-Dialog, falls der Tresor umgezogen
-  ist) und **Neuen Tresor anlegen** (Onboarding, wieder mit dem Hinweis, dass der alte
-  Tresor nicht geloescht wird).
-- **Erweiterung von `get_boot_state()` (N11.13):** Der Boot-Zustand ist damit
-  **vierwertig**: `{ state: 'onboarding'|'locked'|'unlocked'|'vault_error', vault_path,
-  reason }` mit `reason` aus `config_damaged`, `vault_unreachable`, `vault_damaged`. Das
-  ist eine Ergaenzung, kein Widerspruch: `get_state()` bleibt zweiwertig (G13), und die
-  drei alten Zustaende behalten ihre Bedeutung. Die Vokabeln sind dieselben wie in der
-  Entsperr-Fehlerlogik (N11.16).
+#### N7. Neue Fähigkeiten mit Bridge-Erweiterung (einplanen, z.B. Phase 7 oder Folge-Iteration)
 
-#### N11.15.4 Wechseldatentraeger, Netz- und UNC-Pfade
+Echte Funktionslücken einer Mehrlisten-App, je mit kleiner Backend-Ergänzung. Kein
+Sicherheitsthema, daher zeitlich flexibel, aber fest eingeplant:
+- **Aufgaben zwischen Listen verschieben (UX 3.7):** neue Bridge-Methode
+  `move_task(id, target_list_id)` (oder `edit_task` um `list_id` erweitern); Auslösung
+  per Drag auf einen Sidebar-Eintrag und per „Move to…" im Kontextmenü. Validierung wie
+  bei `add_task` (Gate G20), Zielposition ans Ende der Ziel-Liste.
+- **Listen umsortieren (UX 3.9):** das Schema hat `lists.position`, aber kein UI. Neue
+  Methode `reorder_lists(ordered_ids)` analog zu `reorder` (gleiche Typprüfung, Gate
+  G20), Drag & Drop in der Sidebar.
+- **„Clear completed" (UX 3.8):** ~~Sammel-Löschen aller erledigten Aufgaben einer
+  Liste, mit Bestätigung bzw. Undo (analog zum Listen-Undo aus Phase 7). Eigene Methode
+  (z.B. `clear_completed(list_id)`), die serverseitig löscht.~~ **wird nicht gebaut**
+  (Entscheidung N11.2/N11.7).
 
-Erlaubt, aber **nur mit Warnung** bei der Wahl (dieselbe Stelle wie die Cloud-Warnung aus
-G32, `choose_vault_dir()`): Bei Wechseldatentraegern (`DRIVE_REMOVABLE`) und Netz-/UNC-Pfaden
-(`\\server\share`, `DRIVE_REMOTE`) warnt der Dialog, dass (a) die App bei fehlendem
-Laufwerk im Fehlerbildschirm landet (N11.15.3), (b) das sichere Ueberschreiben beim
-Killswitch/Reset dort **nicht** zuverlaessig ist (fremdes Dateisystem, Server-Cache,
-Schattenkopien), und (c) die Datei dort fuer andere leichter erreichbar ist (K1). Die
-Warnung ist Pflicht, das Verbot nicht. **Folge fuer G17:** Ein fehlgeschlagener Write-back
-(Stick mitten im Betrieb abgezogen) ist **kein** stiller Datenverlust, sondern fuehrt in den
-N6-Fehlerbildschirm mit der Moeglichkeit, den Tresor an einem anderen Ort zu speichern.
+#### N9. Einstellungen, Vorbereitung künftiger Phasen (UX 7.6)
 
-#### N11.15.5 Store-Python-Redirect (Befund V8)
+~~Ergänzend zu den schon geplanten Settings (Auto-Lock-Timeout B.8): **Startverhalten**
+(maximiert vs. letzte Fenstergröße) als Einstellung vorsehen.~~ **[Überholt durch
+N11.6: das Fenster startet fest maximiert, ohne Setting.]**
+Weiter gültig: Die bestehende Settings-Struktur (Zeile + Segment, B.6) trägt neue Keys
+ohne Umbau; jeder neue Key muss in die `set_setting`-Whitelist aus Gate G20
+aufgenommen werden.
 
-Laeuft die App unter Microsoft-Store-Python (heutiges Entwickler-Setup), werden Schreibzugriffe
-auf `%LOCALAPPDATA%` umgeleitet; `config.json` liegt dann real unter
-`...\Packages\PythonSoftwareFoundation.Python.3.11_*\LocalCache\Local\NoaToDo\`. **Im Prozess
-ist das transparent** (dieselbe API sieht dieselbe Datei), fuer externes Werkzeug und fuer den
-spaeteren `.exe`-Build (Phase 9, **kein** Redirect) nicht. Regeln: (a) Der Pfad wird nur ueber
-`config_path()` aufgeloest, nie hartkodiert, auch nicht in Tools. (b) Es wird **keine
-Migration** gebaut: Wer vom Dev-Python zur `.exe` wechselt, findet keine Konfig, landet also
-im Onboarding und zeigt mit „Tresor suchen" (N11.15.2) auf seine vorhandene `tasks.db.enc`.
-Das ist bewusst so, ein Auto-Import aus einem fremden Paketpfad waere mehr Risiko als Nutzen.
-(c) Dasselbe gilt fuer `PROFILE_DIR` (G14), das denselben Redirect erlebt. (d) **Aufraeumen ja,
-Migration nein (V8, 2026-07-15):** Der Erststart der Phase-9-`.exe` entfernt die bekannten
-alten Redirect-Pfade **einmalig** (den umgeleiteten `NoaToDo\webview`-Ordner und eine dortige
-`config.json`), liest sie aber nie ein; eine `tasks.db.enc` wird dabei **niemals** angefasst
-(der Tresor liegt am vom Nutzer gewaehlten Ort, ein Loeschen waere Datenverlust). Ohne diesen
-Schritt blieben der alte umgeleitete Profilordner und die alte Konfig fuer immer liegen,
-niemand wischt sie je (G14-Luecke).
+#### N10. Verstärkter Lock, Off-Knopf und Panik-Endschirm mit Killswitch (2026-07-08) [Sec] (Kopf und Punkt 5)
 
-#### N11.15.6 Onboarding zeigt auf einen Ordner mit vorhandenem Tresor (Datenverlust-Schutz)
+Entscheidung vom 2026-07-08; ersetzt bzw. präzisiert Teile von B.4, B.8, N5 und
+Phase 8 Punkt 1/2. Die UI-Anteile sind bereits umgesetzt (Stand Phase 6.5); die
+Sicherheits-Anteile (echte Schlüssel, sicheres Wischen) bleiben Pflicht in Phase 8.
 
-**Die Ratestelle (U1-Nachschlag, 2026-07-15):** Das Onboarding laeuft, wenn `config.json`
-fehlt (N11.15.2). Die Tresordatei `tasks.db.enc` kann dann aber physisch trotzdem am alten
-Ort liegen: genau der von N11.15.5 selbst erzeugte Fall (Wechsel Dev-Python zur `.exe`,
-Config weg, Tresor noch da), ebenso nach manuell geloeschter `config.json`. Waehlt der Nutzer
-im Onboarding-Schritt 1 diesen Ordner, war bisher offen, was `create_vault(path, passphrase)`
-tut. Ein blindes „`tasks.db.enc` unter `path` schreiben" wuerde den vorhandenen, verschluesselten
-Tresor **still und unwiderruflich ueberschreiben**, also echten Datenverlust ausloesen und
-zugleich das N11.15.2-Versprechen brechen („ein vorhandener alter Tresor wird NICHT geloescht").
+**5. Bridge-Erweiterung und Phase-8-Folgen.** Neu in B.2: `quit_app()` und
+`killswitch()`. `killswitch()` ist nur aus dem Panik-Endschirm erreichbar; ein
+direkter Aufruf über eine XSS wäre Datenvernichtung per Fernzugriff, die
+`esc()`-Pflicht aus B.9 gilt hier also doppelt. Für Phase 8 gilt: Gate G13 ist als
+**Allowlist** formuliert (`ALLOWED_WHEN_LOCKED = {"unlock", "quit_app", "killswitch",
+"get_state", "get_boot_state", "choose_vault_dir", "create_vault", "reset_vault"}`,
+normative Fassung in B.9); `quit_app()` und `killswitch()` stehen dort
+neben `unlock()` **ausdrücklich als erlaubt** (beide sind destruktiv bzw. beendend,
+geben aber nie Daten preis; der Killswitch soll gerade ohne Passphrase funktionieren).
+Der Phase-8-Killswitch löscht dann `tasks.db.enc` samt `.bak`-Generation und
+Vault-Metadaten (Salt, Pepper-Verweis) direkt, wofür keine Schlüssel nötig sind.
 
-**Entscheidung (Security first, U1):** Ein bestehender Tresor wird beim Anlegen **nie**
-ueberschrieben. Zwei Riegel, Guertel und Hosentraeger:
+#### NACHTRAG N11 (2026-07-09): Entscheidungen aus der Luecken-Klaerung (verbindlich) (Kopf/Vorbemerkung)
 
-- **UI-Weiche in `choose_vault_dir()`:** Der Backend-Dialog prueft, ob im gewaehlten Ordner
-  schon eine `tasks.db.enc` liegt, und meldet `has_vault:true`. Der Onboarding-Screen bietet
-  dann **nicht** „neuen Tresor anlegen" an, sondern nur „**Diesen Tresor oeffnen**": der Pfad
-  wandert in eine frische `config.json`, und der Boot geht in den normalen **Lock-Screen**
-  (dasselbe Ergebnis wie „Tresor suchen", N11.15.2). Wer stattdessen wirklich neu anlegen will,
-  muss einen anderen, leeren Ort waehlen.
-- **Backend-Riegel in `create_vault()`:** Existiert unter `path` schon eine `tasks.db.enc`,
-  bricht die Methode **vor** jedem Schreiben mit `invalid` ab und ruehrt die Datei nicht an.
-  Das faengt jeden Aufruf ab, der an der UI-Weiche vorbeikommt (Bridge-Aufruf von Hand,
-  Renn-Fall, kuenftiger Code-Pfad). Der Schreibvorgang selbst bleibt atomar (`.tmp` +
-  `os.replace`, wie G16/N11.15.1), sodass auch ein Abbruch mittendrin nie eine halbe Datei
-  hinterlaesst.
+Vorbemerkung: Dieser Nachtrag schliesst gezielt alle Stellen, an denen der Plan
+bisher offen war und eine ausfuehrende KI haette raten muessen. Alle Punkte sind
+vom Nutzer bestaetigt und **ueberschreiben** frueher anderslautende Formulierungen
+an den genannten Stellen. Im Zweifel gilt N11. Phasennummerierung nach der aktuellen
+Fassung: Sicherheit = **Phase 8**, Auslieferung/Build = **Phase 9** (die fruehere
+Benachrichtigungs-Phase ist entfallen, siehe N11.1.1).
 
-**Abgrenzung:** Das gilt nur fuer das **Anlegen** (Onboarding/`create_vault`). Der Reset
-(`reset_vault()`) loescht den Tresor bewusst und legt danach neu an, das ist gewollt und kein
-Widerspruch. Das Ueberschreiben beim regulaeren Write-back eines bereits geoeffneten Tresors
-(G16/G17) ist ebenfalls nicht gemeint, dort ist es der Sinn der Sache.
+**Konsolidierungs-Stand (2026-07-13, Plananalyse S3):** Alle von diesem Nachtrag
+(und von N10) ueberschriebenen Stellen im Haupttext sind inzwischen direkt
+korrigiert bzw. ausdruecklich als gestrichen markiert. N10 und N11 dienen seither
+als **Aenderungsprotokoll** (Entscheidung, Datum, Begruendung), nicht mehr als
+vorrangige Korrekturschicht; die Vorrangregel oben bleibt nur als Sicherheitsnetz
+fuer uebersehene Reste. Neue Entscheidungen werden nach der Redaktionsregel in der
+Einleitung sofort an Ort und Stelle eingearbeitet und hier nur noch protokolliert.
 
----
+#### N11.2 Phase 7: Export, Undo, Verschiebe-Features
 
-## TEIL D: Offene Entscheidungen & Erweiterungen
+- **Zweistufiger Export.** Der Rail-Button "Export" (bzw. `Ctrl+E`) speichert **nicht**
+  direkt, sondern oeffnet zuerst eine kleine Pille an der **linken Seite der rechten
+  Rail**. **Schritt 1: Umfang** ("nur aktuelle Liste" oder "alle Listen mit allen
+  Aufgaben"). **Schritt 2: Format** (`md` oder `txt`). Danach der Save-Dialog.
+- **md-Formatierung bei "alle Listen".** Sauber strukturiert: Listennamen als groessere
+  Ueberschrift (z.B. `#`), die einzelnen Aufgaben darunter kleiner (`- [ ]`/`- [x]`).
+  Bei "nur aktuelle Liste" wie bisher.
+- **Undo nur beim Listen-Loeschen** (Toast "List deleted" mit "Undo", ca. 6 s). Einzelne
+  Aufgaben werden weiterhin sofort und ohne Undo geloescht. "Clear completed" wird
+  **nicht** gebaut. **Die verbindliche Architektur (RAM-Puffer, kein Soft-Delete, genau
+  eine Loeschung, Wiederherstellung an alter Position, Verfall beim Sperren/Beenden) steht
+  in N11.2.1.**
+- **N7-Features hier mitbauen:** `move_task(id, target_list_id)` (Drag auf einen
+  Sidebar-Eintrag plus "Move to..."-Kontextmenue) und `reorder_lists(ordered_ids)`
+  (Drag and Drop in der Sidebar). Validierung wie `add_task` (G20). Volltextsuche und
+  "Clear completed" entfallen.
 
-### D.1 Privatsphäre: alles bleibt lokal
+#### N11.7 Settings-Whitelist und Roadmap-Folgen
 
-- **Lokal:** alle Aufgaben, alle Bearbeitungen, die gesamte SQLite-DB. Nichts verlässt
-  je den Rechner; es gibt keinen externen Dienst, keine Cloud-Anbindung und keinen Sync.
-- Im Windows Credential Manager (über `keyring`) liegt nur der DPAPI-Pepper der
-  Schlüsselableitung (siehe G18), keine Aufgabendaten.
+- **Settings-Whitelist (G20) neu:** entfernt werden `notify`, `notifyInApp`,
+  `notifyWindows` (bereits weg) und das ohnehin unbenutzte `toolbar`; hinzu kommen
+  `theme` (`auto`/`light`/`dark`), `sound` (bool), `autoLock` (Minuten, `0` = nie).
+  Weiter gueltig: `accent`, `density`, `sidebar`, `railPinned`, `sidebarWidth`. Der
+  `seeded`-Marker bleibt Backend-Marker (verhindert kuenftiges Demo-Seeding generell,
+  da ohnehin nie geseedet wird). `dark` entfaellt zugunsten von `theme` (N11.6).
+- **N8-Roadmap:** Volltextsuche wird **nicht** gebaut; die Aufgaben-Detailansicht bleibt
+  Roadmap (spaeter); die Meta-Feld-Frage ist durch die Entfernung (N11.1.3) erledigt.
 
-### D.3 Mögliche spätere Erweiterungen (nicht im Kern-Scope)
+#### N11.8 Phase 8: Sicherheits-Widersprueche aufgeloest [Sec] (Kopf, Punkt 2 und Punkt 4)
 
-- Unterpunkte/Checklisten je Aufgabe.
-- Mehrere Akzent-/Theme-Presets, anpassbare Dichte je Liste.
-- **Fälligkeiten, reine Anzeige (nicht im Kern-Scope, siehe N11.1.6).** Falls das je
-  gebaut wird: ein optionales Datum an der Aufgabe, das nur **angezeigt** wird (Chip in
-  der Zeile, evtl. eine Sortierung), **ohne** Erinnerungen, ohne Toasts, ohne
-  Hintergrund-Timer, ohne Wiederholungen, ohne Schlummern. Benachrichtigungen bleiben
-  gestrichen (N11.1.1), und ohne sie wäre eine Fälligkeit nur eine Notiz mit Datum.
-  Ausdrücklich **kein** Auftrag: kein `due_at` im Schema, kein Platzhalter, keine
-  Vorbereitung im Code, bis es einen neuen ausdrücklichen Entscheid gibt.
-- Wiederholende Aufgaben: nur zusammen mit dem obigen Punkt denkbar, heute gestrichen.
+Vier Stellen, an denen sich spaetere Phasen bisher gegenseitig widersprachen. Diese
+Entscheidungen ueberschreiben die genannten Passagen; im Zweifel Security first.
 
-(Volltextsuche und automatische Backups wurden bewusst gestrichen, siehe N11.1.2 und
-N11.7. Fälligkeiten/Erinnerungen sind aus dem Kern-Scope gestrichen, siehe N11.1.6.)
+2. **Start-Weiche eindeutig:** Beim Start entscheidet **allein die Existenz von
+   `tasks.db.enc`** (Pfad aus `config.json`, N11.3): vorhanden -> Lock-Screen (nur
+   Passphrase, N4); fehlt (frischer Rechner, nach Reset, nach Killswitch) -> Onboarding
+   (Speicherort waehlen, Passphrase min. 12, leeren Tresor anlegen; N11.3, N11.1.4).
+   *Praezisiert die Absolut-Formulierung "startet immer im Lock-Screen" in B.8.*
 
----
+4. **Windows-Sitzungssperre (Win+L) loest KEINE App-Sperre aus.** *Ueberschreibt die
+   "Windows-Sperre"-Zeile in der B.8-Tabelle, die B.8-Kernregel und den
+   `WTSRegisterSessionNotification`/`WM_WTSSESSION_CHANGE`-Absatz in B.8/Phase 8; der
+   Platzhalter in `main.py` und in Phase 3 wird entfernt, nicht verdrahtet.* Win+L tut
+   fuer NoaToDo **nichts**. Die verlaessliche Sperre ist allein die **Auto-Sperre nach
+   Inaktivitaet** (N11.4), und die ist **garantiert, auch waehrend der PC gesperrt ist:**
+   ein Hintergrund-Timer (monotone Uhr, eigener Thread) laeuft **unabhaengig von
+   Fensterfokus und Windows-Sitzungszustand** weiter und feuert nach Ablauf des Timeouts
+   (Default 15 min, N11.4), auch wenn der PC zwischenzeitlich per Win+L gesperrt wurde.
+   Kommt der Nutzer zurueck, ist NoaToDo garantiert gesperrt. Ein reiner **Fokuswechsel
+   sperrt nicht** (B.8 bleibt hier gueltig), ebenso wenig Minimieren/Verschieben; **nur**
+   der abgelaufene Timeout sperrt.
 
-## ANHANG 1: Seed-Daten (Startfüllung der DB) [HINFÄLLIG]
+#### N11.13 Einrichtung, Tresor-Verwaltung und der dreiwertige Boot-Zustand (2026-07-13, U1-Entscheid) [Sec]
+
+*Loest U1 der Plananalyse. B.2 nannte sich "vollstaendige Methodenliste", hatte aber
+keine einzige Methode fuer Tresor anlegen, Speicherort waehlen, Passphrase aendern und
+Reset, und `get_state().locked` kann den dritten Boot-Zustand ("es gibt noch keinen
+Tresor", N11.8.2) gar nicht ausdruecken; B.4 hatte keinen Onboarding-Abschnitt. Ohne das
+haette die ausfuehrende KI die halbe Phase 8 frei geraten. Die Vertraege stehen jetzt in
+B.2 (Methoden + Fehlercodes) und B.4 (Screens); dieser Abschnitt haelt die Entscheidungen
+dahinter fest.*
+
+- **Der Boot-Zustand ist dreiwertig, nicht zweiwertig.** Neue Bridge-Methode
+  `get_boot_state()` -> `{ state: 'onboarding'|'locked'|'unlocked', vault_path }`. Sie ist
+  der **erste und einzige** Aufruf beim Start; das Frontend rendert vorher nichts. Die
+  Weiche ist genau die aus N11.8.2 (allein die Existenz von `tasks.db.enc` am Pfad aus
+  `config.json` entscheidet). `get_state()` bleibt, wie es ist (Gesamtzustand **nach** dem
+  Entsperren, gesperrt nur `{"locked": true}`); es wird **nicht** um einen dritten Zustand
+  aufgebohrt, damit die G13-Regel "gesperrt gibt `get_state` nichts heraus" scharf bleibt.
+- **Vier neue Methoden fuer Einrichtung und Verwaltung** (Vertraege in B.2):
+  `choose_vault_dir()` (nativer Ordner-Dialog im Backend, prueft Schreibbarkeit, warnt bei
+  Cloud-Pfaden, G32), `create_vault(path, passphrase)` (Pepper + Salt + Argon2-Parameter
+  erzeugen, leere DB, `tasks.db.enc` schreiben, Pfad in `config.json`; danach entsperrt),
+  `change_passphrase(old, new)` (Einstellungen, nur entsperrt) und `reset_vault()`
+  (Lock-Screen, der Ausweg der vergessenen Passphrase).
+- **G13-Allowlist waechst um genau vier Namen:** `get_boot_state`, `choose_vault_dir`,
+  `create_vault`, `reset_vault`. Begruendung: Alle vier muessen **ohne Schluessel**
+  laufen (es gibt noch keinen Tresor, oder die Passphrase ist vergessen) und geben nie
+  Daten heraus; `reset_vault` loescht nur. `change_passphrase` steht bewusst **nicht**
+  drin: es braucht die Schluessel und damit den entsperrten Zustand. Das ist genau der
+  von G13 vorgesehene Weg, eine Methode **bewusst** freizuschalten, statt die
+  Ausnahmenliste driften zu lassen.
+- **`reset_vault()` ist kein eigener Loesch-Pfad.** Es ruft die gemeinsame Sequenz aus
+  N11.11 mit `reason='reset'`: DB schliessen, Schluessel nullen, dann erst
+  `tasks.db.enc` + `.bak` + Vault-Metadaten + DPAPI-Pepper loeschen, `PROFILE_DIR`
+  wischen, danach **nicht** beenden, sondern in das Onboarding springen (Schritte 6 bis 9
+  der Sequenz, kein Schritt 10/11). Im UI ist es wie der Killswitch abgesichert
+  (Bestaetigung, dann `RESET` tippen), erreichbar ueber einen unauffaelligen
+  "Forgot passphrase?"-Link im Lock-Screen.
+- **Die Verlust-Warnung ist Pflichttext mit aktiver Bestaetigung** (B.4, Onboarding-Screen
+  2). Sie nennt **beides**: keine Wiederherstellung bei vergessener Passphrase **und** die
+  Bindung an dieses Windows-Konto (anderer PC / neu aufgesetztes Profil = Datenverlust,
+  auch mit korrekter Passphrase, V2/G18). Ohne gesetzte Checkbox kein Weiter; kein
+  vorangekreuztes Haekchen.
+- **Neue Fehlercodes waren nicht noetig:** zu kurze Passphrase und untauglicher Pfad sind
+  `invalid`, falsche alte Passphrase ist `passphrase` (samt Rate-Limit, N11.4), ein
+  abgebrochener Ordner-Dialog ist `canceled`, ein unerreichbarer oder kaputter Tresor ist
+  `vault` (Fehlerbildschirm N6 mit Wiederholen und Reset). Der Katalog in B.2 bleibt
+  unveraendert gueltig.
+- **Seit 2026-07-15 entschieden (war offen):** das genaue `config.json`-Schema samt Verhalten
+  bei fehlender/korrupter Datei und unerreichbarem Vault-Pfad (Befund U2) steht jetzt
+  vollstaendig in **N11.15**. (Die vier Details des Passphrase-Wechsels, Befund U8, sind seit
+  dem 2026-07-13 entschieden und stehen direkt in N11.3: frisches Salt/Nonce, Pepper
+  bleibt, `.bak` sofort mitziehen, Argon2-Parameter auf G8-Soll heben.)
+
+
+### Durchgestrichene und überholte Reste aus dem Baupfad (Umbau-Etappe 5)
+
+Die folgenden Passagen sind wortgleich hierher verschoben (Umbauplan, Etappe 5);
+an der Ursprungsstelle steht nur noch ein Verweis auf Anhang 3.
+
+**Aus B.8.2 (Verstärkte Sperre), der durch N11.10 gestrichene Alt-Wortlaut:**
+
+**[Gestrichen durch N11.10: „offline schalten" und „Offline bleibt die App, bis der
+Nutzer es bewusst wieder einschaltet." Die Sperre fasst den Online-Zustand nicht mehr
+an; nach dem Entsperren gilt der vorherige Zustand unverändert weiter.]**
+
+**Aus D.3 (Roadmap-Erweiterungen, Etikett N8), die zwei hinfälligen Listenpunkte:**
+
+- **Volltextsuche/Filter (UX 7.2):** ~~`Ctrl+F`-Overlay mit Fuzzy-Filter~~ **wird nicht
+  gebaut** (Entscheidung N11.7).
+- **Meta-Feld benennen/strukturieren (UX 7.3):** ~~erledigt~~ **hinfällig**: das
+  Freitext-`meta` wurde ersatzlos entfernt (N11.1.3).
+
+### ANHANG 1 alt: Seed-Daten (Startfüllung der DB) [HINFÄLLIG]
 
 > **Hinfällig seit N11.1.4:** Es werden **keine** Demo-Seed-Daten mehr eingespielt; ein
 > frischer Tresor startet immer leer. Dieser Anhang bleibt nur als historische Referenz
@@ -3716,7 +4053,7 @@ Beim ersten Start einspielen (entspricht dem Konzept), alle Listen sind rein lok
     „Read 24 books this year", „Visit grandparents monthly",
     „Plant a small herb garden"
 
-## ANHANG 2: Icon-Set
+## ANHANG 4: Icon-Set
 
 Das Konzept bringt ein eigenes, konsistentes Line-Art-Icon-Set mit (24er-Grid,
 Strichstärke 1.7, runde Enden). Diese SVG-Pfade **1:1 aus dem Konzept übernehmen**
@@ -3747,7 +4084,7 @@ fertigen Phase ist eine Einladung, von vorne zu bauen.)*
 - [ ] 🔒 G30 (Doku, **vor** Phase 8): Bedrohungsmodell **B.10** gelesen und beim Bauen zugrunde gelegt (Angreiferklassen K1-K6, Nicht-Ziele, Voraussetzungen; Abschnitt ergänzt 2026-07-13 aus Plananalyse S4). Jedes neue Gate trägt seine Klasse in B.10.6 nach
 - [ ] Phase 8, Lock / Emergency / Doppel-Kaskade AES-256 + ChaCha20 (B.7) **+ 🔒 G6 (In-Memory-DB), G7 (Hex-Raw-Key), G8 (Argon2id-Kosten; Passphrase nur Mindestlänge 12, kein Stärkemesser, N11.3), 🔴 G9 (`DEV_AES_KEY` entfernen), 🔴 G13 (Lock serverseitig), G14-Rest (PROFILE_DIR sicher wischen bei lock/panic/quit, **Fenster-X = gleicher sicherer Beenden-Pfad wie `quit_app()`**; fester Ordner + Altlasten-Wisch ✅ 2026-06-20), G15 (HKDF/kein Hash), G16 (.enc-Format), G17 (Write-back), G18 (DPAPI-Pepper), G25 (RAM-Hygiene), G28 (Verschlüsselungs-Beweis, N11.9), G31 (RAM-auf-Platte-Lecks: BitLocker-Anzeige, `VirtualLock`, keine Dump-Dateien; A1, 2026-07-15), G32 (Tresor-Ort-Default + Cloud-Warnung; A2, 2026-07-15), G33 (Dev-Altdaten sicher entsorgen; A3, 2026-07-15), 🔴 G35 (eine gemeinsame `teardown(reason)`-Sequenz für alle Ausgänge, N11.11)** (G19 Single-Instance ✅ 2026-06-20 vorgezogen)
 - [ ] Phase 9, Auslieferung + Tests + Build (portable `NoaToDo.exe`, PyInstaller/Nuitka, WebView2-Runtime, Erststart auf fremdem Rechner) **+ 🔒 G27 (Binary-Härtung + Frontend-Integritäts-Manifest, A5 2026-07-15), G34 (Release-Härtung: `NOATODO_DEBUG` wirkungslos, DevTools/Accelerator-Keys/Kontextmenü aus; Sofort-Teil `text_select=False` mit Termin 2026-07-20; A4/A6, 2026-07-15), G11 (Hash-gepinnter Build), G29-Buildprüfung (kein Debug-Modus, kein Logfile, N11.12.2)**
-- [ ] UX-Nachtrag 2026-06-13 (Abschnitt vor TEIL D): N2 Offline-Statuspille, N4 Lock-Screen-Passphrase-UX (8), N5 Panik nur per Maus, kein Hotkey (Entscheid 2026-07-13), N6 Entsperr-Fehlerbildschirm (8), N7 move_task/reorder_lists (Phase 7; clear_completed gestrichen), N8 Roadmap (D.3), N9 Fenster startet maximiert (N11.6), N10 verstärkter Lock + Off-Knopf + Killswitch (UI ✅ 2026-07-08, Sicherheits-Rest Phase 8), N11 Lücken-Klärung 2026-07-09 (verbindlich), N11.10 Sperre schaltet nicht mehr offline (2026-07-13, W1-Entscheid), N11.11 gemeinsame Sperr-/Beenden-Sequenz + Gate G35 (2026-07-13, S5-Entscheid), N11.12 Fehler-Hygiene + Fehlercode-Katalog + Logging-Politik + Gate G29 (2026-07-13, S6-Entscheid), N11.14 Triage des UX/UI-Audits (2026-07-13, S7-Entscheid; **die Triage-Tabelle ist der Status des Audits, nicht das Audit-Dokument**), N11.13 Onboarding-/Tresor-Bridge + dreiwertiger Boot-Zustand + Onboarding-Screens (2026-07-13, U1-Entscheid)
+- [ ] UX-Nachtrag 2026-06-13 (Normen in den Verträgen; Protokoll: Anhang 1, Historie: Anhang 3): N2 Offline-Statuspille, N4 Lock-Screen-Passphrase-UX (8), N5 Panik nur per Maus, kein Hotkey (Entscheid 2026-07-13), N6 Entsperr-Fehlerbildschirm (8), N7 move_task/reorder_lists (Phase 7; clear_completed gestrichen), N8 Roadmap (D.3), N9 Fenster startet maximiert (N11.6), N10 verstärkter Lock + Off-Knopf + Killswitch (UI ✅ 2026-07-08, Sicherheits-Rest Phase 8), N11 Lücken-Klärung 2026-07-09 (verbindlich), N11.10 Sperre schaltet nicht mehr offline (2026-07-13, W1-Entscheid), N11.11 gemeinsame Sperr-/Beenden-Sequenz + Gate G35 (2026-07-13, S5-Entscheid), N11.12 Fehler-Hygiene + Fehlercode-Katalog + Logging-Politik + Gate G29 (2026-07-13, S6-Entscheid), N11.14 Triage des UX/UI-Audits (2026-07-13, S7-Entscheid; **die Triage-Tabelle ist der Status des Audits, nicht das Audit-Dokument**), N11.13 Onboarding-/Tresor-Bridge + dreiwertiger Boot-Zustand + Onboarding-Screens (2026-07-13, U1-Entscheid)
 
 ### 🔒 Sicherheits-Gates auf einen Blick (Details in B.9)
 
