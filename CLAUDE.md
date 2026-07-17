@@ -35,7 +35,7 @@ A change that leaves the plan out of sync is not finished.
 
 ## Project status
 
-Locally-usable milestone reached (Phases 1 to 6 of the Bauplan, plus the Phase 6.5 UX/security follow-ups: inline task edit via double-click, task delete via the rail trash button (acts on the selected task; **there is no per-task hover trash on the card**, `.t-del` and the `del-task` handler are unused leftovers, corrected 2026-07-13, Plananalyse S7), click-to-select tasks, hardened single-task copy via `copy_task` (gate G23: backend-side Win32 clipboard, excluded from Win+V history and cloud clipboard, auto-clear after 60 s), Ctrl+C app shortcut removed entirely, contextual rail pencil (selected task: inline edit; otherwise: rename list), mini mode always-on-top). Implemented: `db.py`, `api.py`, `main.py`, `frontend/index.html`, `frontend/style.css`, `frontend/app.js`.
+Locally-usable milestone reached (Phases 1 to 6 of the Bauplan, plus the Phase 6.5 UX/security follow-ups: inline task edit via double-click, task delete via the rail trash button (acts on the selected task; **there is no per-task hover trash on the card** and none will be added, decided 2026-07-17 with Phase 7; the unused `.t-del`/`del-task`/`.t-grip`/`.title-row`/`.airplane-pill` leftovers were deleted, Plananalyse S7/Audit 1.6), click-to-select tasks, hardened single-task copy via `copy_task` (gate G23: backend-side Win32 clipboard, excluded from Win+V history and cloud clipboard, auto-clear after 60 s), Ctrl+C app shortcut removed entirely, contextual rail pencil (selected task: inline edit; otherwise: rename list), mini mode always-on-top). Implemented: `db.py`, `api.py`, `main.py`, `frontend/index.html`, `frontend/style.css`, `frontend/app.js`.
 
 Screenshot protection (gate G26, `SetWindowDisplayAffinity` / `WDA_EXCLUDEFROMCAPTURE`) is **removed from the code and should stay removed** (there is no screenshot code anywhere in `main.py` or `backend/`; commit 45820c2 took out the last attempt). It caused recurring problems: on some GPU/driver combos the affinity flag blocks WebView2 from rendering at all (window stays white / "not responding"), and its startup wiring previously deadlocked the message loop (a blocking `_get_hwnd(window, wait=True)` plus a cross-thread native call on the on_start worker thread). It also blacks out the window in legitimate screen sharing/recording and does nothing against a phone camera. Do not reintroduce it.
 
@@ -252,9 +252,11 @@ IDs: local items use `'l'+uuid` (lists) or `'t'+uuid` (tasks).
 ```js
 state = {
   lists, activeId, settings, online, locked,
-  menu,            // 'profile' | null
   modal,           // 'status' | 'rename' | 'delete' | 'shortcuts' | 'settings' | null
+                   // (the former `menu`/'profile' state and the dead profile menu were removed 2026-07-17, Phase 7)
   ctxList,         // right-click list context menu: { id, x, y } | null
+  ctxTask,         // right-click task context menu "Move to…": { id, x, y } | null
+  exportPill,      // two-step export pill: { step:'scope'|'format', scope } | null
   renamingId,      // list being renamed inline (sidebar pill) | null
   confirmDeleteId, // list whose inline delete confirmation pill is open | null
   listEditDock,    // inline rename/delete shown in the bottom dock instead of the sidebar

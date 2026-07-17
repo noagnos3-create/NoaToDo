@@ -82,7 +82,6 @@ const ACCENTS = ['#d97757', '#c75d3a', '#5a9d6b', '#4a86c5', '#d4a23c', '#a66a9c
 // ===========================================================================
 let state = {
   lists: [], activeId: null, settings: {}, online: true, locked: false,
-  menu: null,        // 'profile'
   modal: null,       // 'status' | 'rename' | 'delete' | 'shortcuts' | 'settings'
   ctxList: null,     // Rechtsklick-Kontextmenue einer Liste: { id, x, y } | null
   ctxTask: null,     // Rechtsklick-Kontextmenue einer Aufgabe ("Move to...", N11.2): { id, x, y } | null
@@ -474,19 +473,12 @@ function renderNetBtn() {
     + `<span class="tip">${label}<span class="k">G</span></span></button>`;
 }
 
-function renderProfileMenu() {
-  const I = Icons;
-  return `
-    <div class="menu" style="right:6px" data-keep>
-      <div class="menu-head">
-        <span class="avatar" style="width:32px;height:32px">NA</span>
-        <span class="n-body"><b style="font-size:13px">Noa Andersen</b><small class="mono" style="color:var(--text-faint)">local</small></span>
-      </div>
-      <button class="menu-item">${I.User} Account</button>
-      <button class="menu-item">${I.Shield} Privacy &amp; data</button>
-      <button class="menu-item">${I.Download} Export database</button>
-    </div>`;
-}
+// Das fruehere Profil-Menue (hartkodierter Name "Noa Andersen", tote Eintraege
+// Account/Privacy/Export database) wurde in Phase 7 komplett entfernt: es war
+// unerreichbarer toter Code, im Header existiert kein Avatar/Trigger (Audit,
+// Phase 6.5 Pflichtpunkt "Profil-Menue aufraeumen"). Der Zielzustand, falls der
+// Header nach N11.6 einen Avatar bekommt, steht im Bauplan (N11.6, U24):
+// nur echte Funktionen ("Export database" = Alle-Listen-Export, Settings-Link).
 
 // Kontextmenue einer Liste (Rechtsklick in der Sidebar). Frei positioniert am
 // Cursor (position:fixed), data-keep schuetzt es vor dem Auto-Schliessen.
@@ -1387,7 +1379,7 @@ async function doMini(flag) {
   state.addingTask = false;
   if (state.mini) {
     // Im Mini-Modus alles Überlagernde schließen, damit nur die Liste bleibt.
-    state.focus = false; state.menu = null; state.modal = null;
+    state.focus = false; state.modal = null;
     state.adding = false; state.exportPill = null;
   }
   render();
@@ -1460,7 +1452,7 @@ function onMouseMove(e) {
 function clearWorkspace() {
   state.lists = [];
   state.activeId = null;
-  state.menu = null; state.modal = null; state.ctxList = null; state.ctxTask = null;
+  state.modal = null; state.ctxList = null; state.ctxTask = null;
   state.exportPill = null;
   state.renamingId = null; state.confirmDeleteId = null; state.listEditDock = false;
   state.adding = false; state.addingTask = false; state.doneOpen = false;
@@ -1634,9 +1626,6 @@ function clearToasts() {
 function closeMenusIfOutside(e, a) {
   let changed = false;
   const act = a ? a.dataset.act : null;
-  if (state.menu && !e.target.closest('[data-keep]') && act !== 'open-profile') {
-    state.menu = null; changed = true;
-  }
   if (state.ctxList && !e.target.closest('.list-ctx')) {
     state.ctxList = null; changed = true;
   }
@@ -1685,7 +1674,6 @@ async function onClick(e) {
       if (wasFocus) render(); else applyChrome();
       break;
     }
-    case 'open-profile': state.menu = state.menu === 'profile' ? null : 'profile'; render(); break;
     case 'select-list':
       // Klick auf die bereits ausgewaehlte Liste schliesst sie wieder (zurueck
       // zur leeren Arbeitsflaeche). Sonst die angeklickte Liste oeffnen.
@@ -1720,9 +1708,10 @@ async function onClick(e) {
       render(); break;
     }
     case 'new-list-show': state.adding = true; render(); break;
-    case 'settings': state.menu = null; state.modal = 'settings'; render(); break;
+    case 'settings': state.modal = 'settings'; render(); break;
     case 'toggle-task': await toggleTask(id); break;
-    case 'del-task': await deleteTask(id); break;
+    // 'del-task' entfernt (Phase 7, Audit 1.6/S7): es gab nie einen Hover-
+    // Papierkorb auf der Karte, geloescht wird ueber die Rail (tb-delete).
     case 'toggle-done': state.doneOpen = !state.doneOpen; render(); break;
     case 'focus-newtask': { const i = document.getElementById('new-task-input'); if (i) i.focus(); break; }
     case 'dock-toggle': {
@@ -1772,7 +1761,7 @@ async function onClick(e) {
     case 'tb-mini': if (!state.mini && !activeList()) break; await doMini(!state.mini); break;
     case 'tb-focus':
       if (!state.focus && !activeList()) break;
-      state.focus = !state.focus; state.menu = null; render(); break;
+      state.focus = !state.focus; render(); break;
     case 'rail-pin': toggleRailPin(); break;
     case 'tb-export': toggleExportPill(); break;
     case 'export-close': state.exportPill = null; render(); break;
@@ -1910,7 +1899,6 @@ function onContextMenu(e) {
     const y = Math.min(e.clientY, window.innerHeight - 300);
     state.ctxTask = { id: taskCard.dataset.taskId, x, y };
     state.ctxList = null;
-    state.menu = null;
     render();
     return;
   }
@@ -1921,7 +1909,6 @@ function onContextMenu(e) {
     const y = Math.min(e.clientY, window.innerHeight - 100);
     state.ctxList = { id: item.dataset.id, x, y };
     state.ctxTask = null;
-    state.menu = null;
     render();
     return;
   }
@@ -1935,7 +1922,6 @@ function onContextMenu(e) {
     const y = r.top - 8;
     state.ctxList = { id: state.activeId, x, y, fromDock: true };
     state.ctxTask = null;
-    state.menu = null;
     render();
     return;
   }
@@ -1959,7 +1945,7 @@ function onKeyGlobal(e) {
   }
   if (e.key === 'Escape') {
     if (state.mini) { doMini(false); return; }
-    state.menu = null; state.modal = null;
+    state.modal = null;
     state.focus = false; state.adding = false; state.addingTask = false;
     state.editingId = null; state.selectedId = null; state.ctxList = null; state.ctxTask = null;
     state.exportPill = null;

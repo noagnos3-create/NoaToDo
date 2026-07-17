@@ -617,25 +617,14 @@ input { font: inherit; }
   min-height: 100%; display: flex; flex-direction: column;
 }
 
-.title-row { display: flex; align-items: flex-start; gap: 16px; margin-bottom: 4px; }
+/* .title-row entfernt (Phase 7, Audit 1.6: nie gerendert). */
 .list-title { font-size: 32px; font-weight: 700; letter-spacing: -.025em; line-height: 1.1; }
 .title-meta { display: flex; align-items: center; gap: 10px; margin: 10px 0 6px; color: var(--text-faint); }
 .title-meta .tag { color: var(--text-faint); }
 .title-meta .sep { width: 3px; height: 3px; border-radius: 50%; background: var(--text-faint); }
 
-/* airplane / offline banner */
-.airplane-pill {
-  display: inline-flex; align-items: center; gap: 9px;
-  padding: 7px 13px 7px 11px; border-radius: 999px;
-  background: var(--accent-wash);
-  border: 1px solid var(--accent-line);
-  color: color-mix(in oklab, var(--accent) 70%, var(--text));
-  font-family: var(--font-mono); font-size: 12px; font-weight: 600;
-  cursor: pointer; transition: transform .12s;
-}
-.airplane-pill:hover { transform: translateY(-1px); }
-.airplane-pill svg { width: 16px; height: 16px; }
-.airplane-pill.online { background: var(--secure-wash); border-color: color-mix(in oklab, var(--secure) 35%, transparent); color: var(--secure); }
+/* .airplane-pill entfernt (Phase 7, Audit 1.6: nie gerendert; der Online/
+   Offline-Umschalter ist der Netz-Knopf der Tool-Rail). */
 
 .banner-row { display: flex; justify-content: flex-end; margin-bottom: 18px; }
 
@@ -680,9 +669,8 @@ input { font: inherit; }
 .task .check:hover { border-color: var(--accent); }
 .task .check svg { width: 12px; height: 12px; }
 .task .t-text { flex: 1; font-size: var(--task-fs); font-weight: 500; }
-.task .t-grip { color: var(--text-faint); opacity: 0; transition: opacity .14s; }
-.task:hover .t-grip { opacity: .6; }
-.task .t-grip svg { width: 15px; height: 15px; }
+/* .t-grip entfernt (Phase 7, Audit 1.6: nie gerendert, Drag geht ueber die
+   ganze Karte). */
 
 .task.done { background: transparent; border-style: dashed; }
 .task.done .check { background: var(--secure); border-color: var(--secure); color: #fff; }
@@ -1396,17 +1384,9 @@ input { font: inherit; }
    NoaToDo-Ergänzung Phase 6.5 (nicht aus dem Konzept): Inline-Bearbeiten
    und Einzel-Löschen von Aufgaben. Nutzt nur bestehende Tokens.
    =========================================================================== */
-.task .t-del {
-  appearance: none; border: 0; background: transparent; cursor: pointer;
-  flex-shrink: 0; display: grid; place-items: center;
-  width: 22px; height: 22px; border-radius: 6px; padding: 0;
-  color: var(--text-faint); opacity: 0;
-  transition: opacity .14s, color .14s, background .14s;
-}
-.task:hover .t-del { opacity: .55; }
-.task .t-del:hover { opacity: 1; color: var(--danger);
-  background: color-mix(in oklab, var(--danger) 12%, transparent); }
-.task .t-del svg { width: 14px; height: 14px; }
+/* .t-del entfernt (Phase 7, Audit 1.6 / Plananalyse S7: es gab NIE einen
+   Hover-Papierkorb auf der Karte; geloescht wird ueber die Rail. Entscheid
+   2026-07-17: es wird auch keiner nachgeruestet.) */
 
 .task.editing { border-color: var(--accent-line); box-shadow: var(--shadow); }
 .task.editing .edit-text {
@@ -1431,7 +1411,6 @@ input { font: inherit; }
   width: 3px; border-radius: 99px; background: var(--accent);
 }
 .task.selected .t-text { color: var(--text); }
-.task.selected .t-grip, .task.selected .t-del { opacity: .55; }
 
 /* --- Phase 7 (N7/N11.2): Drag & Drop fuer Listen + Aufgaben-Verschieben --- */
 /* Gezogener Sidebar-Eintrag (reorder_lists): halbtransparent, solange er

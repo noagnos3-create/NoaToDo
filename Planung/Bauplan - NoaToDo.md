@@ -2828,9 +2828,11 @@ seit dem 2026-06-10 fertig und gehärtet (`copy_task`, siehe Punkt 5 unten).
    Hover auf der Karte". Das war **nie** so gebaut: `renderTask` (`app.js`) rendert
    keinen Papierkorb, die CSS-Klasse `.t-del` und der `del-task`-Handler sind
    ungenutzte Reste (Audit 1.6). Der Plan behauptete damit etwas, das der Code nicht
-   tut. **Verbindlicher Stand: Löschen über die Rail.** Ob ein Hover-Papierkorb auf der
-   Karte nachgerüstet wird (Audit 1.6/3.4, würde die Entdeckbarkeit verbessern), ist ein
-   **offener UX-Punkt für Phase 7**, kein umgesetzter Stand.
+   tut. **Verbindlicher Stand: Löschen über die Rail.** Der offene UX-Punkt, ob ein
+   Hover-Papierkorb auf der Karte nachgerüstet wird (Audit 1.6/3.4), ist in Phase 7
+   entschieden (2026-07-17): **nein**, es bleibt bei der Rail-Löschung (eine einzige,
+   bewusste Löschgeste; die ungenutzten Reste `.t-del`/`del-task`-Handler sowie
+   `.t-grip`/`.title-row`/`.airplane-pill` wurden gelöscht, Audit 1.6).
 3. **`Strg+C` als App-Shortcut ersatzlos entfernt** (zweiter Schritt am selben
    Tag, ersetzt die anfängliche "nur ohne Textauswahl"-Variante): Kopiert wird
    nur noch gezielt über den Rail-Button, siehe Punkt 5. Das normale Kopieren
@@ -2868,6 +2870,12 @@ seit dem 2026-06-10 fertig und gehärtet (`copy_task`, siehe Punkt 5 unten).
 - **Profil-Menü aufräumen:** Das Profil-Menü zeigt den hartkodierten Namen
   "Noa Andersen" und tote Einträge (Account, Privacy & data, Export database).
   Pflicht: tote Einträge entweder funktional machen oder entfernen.
+  **Erledigt 2026-07-17 (entfernt):** das Menü war komplett unerreichbarer toter
+  Code (im Header existiert kein Avatar/Trigger, `renderProfileMenu` wurde nie
+  aufgerufen) und wurde samt `state.menu`/`open-profile` restlos entfernt. Der
+  Zielzustand, falls der Header nach N11.6 wieder einen Avatar bekommt, bleibt
+  die dortige Eindampf-Entscheidung (nur echte Funktionen: "Export database" =
+  Alle-Listen-Export, optional Settings-Link).
 - **Export-Save-Dialog (Phase 7):** siehe Gate G21c. **Erledigt 2026-07-17** (mit der
   G21-Umsetzung in Phase 7).
 
@@ -3774,7 +3782,7 @@ gilt vor dem Audit-Dokument: bei Widerspruch gewinnt diese Tabelle.*
 | 1.3 Glocke + Profil-Menue (tot, Fake-Daten) | ❌/🟡 gemischt | Glocke ist **hinfaellig** (Benachrichtigungen ersatzlos entfernt, 2026-07-09); das Profil-Menue ist erreichbar, aber seine toten Eintraege und der hartkodierte Name bleiben **gueltig** (Phase 6.5 "Profil-Menue aufraeumen"). |
 | 1.4 Status-Modal mit Fantasiewerten **[Sec]** | 🔵 eingeplant | Ist Gate **G22** (ehrlicher `get_status()`, sofort/Phase 7); ergaenzt um den G29-Ringpuffer ("Recent errors", N11.12). |
 | 1.5 Export meldet Erfolg ohne Datei | ✅ erledigt (2026-07-17) | Gate **G21c** umgesetzt: echter Save-Dialog, Datei wird wirklich geschrieben, Toast nur nach Schreiberfolg, Abbruch still (`canceled`); Format `md`/`txt` (N11.1.5), JSON hinfaellig. |
-| 1.6 CSS-/Handler-Leichen (`.t-del`, `.t-grip`, `.title-row`, `.airplane-pill`) | 🟡 gueltig (bestaetigt 2026-07-13) | Am Code geprueft: `renderTask` rendert **keinen** Papierkorb; `.t-del` + `del-task`-Handler sind Reste (siehe die Korrektur in Phase 6.5 Punkt 2). Pro Element in Phase 7 entscheiden: rendern oder loeschen. |
+| 1.6 CSS-/Handler-Leichen (`.t-del`, `.t-grip`, `.title-row`, `.airplane-pill`) | ✅ erledigt (2026-07-17) | Entscheid Phase 7: **loeschen**, alle vier CSS-Bloecke plus `del-task`-Handler entfernt; ein Hover-Papierkorb wird nicht nachgeruestet (Loeschen bleibt bewusst ueber die Rail, S7). |
 | 1.7 Neue-Liste-Feld unsichtbar bei geschlossener Sidebar | 🟡 gueltig | Die Taste heisst heute `Ctrl+Shift+N` (B.5), der Bug ist derselbe: sie setzt `state.adding = true`, ohne die Sidebar zu oeffnen (`app.js`), das Feld liegt dann unsichtbar hinter der zugeklappten Sidebar. |
 | 2.1 Sprachmix DE/EN | ✅ erledigt | UI ist durchgehend englisch, deutsche `title`-Tooltips gibt es nicht mehr (am Code geprueft). |
 | 2.2 Mac-Symbole (⌘) | ✅ erledigt | Ueberall `Ctrl`/`Shift`. |
@@ -3784,7 +3792,7 @@ gilt vor dem Audit-Dokument: bei Widerspruch gewinnt diese Tabelle.*
 | 3.1 `Esc` raeumt alles gleichzeitig ab | 🟡 gueltig | Gestaffeltes `Esc` (Modal -> Eingabe -> Auswahl -> Fokus/Mini) ist weiter offen; B.5 beschreibt heute bewusst das Alles-auf-einmal-Verhalten, eine Aenderung muss B.5 mitziehen. |
 | 3.2 Blur legt eine Liste an | 🟡 gueltig | Am Code bestaetigt (`app.js`, `blur` committet das Neue-Liste-Feld): Wegklicken erzeugt ungewollt eine Liste. |
 | 3.3 Kein Undo, nirgends | 🔵/❌ entschieden | Undo gibt es **nur** beim Listen-Loeschen (Phase 7, N11.2); Undo fuer Tasks/Abhaken/Umbenennen ist **hinfaellig**. |
-| 3.4 Doppelklick/Klick sind unsichtbare Konventionen | 🟡 gueltig (halb erledigt) | Maus-Gesten stehen im Shortcuts-Modal (erledigt); die Hover-Aktionen auf der Karte bleiben offen (siehe 1.6). |
+| 3.4 Doppelklick/Klick sind unsichtbare Konventionen | ✅ erledigt/entschieden (2026-07-17) | Maus-Gesten stehen im Shortcuts-Modal; Hover-Aktionen auf der Karte kommen **nicht** (Entscheid mit 1.6: Loeschen bleibt ueber die Rail). |
 | 3.5 Kein Rechtsklick-Kontextmenue | ✅ erledigt (2026-07-17) | Sidebar-Listen: `ctxList`; Task-Karten: „Move to…"-Kontextmenue (`ctxTask`, Phase 7/N11.2). |
 | 3.6 Drag ohne Affordance/Alternative | 🟡 gueltig (reduziert) | Sidebar-Eintraege zeigen als Drop-Ziel jetzt einen Akzent-Rahmen (`.drop-target`); Griff-Affordance und Tastatur-Alternative fehlen weiterhin. |
 | 3.7 Aufgaben zwischen Listen verschieben | ✅ erledigt (2026-07-17) | `move_task(id, target_list_id)` umgesetzt (Phase 7, N7/N11.2; Drag auf Sidebar-Eintrag + „Move to…"-Kontextmenue). |
