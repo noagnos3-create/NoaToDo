@@ -82,7 +82,7 @@ const ACCENTS = ['#d97757', '#c75d3a', '#5a9d6b', '#4a86c5', '#d4a23c', '#a66a9c
 // ===========================================================================
 let state = {
   lists: [], activeId: null, settings: {}, online: true, locked: false,
-  modal: null,       // 'status' | 'rename' | 'delete' | 'shortcuts' | 'settings'
+  modal: null,       // 'status' | 'rename' | 'shortcuts' | 'settings'
   ctxList: null,     // Rechtsklick-Kontextmenue einer Liste: { id, x, y } | null
   ctxTask: null,     // Rechtsklick-Kontextmenue einer Aufgabe ("Move to...", N11.2): { id, x, y } | null
   exportPill: null,  // zweistufige Export-Pille (N11.2): { step:'scope'|'format', scope:'list'|'all' } | null
@@ -623,23 +623,6 @@ function renderModal() {
             <button class="btn btn-primary" data-act="do-rename">Save</button>
           </div>
         </div>`);
-    case 'delete': {
-      const selTask = state.selectedId && list
-        ? [...(list.open || []), ...(list.done || [])].find((t) => t.id === state.selectedId)
-        : null;
-      return scrim(`
-        <div class="modal">
-          <div class="modal-body">
-            <div class="modal-icon danger">${I.Trash}</div>
-            <h3>Delete task?</h3>
-            <p>${selTask ? `&ldquo;${esc(selTask.text)}&rdquo;` : 'No task selected.'}</p>
-          </div>
-          <div class="modal-actions">
-            <button class="btn" data-act="modal-close">Cancel</button>
-            ${selTask ? `<button class="btn btn-danger" data-act="do-delete">Delete</button>` : ''}
-          </div>
-        </div>`);
-    }
     case 'shortcuts': {
       // Anzeige-Vollstaendigkeit nach Bauplan B.5 (einzige Wahrheit): auch Esc und
       // ? selbst listen, Maus-Gesten als eigene Sektion, Rail-only-Hinweis unten.
@@ -1214,12 +1197,6 @@ async function doRename(name) {
   pushToast('List renamed', name);
 }
 
-async function doDelete() {
-  if (!state.selectedId) return;
-  state.modal = null;
-  await deleteTask(state.selectedId);
-}
-
 // Inline-Umbenennen committen (Pille in der Sidebar, Enter oder gueltige Eingabe).
 async function doRenameList(id, name) {
   const list = state.lists.find((l) => l.id === id);
@@ -1756,8 +1733,10 @@ async function onClick(e) {
     }
     case 'net': await setOnline(!state.online); break;
     // Alle Werkzeuge, die eine Liste brauchen (Mini, Fokus, Umbenennen, Copy,
-    // Loeschen, Export), tun ohne offene Liste einfach NICHTS: kein Modal,
-    // kein Toast. Verlassen von Mini/Fokus geht dagegen immer.
+    // Loeschen), tun ohne offene Liste einfach NICHTS: kein Modal, kein Toast.
+    // Verlassen von Mini/Fokus geht dagegen immer. Export ist die Ausnahme
+    // (N11.2.3): die Pille oeffnet sich auch ohne offene Liste, dort ist nur
+    // "All lists" waehlbar.
     case 'tb-mini': if (!state.mini && !activeList()) break; await doMini(!state.mini); break;
     case 'tb-focus':
       if (!state.focus && !activeList()) break;
@@ -1816,7 +1795,6 @@ async function onClick(e) {
       state.modal = null; render(); break;
     case 'modal-close': state.modal = null; render(); break;
     case 'do-rename': { const i = document.getElementById('rename-input'); if (i && i.value.trim()) await doRename(i.value.trim()); break; }
-    case 'do-delete': await doDelete(); break;
     case 'ctx-rename-list': {
       // Inline-Pille oeffnen: in der Sidebar an der Listenposition, oder (bei
       // Rechtsklick auf den Dock-Namen) unten im Dock (listEditDock).
