@@ -86,6 +86,7 @@ let state = {
   modal: null,       // 'status' | 'rename' | 'delete' | 'shortcuts' | 'settings'
   ctxList: null,     // Rechtsklick-Kontextmenue einer Liste: { id, x, y } | null
   ctxTask: null,     // Rechtsklick-Kontextmenue einer Aufgabe ("Move to...", N11.2): { id, x, y } | null
+  exportPill: null,  // zweistufige Export-Pille (N11.2): { step:'scope'|'format', scope:'list'|'all' } | null
   renamingId: null,  // Liste, die gerade inline (Pille in der Sidebar) umbenannt wird
   confirmDeleteId: null, // Liste, fuer die die Inline-Loeschbestaetigung in der Sidebar offen ist
   listEditDock: false, // true: Inline-Umbenennen/Loeschen wird im unteren Dock gezeigt (Rechtsklick auf den grossen Namen) statt in der Sidebar
@@ -523,6 +524,38 @@ function renderTaskCtx() {
     </div>`;
 }
 
+// Zweistufige Export-Pille (Phase 7 / N11.2): schwebt links neben der rechten
+// Rail (gleiche Verankerung wie das Panik-Panel). Schritt 1 Umfang (aktuelle
+// Liste / alle Listen), Schritt 2 Format (md / txt), danach der Save-Dialog im
+// Backend. Ohne offene Liste ist "Current list" AUSGEGRAUT (sichtbar, nicht
+// waehlbar, kein Fehler-Toast, N11.2.3); nur "All lists" bleibt waehlbar.
+function renderExportPill() {
+  if (!state.exportPill) return '';
+  const I = Icons;
+  const step = state.exportPill.step;
+  const hasList = !!activeList();
+  const body = step === 'scope'
+    ? `
+      <button class="menu-item" data-act="export-scope" data-scope="list" ${hasList ? '' : 'disabled'}>
+        ${I.Note} Current list</button>
+      <button class="menu-item" data-act="export-scope" data-scope="all">
+        ${I.Copy} All lists</button>`
+    : `
+      <button class="menu-item" data-act="export-format" data-fmt="md">
+        ${I.Note} Markdown (.md)</button>
+      <button class="menu-item" data-act="export-format" data-fmt="txt">
+        ${I.Note} Plain text (.txt)</button>`;
+  return `
+    <div class="export-pill" data-keep>
+      <div class="export-head">
+        <span class="export-head-icon">${I.Share}</span>
+        <span class="export-head-text">${step === 'scope' ? 'Export: what?' : 'Export: format?'}</span>
+        <button class="panic-x" data-act="export-close" title="Close">${I.Close}</button>
+      </div>
+      ${body}
+    </div>`;
+}
+
 function scrim(inner) {
   return `<div class="scrim" data-act="scrim-close"><div data-keep>${inner}</div></div>`;
 }
@@ -625,7 +658,7 @@ function renderModal() {
         ['Switch list', ['Ctrl', '↑/↓']],
         ['Open list 1-9', ['Ctrl', '1-9']],
         ['Lock app', ['Ctrl', 'L']],
-        ['Export open list', ['Ctrl', 'E']],
+        ['Export', ['Ctrl', 'E']],
         ['Toggle theme', ['Ctrl', 'J']], ['Online / offline', ['G']],
         ['This help', ['?']],
         ['Close all / exit mini', ['Esc']],
@@ -934,7 +967,9 @@ function render() {
     return;
   }
   if (state.focus) {
-    root.innerHTML = renderFocus() + renderLock();
+    // Die Export-Pille funktioniert auch im Focus-Modus (Ctrl+E, B.5); sie ist
+    // fixed rechts verankert und braucht die Rail nicht.
+    root.innerHTML = renderFocus() + renderExportPill() + renderLock();
     wireInputs();
     return;
   }
@@ -946,6 +981,7 @@ function render() {
     renderRailPin() +
     renderListCtx() +
     renderTaskCtx() +
+    renderExportPill() +
     renderModal() +
     renderPanic() +
     renderLock();
@@ -1297,13 +1333,29 @@ async function setAccent(color) {
 }
 
 
-async function doExport() {
-  const list = activeList();
-  if (!list) return;
-  const res = await api().export_list(list.id, 'md');
+// Zweistufiger Export (Phase 7 / N11.2): Rail-Button und Ctrl+E oeffnen die
+// Pille (zweiter Druck schliesst sie). Auch OHNE offene Liste oeffnet sie sich
+// (N11.2.3); dort ist nur "All lists" waehlbar. Im Mini-Modus bewusst nicht
+// (reines Lesefenster, wie Modals).
+function toggleExportPill() {
+  if (state.mini) return;
+  state.exportPill = state.exportPill ? null : { step: 'scope' };
+  render();
+}
+
+// Schritt 2 abgeschlossen: Export ausfuehren. Das Backend zeigt den Save-
+// Dialog und schreibt die Datei (G21c). "canceled" (Dialog abgebrochen) und
+// "locked" bleiben nach B.2 bewusst still; nur ein echter Erfolg (Datei
+// liegt auf der Platte) zeigt den "Exported"-Toast (G22, keine falsche
+// Erfolgsmeldung).
+async function runExport(scope, fmt) {
+  state.exportPill = null;
+  render();
+  const res = scope === 'all'
+    ? await api().export_all(fmt)
+    : await api().export_list(state.activeId, fmt);
   if (handleError(res)) return;
-  // Phase 7 ergänzt den echten Speicher-Dialog; vorerst Bestätigung.
-  pushToast('Exported list', res.filename);
+  pushToast('Exported', res.filename);
 }
 
 // Kopiert die AUSGEWAEHLTE Aufgabe. Das eigentliche Kopieren passiert im
@@ -1327,7 +1379,7 @@ async function doMini(flag) {
   if (state.mini) {
     // Im Mini-Modus alles Überlagernde schließen, damit nur die Liste bleibt.
     state.focus = false; state.menu = null; state.modal = null;
-    state.adding = false;
+    state.adding = false; state.exportPill = null;
   }
   render();
 }
@@ -1400,6 +1452,7 @@ function clearWorkspace() {
   state.lists = [];
   state.activeId = null;
   state.menu = null; state.modal = null; state.ctxList = null; state.ctxTask = null;
+  state.exportPill = null;
   state.renamingId = null; state.confirmDeleteId = null; state.listEditDock = false;
   state.adding = false; state.addingTask = false; state.doneOpen = false;
   state.editingId = null; state.selectedId = null;
@@ -1581,6 +1634,11 @@ function closeMenusIfOutside(e, a) {
   if (state.ctxTask && !e.target.closest('.task-ctx')) {
     state.ctxTask = null; changed = true;
   }
+  // Klick ausserhalb der Export-Pille schliesst sie (der eigene Rail-Knopf
+  // toggelt selbst und darf hier nicht doppelt schliessen).
+  if (state.exportPill && !e.target.closest('.export-pill') && act !== 'tb-export') {
+    state.exportPill = null; changed = true;
+  }
   // Klick ausserhalb der Inline-Pillen (Sidebar .list-inline ODER Dock .dock-edit)
   // verwirft Umbenennen / Loeschbestaetigung.
   if (state.renamingId && !e.target.closest('.list-inline, .dock-edit')) {
@@ -1707,7 +1765,18 @@ async function onClick(e) {
       if (!state.focus && !activeList()) break;
       state.focus = !state.focus; state.menu = null; render(); break;
     case 'rail-pin': toggleRailPin(); break;
-    case 'tb-export': await doExport(); break;
+    case 'tb-export': toggleExportPill(); break;
+    case 'export-close': state.exportPill = null; render(); break;
+    case 'export-scope':
+      if (state.exportPill) {
+        state.exportPill.scope = a.dataset.scope;
+        state.exportPill.step = 'format';
+        render();
+      }
+      break;
+    case 'export-format':
+      if (state.exportPill) await runExport(state.exportPill.scope, a.dataset.fmt);
+      break;
     case 'tb-help': state.modal = 'shortcuts'; render(); break;
     case 'tb-lock': await doLock(); break;
     case 'tb-emergency': state.panic = state.panic ? null : { armed: false, stage: 'panel' }; render(); break;
@@ -1884,6 +1953,7 @@ function onKeyGlobal(e) {
     state.menu = null; state.modal = null;
     state.focus = false; state.adding = false; state.addingTask = false;
     state.editingId = null; state.selectedId = null; state.ctxList = null; state.ctxTask = null;
+    state.exportPill = null;
     state.renamingId = null; state.confirmDeleteId = null; state.listEditDock = false;
     // Panik-Panel schliessen, aber den laufenden/fertigen Wipe-Schirm stehen lassen.
     if (state.panic && state.panic.stage === 'panel') state.panic = null;
@@ -1899,7 +1969,7 @@ function onKeyGlobal(e) {
   if (meta && k === 'b') { e.preventDefault(); const wasFocus = state.focus; state.focus = false; state.settings.sidebar = sidebarVisible() ? 'closed' : 'open'; api().set_setting('sidebar', state.settings.sidebar); if (wasFocus) render(); else applyChrome(); }
   else if (meta && k === 'j') { e.preventDefault(); setSetting('dark', !state.settings.dark); }
   else if (meta && k === 'l') { e.preventDefault(); doLock(); }
-  else if (meta && k === 'e') { e.preventDefault(); doExport(); }
+  else if (meta && k === 'e') { e.preventDefault(); toggleExportPill(); }
   else if (meta && (e.key === 'ArrowUp' || e.key === 'ArrowDown')) {
     // Ctrl+Pfeil hoch/runter: durch die Listen der Sidebar wechseln. Nur wenn
     // die Sidebar offen UND bereits eine Liste geoeffnet ist; an den Enden

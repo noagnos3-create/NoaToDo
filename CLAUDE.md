@@ -216,8 +216,8 @@ All frontend<->backend communication goes through these methods on the `Api` cla
 | `reorder(list_id, ordered_ids)` | str, [str] | `{ ok }` (task order within a list) |
 | `reorder_lists(ordered_ids)` | [str] | `{ ok }` (sidebar list order via drag and drop; N11.2.2 edge cases: exactly the full list set or `invalid`, implemented 2026-07-17) |
 | `move_task(id, target_list_id)` | str, str | `{ ...task }` (move task to another list: drag onto a sidebar entry or right-click "Move to…" menu; keeps `done`, appends to the end of its section in the target, N11.2.2, implemented 2026-07-17) |
-| `export_list(id, format)` | str, `'md'`\|`'txt'` | `{ filename, content }` (N11: JSON dropped) |
-| `export_all(format)` | `'md'`\|`'txt'` | `{ filename, content }` (planned, N11.2: all lists in one file) |
+| `export_list(id, format)` | str, `'md'`\|`'txt'` | `{ ok, filename }` (JSON dropped, N11.1.5; shows the save dialog in the backend and really writes the file, G21c: UTF-8 no BOM, CRLF; dialog cancel -> `canceled` (silent), second dialog -> `busy`; suggested filename = G21/V6-sanitized list name) |
+| `export_all(format)` | `'md'`\|`'txt'` | `{ ok, filename }` (all lists in one file, sidebar order, names verbatim incl. duplicates; suggested filename `NoaToDo-Export-YYYY-MM-DD.<format>`; same dialog path as `export_list`; implemented 2026-07-17) |
 | `copy_task(id)` | str | `{ ok, clears_in }` (hardened backend clipboard copy of ONE task) |
 | `copy_errors()` | (keine) | `{ ok, clears_in }` (copies the redacted G29 error ring buffer via the same hardened G23 clipboard path; status modal "Recent errors" copy button) |
 | `set_setting(key, value)` | str, * | `{ ok }` |
@@ -300,7 +300,7 @@ Bauplan B.5 is the **single source of truth** for shortcuts (fully re-derived fr
 | Switch list | `Ctrl+ArrowUp` / `Ctrl+ArrowDown` (sidebar open and a list open; stops at the ends, no wrap-around) |
 | Open list 1-9 | `Ctrl+1` bis `Ctrl+9` (opens the n-th sidebar list, 1 = topmost; same key again toggles it closed; only when the sidebar is open, a list open with the sidebar closed does not count) |
 | Lock app | `Ctrl+L` |
-| Export | `Ctrl+E` (today: exports the currently open list directly; Phase 7 target per N11.2: opens the two-step export pill; with no open list the "current list" scope option is greyed out, only "all lists" is selectable, N11.2.3) |
+| Export | `Ctrl+E` (opens the two-step export pill: scope, then format, then the backend save dialog; second press or `Esc` closes it; with no open list the "current list" scope option is greyed out, only "all lists" is selectable, N11.2.3; no-op in mini mode) |
 | Toggle theme | `Ctrl+J` (from `auto`: override to the opposite of the shown theme; from a fixed theme: the other fixed theme; back to `auto` only via the Settings segment) |
 | Online/offline | `G` |
 | Shortcut help | `?` |

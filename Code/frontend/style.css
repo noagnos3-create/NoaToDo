@@ -1443,3 +1443,21 @@ input { font: inherit; }
   box-shadow: inset 0 0 0 1.5px var(--accent-line);
   color: var(--text);
 }
+
+/* --- Phase 7 (N11.2): zweistufige Export-Pille links neben der Rail --- */
+.export-pill {
+  position: fixed; right: 80px; top: 50%; transform: translateY(-50%);
+  z-index: 45; width: 232px; padding: 6px;
+  background: var(--surface); overflow: hidden;
+  border: 1px solid var(--border-strong);
+  border-radius: 16px;
+  box-shadow: var(--shadow-lg);
+  animation: panic-slide .22s cubic-bezier(.2,.7,.3,1);
+}
+.export-head { display: flex; align-items: center; gap: 9px; padding: 7px 5px 8px 9px; }
+.export-head-icon { color: var(--accent); display: grid; place-items: center; }
+.export-head-icon svg { width: 17px; height: 17px; }
+.export-head-text { font-size: 13.5px; font-weight: 700; letter-spacing: -.01em; }
+/* Ausgegraute Umfang-Option (N11.2.3): sichtbar, nicht waehlbar, kein Toast. */
+.menu-item:disabled { opacity: .38; cursor: default; }
+.menu-item:disabled:hover { background: none; color: var(--text-dim); }

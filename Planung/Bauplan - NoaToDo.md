@@ -274,8 +274,8 @@ Das ist die **vollständige Methodenliste**, die `backend/api.py` bereitstellt u
 | `reorder(list_id, ordered_ids)` | `str,[str]` | `{ ok:true }` | Drag-&-Drop-Reihenfolge der Aufgaben speichern |
 | `reorder_lists(ordered_ids)` | `[str]` | `{ ok:true }` | Reihenfolge der Listen in der Sidebar speichern (Phase 7, N11.2; Randfaelle nach N11.2.2; im Code umgesetzt 2026-07-17: Drag and Drop der Sidebar-Eintraege) |
 | `move_task(id, target_list_id)` | `str,str` | `{ ...task }` | Aufgabe in eine andere Liste verschieben (behaelt `done`, ans Ende ihrer Sektion in der Ziel-Liste; Phase 7, N11.2; Randfaelle nach N11.2.2; im Code umgesetzt 2026-07-17: Drag auf einen Sidebar-Eintrag plus "Move to..."-Kontextmenue per Rechtsklick auf die Karte) |
-| `export_list(id, format)` | `str,'md'\|'txt'` | `{ filename, content }` | Eine Liste exportieren (nur noch md/txt, N11.1.5) |
-| `export_all(format)` | `'md'\|'txt'` | `{ filename, content }` | Alle Listen mit allen Aufgaben in eine Datei exportieren (Schritt "alle Listen" des zweistufigen Exports, N11.2) |
+| `export_list(id, format)` | `str,'md'\|'txt'` | `{ ok:true, filename }` | Eine Liste exportieren (nur noch md/txt, N11.1.5). Zeigt den Save-Dialog im Backend und schreibt die Datei wirklich (G21c); Dialog-Abbruch -> `canceled` (still), zweiter Dialog -> `busy`. (Rückgabe bis 2026-07-17 `{ filename, content }` ohne Datei; mit der G21-Umsetzung ersetzt.) |
+| `export_all(format)` | `'md'\|'txt'` | `{ ok:true, filename }` | Alle Listen mit allen Aufgaben in eine Datei exportieren (Schritt "alle Listen" des zweistufigen Exports, N11.2); Sidebar-Reihenfolge, Vorschlag `NoaToDo-Export-YYYY-MM-DD.<format>` (U10); Save-Dialog/`canceled`/`busy` wie `export_list` (im Code umgesetzt 2026-07-17) |
 | `copy_task(id)` | `str` | `{ ok, clears_in }` | EINE ausgewählte Aufgabe gehärtet ins Clipboard (Backend-seitig, keine Win+V-History, kein Cloud-Clipboard, Auto-Clear nach 60 s; ersetzt das frühere `copy_list`, ganze Listen kopiert man bewusst nicht mehr, dafür gibt es den Export) |
 | `copy_errors()` | (keine) | `{ ok, clears_in }` | Kopiert den redigierten G29-Fehler-Ringpuffer als Text über denselben gehärteten G23-Clipboard-Pfad wie `copy_task` (Kopier-Knopf der "Recent errors"-Sektion im Status-Modal, N11.12.1; der Puffer ist bereits redigiert, `<path>` statt Pfaden, keine Bridge-Argumente; ergänzt 2026-07-17 mit der G29-Umsetzung) |
 | `set_setting(key, value)` | `str,*` | `{ ok:true }` | Eine Einstellung speichern |
@@ -1108,7 +1108,7 @@ ungültig; insbesondere gibt es kein blankes `N` für "Neue Liste" mehr.)*
 | Liste wechseln | `Ctrl+↑` / `Ctrl+↓` | Sidebar offen UND eine Liste offen; stoppt an den Enden, kein Umlauf |
 | Liste 1-9 öffnen | `Ctrl+1` bis `Ctrl+9` | nur bei offener Sidebar (eine offene Liste bei geschlossener Sidebar reicht nicht); 1 = oberste; dieselbe Nummer erneut schließt die Liste (Toggle) |
 | App sperren | `Ctrl+L` | |
-| Exportieren | `Ctrl+E` | heute: exportiert direkt die offene Liste; ab Phase 7 (N11.2): öffnet die zweistufige Export-Pille; ohne offene Liste ist die Umfang-Option "aktuelle Liste" ausgegraut, nur "alle Listen" wählbar (N11.2.3) |
+| Exportieren | `Ctrl+E` | öffnet die zweistufige Export-Pille (erst Umfang, dann Format; zweiter Druck oder `Esc` schließt sie; umgesetzt 2026-07-17, N11.2); ohne offene Liste ist die Umfang-Option "aktuelle Liste" ausgegraut, nur "alle Listen" wählbar (N11.2.3); im Mini-Modus bewusst ohne Funktion (reines Lesefenster) |
 | Theme umschalten | `Ctrl+J` | aus `auto` heraus: Override auf das Gegenteil des aktuell angezeigten Themes; aus einem festen Theme: das andere feste; Rückkehr zu `auto` nur über das Settings-Segment (U16) |
 | Online/Offline | `G` | |
 | Tastenkürzel-Hilfe | `?` | |
@@ -2107,7 +2107,7 @@ auch forensisch belastbar.
 > | **G18** | **8** | offen (Zusage konditioniert 2026-07-13, B.10.4) | seit 2026-06-10 | Der Credential-Manager-Eintrag existiert; eine Kopie von `tasks.db.enc` lässt sich auf einem fremden Windows-Konto auch mit korrekter Passphrase nicht öffnen. | **DPAPI-Pepper gegen Offline-Brute-Force (Pflicht).** Beim Einrichten der Passphrase wird zusätzlich ein zufälliger 32-Byte-Pepper erzeugt und über `keyring` im Windows Credential Manager (DPAPI, ans Windows-Konto gebunden) abgelegt. Der Pepper fliesst zusätzlich zur Passphrase in die Ableitung ein. **Verbindliche, versionierte Konstruktion (V2a, 2026-07-15; ersetzt die frühere Angabe „Argon2id-`secret`-Parameter", die so nicht umsetzbar ist, weil `argon2-cffi` Argon2s Keyed-Secret-Parameter nicht exponiert):** die Passphrase wird **vor** Argon2id an den Pepper gebunden: `ikm = HKDF-Extract(salt=pepper, ikm=passphrase_utf8)` (per Definition identisch mit `HMAC-SHA256(key=pepper, msg=passphrase_utf8)`, Ergebnis 32 Byte), danach `master_secret = Argon2id(password=ikm, salt=<Salt aus dem G16-Header>, Parameter aus N11.4.3, B.7)`. Die Konstruktion hängt an der Formatversion im G16-Header; eine spätere Änderung erhöht die Version und braucht einen Migrationspfad. **Wirkung, konditioniert (B.10.4, Plananalyse S4; die frühere Formulierung "kann offline gar nicht raten" war ein Überversprechen und ist gestrichen):** Wer **nur die Tresordatei** `tasks.db.enc` kopiert hat (Klasse K1), kann offline nichts anfangen, ihm fehlt der Pepper aus dem Windows-Konto. Wer die **ganze, unverschlüsselte Platte** hat (gestohlener Laptop, ausgebaute SSD), kann den DPAPI-Master-Key offline angreifen; der Pepper hängt dann an der Stärke des **Windows-Anmeldepassworts**. Die Zusage gilt daher nur mit BitLocker/Geräteverschlüsselung **oder** starkem Windows-Passwort, und genau so (mit dieser Bedingung) muss sie in UI und Doku stehen. **Kein Recovery-Export (N11.3, überschreibt die frühere Pflicht):** der Tresor ist bewusst an dieses Windows-Konto/diesen PC gebunden; geht das Windows-Profil verloren, ist die DB auch mit korrekter Passphrase nicht mehr zu öffnen. Der Einrichtungs-Flow enthält daher keinen Recovery-Schritt; der einzige Ausweg bei Verlust ist der Reset (Datenverlust, N11.3). |
 > | **G19** | **8, vorgezogen** | ✅ umgesetzt; Nachbesserung offen (V3: Mutex-Namensraum) | 2026-06-20, V3 ergänzt 2026-07-15 | Zweite Instanz starten: Hinweisbox erscheint, der zweite Prozess beendet sich, die erste Instanz läuft ungestört weiter. Zusätzlich (V3): dieselbe Prüfung aus einer zweiten Logon-Session desselben Benutzers (RDP/schnelle Benutzerumschaltung); auch dort darf keine zweite Instanz auf dieselbe DB starten. | **Single-Instance-Schutz.** Beim Start einen benannten Windows-Mutex belegen (`ctypes.windll.kernel32.CreateMutexW(None, False, "Local\\NoaToDoSingleton")`, danach `GetLastError() == ERROR_ALREADY_EXISTS (183)` prüfen). Läuft schon eine Instanz: Hinweis zeigen und den zweiten Prozess sofort beenden. Zwei Instanzen würden sich `tasks.db.enc` bzw. die Arbeitskopie gegenseitig überschreiben (Korruption/Datenverlust). **Nachbesserung V3 (2026-07-15): Mutex-Namensraum.** `Local\NoaToDoSingleton` ist nur **pro Logon-Session** eindeutig: derselbe Benutzer über RDP oder schnelle Benutzerumschaltung startet damit eine zweite Instanz auf demselben Profil und derselben DB, exakt die Korruption, die dieses Gate verhindern soll. Zielname: **`Global\NoaToDo-<User-SID>`** (`Global\` gilt über alle Sessions hinweg, die User-SID hält verschiedene Windows-Konten weiterhin getrennt). Der Code nutzt heute noch `Local\...`; die Umstellung ist Rest-Pflicht dieses Gates, spätestens in Phase 8. |
 > | **G20** | **7** | ✅ umgesetzt 2026-07-17 (deklaratives Schema am `@bridge`-Decorator, introspektierbar via `_schema`; Text-/Namens-Kappung + Steuerzeichen-Strip, ID-/Listen-Typpruefung, `reorder` mit exakter Mengenpruefung nach N11.2.2, `set_setting`-Whitelist mit Wert-Pruefung je Key nach V5. Hinweis: der Key `dark` bleibt uebergangsweise in der Whitelist, bis N11.6 ihn durch `theme` ersetzt; `theme`/`sound`/`autoLock` sind bereits validiert) | seit 2026-06-10 | Ein 1-MB-Text wird auf 4096 Zeichen gekürzt; `reorder(list_id, "string")` liefert einen Fehler; `set_setting("foo", 1)` liefert `{"error": "invalid"}`. Zusätzlich (V5): `set_setting("accent", "red;} body{...")` liefert `invalid`; `set_setting("sidebarWidth", 9999)` speichert höchstens 520; `set_setting("autoLock", 7)` liefert `invalid`. | **Regel-4-Validierung auch für LOKALE Eingaben + Typ-/Key-Prüfung an der Bridge.** Volltext in B.2 (Etikett G20). |
-> | **G21** | **7** | offen | seit 2026-06-10 | Eine Liste namens `CON` exportiert als `_CON.md`; ein Task mit Zeilenumbruch bleibt im Export einzeilig; die Datei liegt real am im Save-Dialog gewählten Ort. Zusätzlich (V6): eine Liste namens `a<b>:c?*` bzw. `..\..\evil` ergibt einen Dateinamens-Vorschlag ohne diese Zeichen und ohne `..`; ein 300-Zeichen-Listenname wird auf ca. 120 Zeichen gekappt; dasselbe gilt für `export_all`. | **Export-Härtung.** Volltext in Phase 7 (Etikett G21). |
+> | **G21** | **7** | erledigt (2026-07-17): Sanitisierung (a)/(a2), Einzeiligkeit (b) und echter Save-Dialog mit realem Schreiben (c) in `api.py` umgesetzt, gilt für `export_list` und `export_all` | seit 2026-06-10 | Eine Liste namens `CON` exportiert als `_CON.md`; ein Task mit Zeilenumbruch bleibt im Export einzeilig; die Datei liegt real am im Save-Dialog gewählten Ort. Zusätzlich (V6): eine Liste namens `a<b>:c?*` bzw. `..\..\evil` ergibt einen Dateinamens-Vorschlag ohne diese Zeichen und ohne `..`; ein 300-Zeichen-Listenname wird auf ca. 120 Zeichen gekappt; dasselbe gilt für `export_all`. | **Export-Härtung.** Volltext in Phase 7 (Etikett G21). |
 > | **🔴 G22** | **SOFORT, spätestens mit 7** | teils erledigt (2026-07-16): `get_status()` + Status-Modal ehrlich (`active:false`, Warnfarbe, `dev_key`-Flag); Header-Pill/Lock-Untertitel existieren im Code nicht. **OFFEN bis Phase 8:** der Panik-Endschirm behauptet weiter "All data securely wiped" (heute falsch, Lock/Panik sind Frontend-only, `tasks.db` bleibt dev-key-lesbar); Termin **2026-07-20** | seit 2026-06-10 | Solange `DEV_AES_KEY` in `db.py` existiert, darf nirgends in der App "active", "ENCRYPTED" oder "securely wiped" stehen: Status-Modal öffnen sowie Header-Pill, Lock-Screen-Untertitel und Panik-Endschirm prüfen. | **Ehrliche Sicherheits-Behauptungen in der gesamten UI (ausgeweitet 2026-07-13, Plananalyse S2; vorher nur `get_status()`).** Bis Phase 8 fertig ist, darf **keine** Stelle der App eine Verschlüsselung oder einen sicheren Wipe behaupten, die es nicht gibt. (a) `get_status()` meldet den realen Zustand: Schicht 1 "SQLCipher mit Entwicklungs-Schlüssel (UNSICHER)", Schicht 2 "nicht implementiert", `active: false`; das Status-Modal zeigt das in Warnfarben statt grün (aktuell meldet der Status "AES-256 + ChaCha20 · active", während der AES-Key öffentlich im Repo steht; im Audit nachgewiesen). (b) Dieselbe Ehrlichkeit gilt für **alle** weiteren Verschlüsselungs-/Wipe-Behauptungen der UI: die Header-Pill ("LOCAL · ENCRYPTED"), den Lock-Screen-Untertitel ("LOCAL VAULT · ENCRYPTED") und den Panik-Endschirm ("All data securely wiped") bis Phase 8 auf ehrliche Texte umstellen (z.B. "LOCAL · DEV BUILD"). Die "bewusste Aussendarstellung" des Endschirms aus N10.3 ist erst ab Phase 8 zulässig, wenn der reale Wipe-Pfad (G14/G25, Killswitch) existiert; die Abwägung dazu steht in B.10.5. Ab Phase 8 zeigt der Status echte Werte (Argon2-Parameter, Pepper vorhanden ja/nein, Zeitpunkt des letzten Wraps). |
 > | **G23** | **6.5** | ✅ umgesetzt | 2026-06-10 | Der kopierte Task erscheint nicht in der Win+V-History; das Clipboard ist 60 s nach dem Kopieren leer. | **Clipboard-Hygiene + Einzel-Task-Kopie.** Windows speichert das Clipboard in der Zwischenablage-History (Win+V) und synchronisiert es ggf. ins Microsoft-Cloud-Clipboard, App-Inhalte würden so den Rechner verlassen. Umgesetzt: (a) Kopiert wird nur noch **eine ausgewählte Aufgabe** (`copy_task`), nie eine ganze Liste; für Listen gibt es den Export. (b) Das Kopieren passiert komplett im **Backend** (`api.py`, Win32 per ctypes, nicht `navigator.clipboard`) und setzt zusätzlich zu `CF_UNICODETEXT` die Formate `ExcludeClipboardContentFromMonitorProcessing`, `CanIncludeInClipboardHistory` (=0) und `CanUploadToCloudClipboard` (=0). (c) Auto-Clear: 60 s nach dem Kopieren wird das Clipboard geleert, sofern es noch unseren Inhalt trägt. (d) Der `Strg+C`-App-Shortcut wurde ersatzlos entfernt. Bei künftigen Copy-Funktionen MUSS derselbe Backend-Pfad verwendet werden. |
 > | **G25** | **8** | offen | seit 2026-06-10 | Code-Review: Schlüssel/Master-Secret/Pepper als `bytearray` mit Nullung an allen Ausgängen (Lock, Panic, Quit, Fenster-X, `atexit`); kein Geheimnis in Logs, Exceptions oder `get_status()`. | **RAM-Schlüssel-Hygiene.** `aes_key`, `chacha_key`, Master-Secret und Pepper als `bytearray` (nicht `bytes`/`str`) halten; beim Sperren/Panic/Beenden **vor** dem Verwerfen mit Nullen überschreiben. Die Passphrase unmittelbar nach der Ableitung verwerfen; Passphrase und Schlüssel dürfen **nie** in Logs, Exceptions, `get_status()` oder sonstwie ans Frontend gelangen. Im Code dokumentieren: Python gibt keine harten Garantien (der GC kann Kopien hinterlassen), das Nullen ist Best-Effort und trotzdem Pflicht. |
@@ -2806,8 +2806,9 @@ Toolbar-Modus mehr, N11.7), Tastenkürzel, Focus-Modus. Optisch deckungsgleich m
 ### Phase 6.5: UX-Nacharbeiten am Prototyp (eingeschoben nach dem Audit vom 2026-06-10)
 
 **Stand-Korrektur:** Abgeschlossen ist **Phase 6** (lokal nutzbarer Prototyp).
-Phase 7 ist **offen**: `export_list` erzeugt zwar Inhalte, aber es wird noch
-keine Datei geschrieben (kein Save-Dialog), siehe Gate G21c. Das Kopieren ist
+(Der frühere Zusatz "Phase 7 ist offen, der Export schreibt keine Datei" ist seit
+dem 2026-07-17 überholt: G21c ist umgesetzt, der Export schreibt real, siehe
+Phase 7.) Das Kopieren ist
 seit dem 2026-06-10 fertig und gehärtet (`copy_task`, siehe Punkt 5 unten).
 
 **Bereits umgesetzt (2026-06-10), gehört ab jetzt zum Soll-Verhalten:**
@@ -2862,7 +2863,8 @@ seit dem 2026-06-10 fertig und gehärtet (`copy_task`, siehe Punkt 5 unten).
 - **Profil-Menü aufräumen:** Das Profil-Menü zeigt den hartkodierten Namen
   "Noa Andersen" und tote Einträge (Account, Privacy & data, Export database).
   Pflicht: tote Einträge entweder funktional machen oder entfernen.
-- **Export-Save-Dialog (Phase 7):** siehe Gate G21c.
+- **Export-Save-Dialog (Phase 7):** siehe Gate G21c. **Erledigt 2026-07-17** (mit der
+  G21-Umsetzung in Phase 7).
 
 **Abnahme:** Doppelklick-Bearbeiten, Löschen der ausgewählten Aufgabe über den
 Rail-Papierkorb (nicht über die Karte, siehe Punkt 2), das neue `Strg+C`-Verhalten
@@ -2926,6 +2928,12 @@ aus Phase 6.5 / Gate G23, es gibt bewusst kein Listen-Kopieren mehr.)
    5. **Listen-Reihenfolge im Gesamtexport:** `export_all` schreibt die Listen in
       **Sidebar-Reihenfolge** (`lists.position`, dieselbe wie am Bildschirm), damit der
       Export der sichtbaren Ordnung entspricht; gilt für `md` und `txt`.
+
+   **Im Code umgesetzt (2026-07-17):** zweistufige Export-Pille im Frontend
+   (`renderExportPill` in `app.js`, links neben der Rail; Rail-Button und `Ctrl+E`
+   toggeln sie, `Esc`/Klick daneben schliesst, N11.2.3-Ausgrauung ohne offene Liste),
+   `export_all(format)` als neue Bridge-Methode, JSON-Zweig entfernt; alle fünf
+   U10-Festlegungen und die G21-Härtung siehe den G21-Block unten.
 2. **Undo beim Listen-Löschen** (UX-Pflicht aus Phase 6.5): `delete_list` hält
    die gelöschte Liste samt Aufgaben zunächst zurück, neue Bridge-Methode
    `undo_delete_list(id)` stellt wieder her; das Frontend zeigt den Toast
@@ -2952,7 +2960,8 @@ Windows-Gerätename), und Zeilenumbrüche im Task-Text brechen die Markdown-Stru
 (eingeschleuste falsche `- [x]`-Zeilen/Überschriften). Pflicht in `export_list`: (a) Dateiname:
 reservierte Namen (CON, PRN, AUX, NUL, COM1-COM9, LPT1-LPT9; case-insensitive, auch mit Endung)
 mit `_`-Präfix entschärfen; führende/abschliessende Punkte und Leerzeichen entfernen; bleibt
-nichts übrig, Fallback `list`. (a2) **Verbotene Zeichen und Längenkappung (V6, 2026-07-15):**
+nichts übrig, Fallback `NoaToDo-Liste` (vereinheitlicht 2026-07-17 mit U10 Punkt 1, der
+frühere Fallback-Wortlaut `list` hier widersprach dem dortigen Default). (a2) **Verbotene Zeichen und Längenkappung (V6, 2026-07-15):**
 die unter Windows unzulässigen Zeichen `<`, `>`, `:`, `"`, `/`, `\`, `|`, `?`, `*` sowie
 `..`-Sequenzen im vorgeschlagenen Dateinamen durch `_` ersetzen (Listennamen sind Freitext) und
 das Ergebnis auf ca. 120 Zeichen kürzen. Reihenfolge: erst Zeichen ersetzen, dann kürzen, dann
@@ -2960,7 +2969,16 @@ die Gerätenamen-Prüfung aus (a). Gilt für `export_list` **und** `export_all`.
 md/txt jede Aufgabe einzeilig ausgeben, `\r` und `\n` im Task-Text durch ein Leerzeichen
 ersetzen (kein Meta mehr, N11.1.3). (c) Echten Save-Dialog umsetzen
 (`window.create_file_dialog(webview.SAVE_DIALOG, save_filename=...)`) und die Datei wirklich
-schreiben. Stand heute schreibt der Export **keine** Datei, das Frontend zeigt nur einen Toast.
+schreiben.
+
+**Im Code umgesetzt (2026-07-17):** `_sanitize_export_name()` in `api.py` setzt (a)/(a2)
+in der G21-Reihenfolge um (Zeichen ersetzen, auf 120 kappen, Punkte/Leerzeichen strippen,
+Gerätenamen-Präfix; Fallback `NoaToDo-Liste` nach U10), `_one_line()` setzt (b) um
+(gilt auch für Listennamen in Überschriften), und `_export_via_dialog()` setzt (c) um:
+Save-Dialog über den `_native_dialog()`-Kontext (N11.11.5: höchstens ein Dialog, zweiter
+Aufruf -> `busy`), Datei UTF-8 ohne BOM mit CRLF (U10 Punkt 3), Abbruch -> `canceled`
+ohne Nebeneffekt (U10 Punkt 4). Gilt für `export_list` und `export_all`; das Frontend
+zeigt den "Exported"-Toast nur nach echtem Schreiberfolg.
 
 > **🔒 PFLICHT-GATES für Phase 7 (keines optional; Definition, Status, Termin und
 > Prüfweg stehen ausschliesslich in der normativen Gate-Tabelle in B.9, diese
@@ -3750,7 +3768,7 @@ gilt vor dem Audit-Dokument: bei Widerspruch gewinnt diese Tabelle.*
 | 1.2 Task-Loeschen ohne Bestaetigung, totes Delete-Modal | 🟡 gueltig (reduziert) | Sofort-Loeschen **bleibt** so (Undo gibt es nur fuer Listen, N11.2); offen ist nur, den toten `case 'delete'`-Modalcode zu entfernen. |
 | 1.3 Glocke + Profil-Menue (tot, Fake-Daten) | ❌/🟡 gemischt | Glocke ist **hinfaellig** (Benachrichtigungen ersatzlos entfernt, 2026-07-09); das Profil-Menue ist erreichbar, aber seine toten Eintraege und der hartkodierte Name bleiben **gueltig** (Phase 6.5 "Profil-Menue aufraeumen"). |
 | 1.4 Status-Modal mit Fantasiewerten **[Sec]** | 🔵 eingeplant | Ist Gate **G22** (ehrlicher `get_status()`, sofort/Phase 7); ergaenzt um den G29-Ringpuffer ("Recent errors", N11.12). |
-| 1.5 Export meldet Erfolg ohne Datei | 🔵 eingeplant | Phase 7 / Gate **G21c** (echter Save-Dialog); Format ist auf `md`/`txt` reduziert (N11.1.5), JSON ist hinfaellig. |
+| 1.5 Export meldet Erfolg ohne Datei | ✅ erledigt (2026-07-17) | Gate **G21c** umgesetzt: echter Save-Dialog, Datei wird wirklich geschrieben, Toast nur nach Schreiberfolg, Abbruch still (`canceled`); Format `md`/`txt` (N11.1.5), JSON hinfaellig. |
 | 1.6 CSS-/Handler-Leichen (`.t-del`, `.t-grip`, `.title-row`, `.airplane-pill`) | 🟡 gueltig (bestaetigt 2026-07-13) | Am Code geprueft: `renderTask` rendert **keinen** Papierkorb; `.t-del` + `del-task`-Handler sind Reste (siehe die Korrektur in Phase 6.5 Punkt 2). Pro Element in Phase 7 entscheiden: rendern oder loeschen. |
 | 1.7 Neue-Liste-Feld unsichtbar bei geschlossener Sidebar | 🟡 gueltig | Die Taste heisst heute `Ctrl+Shift+N` (B.5), der Bug ist derselbe: sie setzt `state.adding = true`, ohne die Sidebar zu oeffnen (`app.js`), das Feld liegt dann unsichtbar hinter der zugeklappten Sidebar. |
 | 2.1 Sprachmix DE/EN | ✅ erledigt | UI ist durchgehend englisch, deutsche `title`-Tooltips gibt es nicht mehr (am Code geprueft). |

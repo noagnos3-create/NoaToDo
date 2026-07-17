@@ -124,6 +124,13 @@ def v_bool(value: Any) -> bool:
     raise InvalidInput("not a bool")
 
 
+def v_fmt(value: Any) -> str:
+    """Exportformat: nur ``md`` oder ``txt`` (JSON ist gestrichen, N11.1.5)."""
+    if value not in ("md", "txt"):
+        raise InvalidInput("bad format")
+    return value
+
+
 def v_task_fields(value: Any) -> dict[str, Any]:
     """``edit_task.fields``: nur bekannte Felder, `text` String, `done` Bool (V5)."""
     if not isinstance(value, dict) or not value:
@@ -197,6 +204,90 @@ def _validate_setting(key: Any, value: Any) -> str:
     raise InvalidInput("bad rule")  # pragma: no cover - Schema-Tippfehler
 
 
+# ---------------------------------------------------------------------------
+# Export-Härtung (Gate G21, V6, U10 / Bauplan Phase 7).
+#
+# Der vorgeschlagene Dateiname entsteht IMMER über _sanitize_export_name:
+# Listennamen sind Freitext und dürfen weder reservierte Windows-Gerätenamen
+# noch verbotene Zeichen, Pfadtrenner, `..`-Sequenzen oder Steuerzeichen in
+# den Save-Dialog tragen. Reihenfolge nach G21: erst Zeichen ersetzen, dann
+# auf ca. 120 Zeichen kürzen, dann die Gerätenamen-Prüfung.
+# ---------------------------------------------------------------------------
+_WIN_FORBIDDEN_RE = re.compile(r'[<>:"/\\|?*]')
+_RESERVED_DEVICE_NAMES = (
+    {"CON", "PRN", "AUX", "NUL"}
+    | {f"COM{i}" for i in range(1, 10)}
+    | {f"LPT{i}" for i in range(1, 10)}
+)
+EXPORT_NAME_MAX = 120
+EXPORT_NAME_FALLBACK = "NoaToDo-Liste"  # U10 Punkt 1: sanitisiert-leerer Name
+
+
+def _sanitize_export_name(name: str) -> str:
+    """Listenname -> sicherer Dateinamens-Stamm (ohne Endung), Gate G21/V6."""
+    # Steuerzeichen inkl. Zeilenumbrüchen und Tab durch Leerzeichen ersetzen.
+    name = re.sub(r"[\x00-\x1f]", " ", str(name))
+    # (a2/V6) Unter Windows verbotene Zeichen und ..-Sequenzen -> "_".
+    name = _WIN_FORBIDDEN_RE.sub("_", name)
+    name = re.sub(r"\.{2,}", "_", name)
+    # (V6) Dann auf ca. 120 Zeichen kappen.
+    name = name[:EXPORT_NAME_MAX]
+    # (a) Führende/abschliessende Punkte und Leerzeichen entfernen.
+    name = name.strip(" .")
+    # (a) Reservierte Gerätenamen entschärfen (case-insensitive; geprüft wird
+    # der Stamm vor dem ersten Punkt, damit auch "CON.backup" -> "_CON.backup";
+    # die Format-Endung kommt erst danach dazu und ändert daran nichts).
+    if name and name.split(".", 1)[0].upper() in _RESERVED_DEVICE_NAMES:
+        name = "_" + name
+    return name or EXPORT_NAME_FALLBACK
+
+
+def _one_line(text: str) -> str:
+    """G21 (b): Zeilenumbrüche im Task-Text/Listennamen -> ein Leerzeichen."""
+    return re.sub(r"[\r\n]+", " ", str(text))
+
+
+def _export_md(lists: list[dict[str, Any]]) -> list[str]:
+    """md-Zeilen (U10): `#`-Überschrift je Liste, `- [ ]`/`- [x]` je Aufgabe."""
+    lines: list[str] = []
+    for lst in lists:
+        if lines:
+            lines.append("")
+        lines.append(f"# {_one_line(lst['name'])}")
+        lines.append("")
+        for t in lst["open"]:
+            lines.append(f"- [ ] {_one_line(t['text'])}")
+        for t in lst["done"]:
+            lines.append(f"- [x] {_one_line(t['text'])}")
+    return lines
+
+
+def _export_txt(lists: list[dict[str, Any]]) -> list[str]:
+    """txt-Zeilen (U10 Punkt 2): Name, `=`-Zeile, `[ ] `/`[x] ` ohne
+    Einrückung; bei mehreren Listen trennt eine Leerzeile."""
+    lines: list[str] = []
+    for lst in lists:
+        if lines:
+            lines.append("")
+        name = _one_line(lst["name"])
+        lines.append(name)
+        lines.append("=" * max(1, len(name)))
+        for t in lst["open"]:
+            lines.append(f"[ ] {_one_line(t['text'])}")
+        for t in lst["done"]:
+            lines.append(f"[x] {_one_line(t['text'])}")
+    return lines
+
+
+def _crlf(lines: list[str]) -> str:
+    """U10 Punkt 3: CRLF-Zeilenenden (Notepad-tauglich), Abschluss-Newline."""
+    return "\r\n".join(lines) + "\r\n"
+
+
+class _NativeDialogBusy(Exception):
+    """Zweiter nativer Dialog, während schon einer offen ist (N11.11.5)."""
+
+
 def bridge(fn: Callable | None = None, *, schema: dict[str, Callable] | None = None) -> Callable:
     """Fängt Ausnahmen ab und liefert die Fehlerkonvention aus B.2 (Gate G29),
     und validiert Argumente gegen das deklarative Schema (Gate G20).
@@ -228,6 +319,10 @@ def bridge(fn: Callable | None = None, *, schema: dict[str, Callable] | None = N
                 return _err("invalid")
             except db_module.InvalidInput:
                 return _err("invalid")
+            except _NativeDialogBusy:
+                # N11.11.5: höchstens ein nativer Dialog gleichzeitig; der
+                # zweite Aufruf bekommt den Katalog-Code busy, kein Fehler.
+                return _err("busy")
             except TypeError as exc:
                 # Falsche Argument-Anzahl/-Form am Bind: unbrauchbarer Aufruf.
                 if "bind" in str(exc) or "argument" in str(exc):
@@ -289,6 +384,10 @@ class Api:
                                        # (Handle wird neu erzeugt: Titelleisten-Theme
                                        # muss neu gesetzt werden)
         self._clip_timer = None   # Timer für das Auto-Leeren der Zwischenablage
+        # Höchstens EIN nativer Dialog gleichzeitig (N11.11.5): alle
+        # create_file_dialog-Aufrufe laufen über _native_dialog(); ein zweiter
+        # Aufruf bei offenem Dialog liefert den Katalog-Code busy.
+        self._dialog_lock = threading.Lock()
         # Redigierter Fehler-Ringpuffer (Gate G29 / N11.12.1): die letzten 50
         # Fehler, NUR im RAM, nie auf der Platte. Eintraege sind bereits beim
         # Schreiben redigiert (Pfade -> <path>, 200 Zeichen) und enthalten nie
@@ -409,7 +508,7 @@ class Api:
         return self.db.reorder_lists(ordered_ids)
 
     # =====================================================================
-    # Export / Kopieren (Grundgerüst; Save-Dialog folgt in Phase 7)
+    # Export (Phase 7 / Gate G21: Härtung + echter Save-Dialog)
     # =====================================================================
     def _list_or_none(self, list_id: str) -> dict[str, Any] | None:
         for lst in self.db.get_lists_with_tasks():
@@ -417,36 +516,78 @@ class Api:
                 return lst
         return None
 
-    @bridge
+    def _native_dialog(self):
+        """Kontext für native Dialoge (N11.11.5): höchstens einer gleichzeitig.
+
+        Flag im ``finally`` freigegeben; ein zweiter Aufruf bei offenem Dialog
+        wirft ``_NativeDialogBusy`` (-> Katalog-Code ``busy`` im Decorator).
+        Ein offener Dialog zählt NICHT als Aktivität (Auto-Lock, Phase 8).
+        """
+        import contextlib
+
+        @contextlib.contextmanager
+        def guard():
+            if not self._dialog_lock.acquire(blocking=False):
+                raise _NativeDialogBusy()
+            try:
+                yield
+            finally:
+                self._dialog_lock.release()
+
+        return guard()
+
+    def _export_via_dialog(self, filename: str, lines: list[str]) -> dict[str, Any]:
+        """Save-Dialog zeigen und die Datei wirklich schreiben (G21 c).
+
+        UTF-8 ohne BOM, CRLF-Zeilenenden (U10 Punkt 3). Dialog-Abbruch: keine
+        Datei, kein Nebeneffekt, Rückgabe ``canceled`` (nach B.2 bewusst
+        still, U10 Punkt 4).
+        """
+        win = self._window
+        if win is None:
+            raise RuntimeError("window not ready")   # -> internal + ref (G29)
+        import webview
+
+        with self._native_dialog():
+            result = win.create_file_dialog(webview.SAVE_DIALOG, save_filename=filename)
+        # PyWebView liefert je nach Version einen String oder eine Sequenz.
+        if isinstance(result, (list, tuple)):
+            result = result[0] if result else None
+        if not result:
+            return _err("canceled")
+        with open(result, "w", encoding="utf-8", newline="") as fh:
+            fh.write(_crlf(lines))
+        return {"ok": True, "filename": os.path.basename(str(result))}
+
+    @bridge(schema={"list_id": v_id, "fmt": v_fmt})
     def export_list(self, list_id: str, fmt: str = "md") -> dict[str, Any]:
+        """Eine Liste als md/txt exportieren (zweistufiger Export, Schritt
+        "aktuelle Liste"; N11.2, kein JSON mehr, N11.1.5).
+
+        Der Dateinamens-Vorschlag ist der über G21/V6 sanitisierte Listenname;
+        die Endung setzt das gewählte Format, nie der Nutzer-Text (U10).
+        """
         lst = self._list_or_none(list_id)
         if lst is None:
             return _err("not_found")
-        safe = "".join(c if c.isalnum() or c in " -_" else "_" for c in lst["name"]).strip()
-        if fmt == "json":
-            import json
+        lines = _export_md([lst]) if fmt == "md" else _export_txt([lst])
+        return self._export_via_dialog(
+            f"{_sanitize_export_name(lst['name'])}.{fmt}", lines
+        )
 
-            content = json.dumps(lst, ensure_ascii=False, indent=2)
-            return {"filename": f"{safe}.json", "content": content}
-        # md / txt (kein Meta mehr, N11.1.3)
-        lines: list[str] = []
-        if fmt == "md":
-            lines.append(f"# {lst['name']}")
-            lines.append("")
-            for t in lst["open"]:
-                lines.append(f"- [ ] {t['text']}")
-            for t in lst["done"]:
-                lines.append(f"- [x] {t['text']}")
-            ext = "md"
-        else:  # txt
-            lines.append(lst["name"])
-            lines.append("=" * len(lst["name"]))
-            for t in lst["open"]:
-                lines.append(f"[ ] {t['text']}")
-            for t in lst["done"]:
-                lines.append(f"[x] {t['text']}")
-            ext = "txt"
-        return {"filename": f"{safe}.{ext}", "content": "\n".join(lines)}
+    @bridge(schema={"fmt": v_fmt})
+    def export_all(self, fmt: str = "md") -> dict[str, Any]:
+        """Alle Listen in EINE Datei exportieren (N11.2, Schritt "alle Listen").
+
+        Reihenfolge = Sidebar-Reihenfolge (``lists.position``, U10 Punkt 5);
+        Listennamen stehen wörtlich und dürfen doppelt vorkommen (U12), je
+        Liste als größere Überschrift. Dateinamens-Vorschlag:
+        ``NoaToDo-Export-YYYY-MM-DD.<fmt>`` (lokales Datum, U10 Punkt 1).
+        """
+        lists = self.db.get_lists_with_tasks()
+        lines = _export_md(lists) if fmt == "md" else _export_txt(lists)
+        date = datetime.now().strftime("%Y-%m-%d")
+        return self._export_via_dialog(f"NoaToDo-Export-{date}.{fmt}", lines)
 
     @bridge(schema={"task_id": v_id})
     def copy_task(self, task_id: str) -> dict[str, Any]:
