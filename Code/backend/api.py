@@ -110,11 +110,11 @@ class Api:
     # Aufgaben
     # =====================================================================
     @bridge
-    def add_task(self, list_id: str, text: str, meta: str | None = None) -> dict[str, Any]:
+    def add_task(self, list_id: str, text: str) -> dict[str, Any]:
         text = (text or "").strip()
         if not text:
             return {"error": "invalid", "message": "Aufgabentext darf nicht leer sein."}
-        return self.db.add_task(list_id, text, meta)
+        return self.db.add_task(list_id, text)
 
     @bridge
     def toggle_task(self, task_id: str) -> dict[str, Any]:
@@ -152,27 +152,23 @@ class Api:
 
             content = json.dumps(lst, ensure_ascii=False, indent=2)
             return {"filename": f"{safe}.json", "content": content}
-        # md / txt
+        # md / txt (kein Meta mehr, N11.1.3)
         lines: list[str] = []
         if fmt == "md":
             lines.append(f"# {lst['name']}")
             lines.append("")
             for t in lst["open"]:
-                meta = f" ({t['meta']})" if t.get("meta") else ""
-                lines.append(f"- [ ] {t['text']}{meta}")
+                lines.append(f"- [ ] {t['text']}")
             for t in lst["done"]:
-                meta = f" ({t['meta']})" if t.get("meta") else ""
-                lines.append(f"- [x] {t['text']}{meta}")
+                lines.append(f"- [x] {t['text']}")
             ext = "md"
         else:  # txt
             lines.append(lst["name"])
             lines.append("=" * len(lst["name"]))
             for t in lst["open"]:
-                meta = f", {t['meta']}" if t.get("meta") else ""
-                lines.append(f"[ ] {t['text']}{meta}")
+                lines.append(f"[ ] {t['text']}")
             for t in lst["done"]:
-                meta = f", {t['meta']}" if t.get("meta") else ""
-                lines.append(f"[x] {t['text']}{meta}")
+                lines.append(f"[x] {t['text']}")
             ext = "txt"
         return {"filename": f"{safe}.{ext}", "content": "\n".join(lines)}
 
@@ -189,7 +185,7 @@ class Api:
         task = self.db.get_task(task_id)
         if task is None:
             return {"error": "not_found", "message": "Aufgabe nicht gefunden."}
-        text = task["text"] + (f" ({task['meta']})" if task.get("meta") else "")
+        text = task["text"]
         if not _set_clipboard_secure(text):
             return {"error": "clipboard", "message": "Zwischenablage nicht verfügbar."}
         if self._clip_timer is not None:

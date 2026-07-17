@@ -134,6 +134,11 @@ weniger Angriffsfläche, passt zum local-first-Sicherheitsgedanken. Das ist
    Text), B.4 (Meta-Zeile in `renderMain`/`renderTask`), Phase 6.5 Punkt 1 (Meta-Eingabe),
    Phase 7 Punkt 1 ("Meta in Klammern"), G20/G21 (Meta-Laenge/Meta-Newline entfallen),
    N8 "Meta-Feld benennen".
+   **Im Code umgesetzt (2026-07-17, mit Phase 7):** Schema, `db.py`, `api.py`, Render,
+   Inline-Edit und Export sind meta-frei; eine Einmal-Migration
+   (`db._drop_legacy_columns()`) entfernt beim Verbinden die `meta`-Spalte samt der
+   verwaisten Sync-/Faelligkeits-Altspalten (`synced`/`source`/`graph_etag`/`due_at`)
+   aus Bestands-Entwicklungs-DBs.
 
 4. **Demo-Seed-Daten entfernt.** Ein frischer Tresor startet **immer leer** (Erststart,
    nach Reset, nach Killswitch). Es werden keine Beispiel-Listen mehr eingespielt; nur

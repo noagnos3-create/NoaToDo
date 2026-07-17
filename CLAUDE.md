@@ -50,7 +50,7 @@ Screenshot protection (gate G26, `SetWindowDisplayAffinity` / `WDA_EXCLUDEFROMCA
 **Notifications removed (2026-07-09):** the app has no notifications of any kind (neither in-app alerts nor Windows toasts). The former `backend/notify.py` (winotify) file was deleted, the `winotify` dependency dropped, the `notify`/`notifyInApp`/`notifyWindows` settings and their Settings-modal section removed, and the `onNotification` backend -> frontend event removed. The general `pushToast` helper in `app.js` is unrelated: those are transient action confirmations ("List created"), not the notification feature, and stay. The former "Phase 8 (notifications)" no longer exists; lock/panic/encryption is now Phase 8.
 
 **Planned per Bauplan N11 (2026-07-09), decided but NOT yet in code (do not assume these are implemented; implement them per the Bauplan, do not re-add what N11 drops):**
-- **Task `meta` field is being removed entirely (N11.1.3):** a task will be only `text` + `done`. The DB column, the `add_task`/`edit_task` meta arg, the render, the inline-edit meta input, and the export meta all go away. Until then the code still has `meta`; do not build new features on it.
+- **Task `meta` field removed entirely (N11.1.3, DONE 2026-07-17):** a task is only `text` + `done`. The DB column, the `add_task`/`edit_task` meta arg, the render, the inline-edit meta input, and the export meta are all gone. `db._drop_legacy_columns()` drops `meta` (and the orphaned sync-era columns `synced`/`source`/`graph_etag`/`due_at`) from existing dev DBs once at connect. Do not re-add any of them.
 - **Export is `md`/`txt` only (N11.1.5), two-step (scope then format), plus `export_all` (N11.2).** JSON export is dropped.
 - **`set_online` becomes a real Windows airplane-mode control (N11.5),** see the sync-removed note above.
 - **Locking no longer switches offline (N11.10, decided 2026-07-13, resolves finding W1 of the Plananalyse):** every lock (lock button, `Ctrl+L`, auto-lock) leaves the online/radio state exactly as it is, in neither direction (no airplane mode on, no restore). Radios are switched only by the explicit user toggle (pill/`G`) and by the panic flow; the pre-app radio state is restored only on quit, as the last step. Today's `clearWorkspace()` still sets offline on lock; when implementing, remove that from the lock path (keep it in the panic path only).
@@ -132,7 +132,7 @@ Code/                      # run everything from here
 
 The same applies to `on_start` and the `_on_setting_change` / `_on_frame_changed` callbacks in `main.py`: they also run on a worker thread. Setting `window.native.Icon` (in `_apply_window_icon`) directly from there deadlocked against the UI thread while it was still initializing the WebView2 control (`edgechromium.py:__init__`), so the window never appeared (intermittently white, "not responding", or nothing, depending on timing; root cause found 2026-06-13 via thread stack dump). Fix: all startup window operations (icon, DWM titlebar theme, `SetWindowPos`) are dispatched through `_run_on_ui_thread(window, work)`, which uses `window.native.BeginInvoke(Action(work))` (async, non-blocking) after the window handle exists. Never call WinForms members on `window.native` directly from a worker thread; route them through `_run_on_ui_thread`.
 
-**`db.edit_task` SQL:** builds a dynamic SET clause from a whitelisted `allowed` set (currently `{"text", "meta", "done"}`; `meta` drops out with N11.1.3, leaving `{"text", "done"}`). The f-string in the query is safe because only those whitelisted column names can appear. This is an intentional tradeoff and not a SQL injection risk.
+**`db.edit_task` SQL:** builds a dynamic SET clause from a whitelisted `allowed` set (`{"text", "done"}` since the N11.1.3 meta removal). The f-string in the query is safe because only those whitelisted column names can appear. This is an intentional tradeoff and not a SQL injection risk.
 
 ## Critical constraints
 
@@ -155,9 +155,9 @@ The same applies to `on_start` and the `_on_setting_change` / `_on_frame_changed
 
 ## Security rules (mandatory: all untrusted input must follow these)
 
-Task text, list names, and meta fields are user-entered free text and treated as **untrusted input** (the app is local, so there is no external data source, but the defensive rules cost nothing and stay mandatory). These rules apply everywhere such values touch code:
+Task text and list names are user-entered free text and treated as **untrusted input** (the app is local, so there is no external data source, but the defensive rules cost nothing and stay mandatory). These rules apply everywhere such values touch code:
 
-**Escape every foreign value before it reaches `innerHTML` (anti-XSS):** The frontend runs with full `pywebview.api.*` access, an XSS is effectively RCE against the backend. `app.js` renders by building HTML strings from template literals and assigning them to `root.innerHTML` (full re-render via `render()`); it does NOT use `textContent`/`createTextNode` per node. The mandatory rule is therefore: any (potentially) foreign value interpolated into one of those template strings (task text, list name, meta, ids) MUST be wrapped in the `esc()` helper near the top of `app.js`, which escapes `& < > " '`.
+**Escape every foreign value before it reaches `innerHTML` (anti-XSS):** The frontend runs with full `pywebview.api.*` access, an XSS is effectively RCE against the backend. `app.js` renders by building HTML strings from template literals and assigning them to `root.innerHTML` (full re-render via `render()`); it does NOT use `textContent`/`createTextNode` per node. The mandatory rule is therefore: any (potentially) foreign value interpolated into one of those template strings (task text, list name, ids) MUST be wrapped in the `esc()` helper near the top of `app.js`, which escapes `& < > " '`.
 ```js
 `<span class="t-text">${esc(t.text)}</span>`   // correct: foreign data wrapped in esc()
 `<span class="t-text">${t.text}</span>`         // FORBIDDEN: unescaped interpolation
@@ -206,9 +206,9 @@ All frontend<->backend communication goes through these methods on the `Api` cla
 | `add_list(name)` | str | `{ id, name, ... }` |
 | `rename_list(id, name)` | str, str | `{ ok }` |
 | `delete_list(id)` | str | `{ ok }` |
-| `add_task(list_id, text, meta?)` | str, str, str? | `{ ...task }` (N11: `meta` slated for removal) |
+| `add_task(list_id, text)` | str, str | `{ ...task }` (no meta field, N11.1.3) |
 | `toggle_task(id)` | str | `{ id, done }` |
-| `edit_task(id, fields)` | str, obj | `{ ...task }` (N11: text only, no meta) |
+| `edit_task(id, fields)` | str, obj | `{ ...task }` (text only, no meta, N11.1.3) |
 | `delete_task(id)` | str | `{ ok }` |
 | `reorder(list_id, ordered_ids)` | str, [str] | `{ ok }` (task order within a list) |
 | `reorder_lists(ordered_ids)` | [str] | `{ ok }` (planned, N11.2: sidebar list order) |
@@ -237,7 +237,7 @@ Backend -> frontend events (via `window.evaluate_js`): `window.noa.onLocked()`.
 ## SQLite schema (2 main tables + settings)
 
 `lists(id, name, position, created_at, updated_at)`.  
-`tasks(id, list_id, text, meta, done, position, created_at, updated_at)` (N11.1.3: the `meta` column is slated for removal, a task will be only `text` + `done`). **Position invariant (Bauplan B.1, U13 decision 2026-07-15, planned, NOT yet in code):** `position` is kept **per section**, i.e. `open` (`done=0`) and `done` (`done=1`) each have their own 0..n sequence within a list. Checking a task off appends it to the **end of `done`** (`MAX(position) + 1` among that list's done tasks); reopening appends it to the **end of `open`**; a new task appends to the end of `open`; `reorder` renumbers 0..n within one section; each section is ordered by `(position, created_at)`. Today's code instead keeps **one** shared per-list sequence and leaves `position` untouched on toggle, so `toggle_task` (assign new end-of-section position) and `add_task` (`MAX+1` only among `done=0`) still have to be adjusted; `get_lists` already orders by `position` and splits on `done`, it stays.  
+`tasks(id, list_id, text, done, position, created_at, updated_at)` (the `meta` column was removed 2026-07-17 per N11.1.3, a task is only `text` + `done`; `_drop_legacy_columns()` migrates old dev DBs). **Position invariant (Bauplan B.1, U13 decision 2026-07-15, planned, NOT yet in code):** `position` is kept **per section**, i.e. `open` (`done=0`) and `done` (`done=1`) each have their own 0..n sequence within a list. Checking a task off appends it to the **end of `done`** (`MAX(position) + 1` among that list's done tasks); reopening appends it to the **end of `open`**; a new task appends to the end of `open`; `reorder` renumbers 0..n within one section; each section is ordered by `(position, created_at)`. Today's code instead keeps **one** shared per-list sequence and leaves `position` untouched on toggle, so `toggle_task` (assign new end-of-section position) and `add_task` (`MAX+1` only among `done=0`) still have to be adjusted; `get_lists` already orders by `position` and splits on `done`, it stays.  
 `settings(key, value)`, current key/value pairs: `accent`, `dark`, `toolbar`, `density`, `sidebar`, `railPinned`, `sidebarWidth`. All values stored as strings; the bool-typed keys read back as bool via `_BOOL_SETTINGS` in `api.py` (`dark`), `railPinned` is compared to the string `'true'`, `sidebarWidth` is parsed as int (valid range 180-520). `toolbar` is still stored/seeded but no longer exposed in the settings UI (the rail is always `floating`; any saved value is ignored on read in `applyChrome`). **Planned (N11.6/N11.7):** `dark` is replaced by `theme` (`auto|light|dark`, default `auto`), `toolbar` is retired, and `sound` (bool) plus `autoLock` (minutes, `0` = never) are added; update the `set_setting` whitelist accordingly. `seeded` (`"true"`) is a backend-only marker written on the first run (by `seed_if_empty()`) and by `killswitch()`; `seed_if_empty()` only writes the default settings and this marker, it never creates demo lists/tasks, so the app always starts with empty lists.
 
 IDs: local items use `'l'+uuid` (lists) or `'t'+uuid` (tasks).

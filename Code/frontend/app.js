@@ -201,17 +201,16 @@ function renderSidebar() {
 
 function renderTask(t) {
   const I = Icons;
-  // Inline-Bearbeitung (Doppelklick): Text + Meta direkt in der Karte aendern.
+  // Inline-Bearbeitung (Doppelklick): Text direkt in der Karte aendern (eine
+  // Aufgabe ist nur noch text + done, N11.1.3).
   // Enter speichert (edit_task), Esc bricht ab, Klick daneben speichert.
   if (state.editingId === t.id) {
     return `
     <div class="task editing${t.done ? ' done' : ''}" data-task-id="${esc(t.id)}">
       <button class="check" data-act="toggle-task" data-id="${esc(t.id)}" aria-label="toggle">${I.Check}</button>
       <input class="edit-text" id="edit-task-text" value="${esc(t.text)}" />
-      <input class="edit-meta" id="edit-task-meta" value="${esc(t.meta || '')}" placeholder="meta" />
     </div>`;
   }
-  const meta = (t.meta && !t.done) ? `<span class="t-meta">${esc(t.meta)}</span>` : '';
   const draggable = t.done ? '' : 'draggable="true"';
   // Klick auf die Karte (ausserhalb der Buttons) waehlt sie aus: die Auswahl
   // ist das Ziel fuer "Copy task" und den Bleistift in der Tool-Rail.
@@ -221,7 +220,6 @@ function renderTask(t) {
          data-act="select-task" data-id="${esc(t.id)}" ${draggable}>
       <button class="check" data-act="toggle-task" data-id="${esc(t.id)}" aria-label="toggle">${I.Check}</button>
       <span class="t-text">${esc(t.text)}</span>
-      ${meta}
     </div>`;
 }
 
@@ -973,13 +971,10 @@ function wireInputs() {
   const et = document.getElementById('edit-task-text');
   if (et) {
     et.focus(); et.select();
-    const em = document.getElementById('edit-task-meta');
-    const onEditKey = (e) => {
+    et.addEventListener('keydown', (e) => {
       if (e.key === 'Enter') { e.preventDefault(); commitTaskEdit(); }
       else if (e.key === 'Escape') { e.stopPropagation(); state.editingId = null; render(); }
-    };
-    et.addEventListener('keydown', onEditKey);
-    if (em) em.addEventListener('keydown', onEditKey);
+    });
   }
 }
 let refocusNewTask = false;
@@ -1084,21 +1079,19 @@ async function toggleTask(id) {
   render();
 }
 
-// Inline-Bearbeitung speichern: Text ist Pflicht, Meta optional (leer = null).
+// Inline-Bearbeitung speichern: nur der Text (kein Meta mehr, N11.1.3).
 async function commitTaskEdit() {
   const id = state.editingId;
   const ti = document.getElementById('edit-task-text');
   if (!id || !ti) { state.editingId = null; return; }
   const text = ti.value.trim();
   if (!text) return pushToast('Task text cannot be empty');
-  const mi = document.getElementById('edit-task-meta');
-  const meta = mi && mi.value.trim() ? mi.value.trim() : null;
-  const res = await api().edit_task(id, { text: text, meta: meta });
+  const res = await api().edit_task(id, { text: text });
   state.editingId = null;
   if (res && res.error) { render(); return pushToast(res.message || 'Error'); }
   for (const l of state.lists) {
     const t = l.open.find((x) => x.id === id) || l.done.find((x) => x.id === id);
-    if (t) { t.text = res.text; t.meta = res.meta; break; }
+    if (t) { t.text = res.text; break; }
   }
   render();
   pushToast('Task updated');

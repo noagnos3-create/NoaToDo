@@ -680,7 +680,6 @@ input { font: inherit; }
 .task .check:hover { border-color: var(--accent); }
 .task .check svg { width: 12px; height: 12px; }
 .task .t-text { flex: 1; font-size: var(--task-fs); font-weight: 500; }
-.task .t-meta { font-family: var(--font-mono); font-size: 10.5px; color: var(--text-faint); }
 .task .t-grip { color: var(--text-faint); opacity: 0; transition: opacity .14s; }
 .task:hover .t-grip { opacity: .6; }
 .task .t-grip svg { width: 15px; height: 15px; }
@@ -1402,14 +1401,13 @@ input { font: inherit; }
 .task .t-del svg { width: 14px; height: 14px; }
 
 .task.editing { border-color: var(--accent-line); box-shadow: var(--shadow); }
-.task.editing .edit-text, .task.editing .edit-meta {
+.task.editing .edit-text {
   background: var(--surface-2); border: 1px solid var(--accent-line);
   border-radius: 8px; color: var(--text); outline: none; padding: 6px 9px;
   min-width: 0;
+  flex: 1; font-size: var(--task-fs); font-weight: 500; font-family: inherit;
 }
-.task.editing .edit-text { flex: 1; font-size: var(--task-fs); font-weight: 500; font-family: inherit; }
-.task.editing .edit-meta { width: 132px; font-family: var(--font-mono); font-size: 10.5px; color: var(--text-dim); }
-.task.editing .edit-text:focus, .task.editing .edit-meta:focus { border-color: var(--accent); }
+.task.editing .edit-text:focus { border-color: var(--accent); }
 
 /* Auswahl einer Aufgabe (Klick auf die Karte): Ziel fuer "Copy task" und den
    Bleistift der Tool-Rail. Akzent-Rahmen + sanfter Wash + Akzent-Balken links,

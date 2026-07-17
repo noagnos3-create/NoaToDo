@@ -43,7 +43,6 @@ CREATE TABLE IF NOT EXISTS tasks (
   id          TEXT PRIMARY KEY,
   list_id     TEXT NOT NULL REFERENCES lists(id) ON DELETE CASCADE,
   text        TEXT NOT NULL,
-  meta        TEXT,
   done        INTEGER NOT NULL DEFAULT 0,
   position    INTEGER NOT NULL DEFAULT 0,
   created_at  TEXT NOT NULL,
@@ -80,6 +79,28 @@ class Database:
         self.conn.row_factory = sqlcipher3.Row
         self.conn.executescript(SCHEMA)
         self.conn.commit()
+        self._drop_legacy_columns()
+
+    def _drop_legacy_columns(self) -> None:
+        """Einmal-Migration: Altspalten fliegen aus Bestands-DBs.
+
+        ``meta`` (eine Aufgabe ist nur noch ``text`` + ``done``, N11.1.3) sowie
+        die Reste der 2026-07-09 entfernten Sync-Integration und der gestrichenen
+        Faelligkeiten (``synced``/``source``/``graph_etag``/``due_at``, N11.1.6).
+        Neue DBs entstehen ohne diese Spalten (SCHEMA oben); hier werden sie aus
+        aelteren Entwicklungs-DBs entfernt, damit kein verwaister Freitext liegen
+        bleibt. Scheitert ein ALTER (sehr alte SQLite-Engine ohne DROP COLUMN),
+        bleibt die Spalte ungenutzt stehen; kein harter Fehler.
+        """
+        legacy = ("meta", "synced", "source", "graph_etag", "due_at")
+        try:
+            cols = {r["name"] for r in self.conn.execute("PRAGMA table_info(tasks)")}
+            for col in legacy:
+                if col in cols:
+                    self.conn.execute(f"ALTER TABLE tasks DROP COLUMN {col}")
+            self.conn.commit()
+        except Exception:
+            pass
 
     # -- Lebenszyklus ------------------------------------------------------
     def close(self) -> None:
@@ -95,7 +116,6 @@ class Database:
             "id": row["id"],
             "list_id": row["list_id"],
             "text": row["text"],
-            "meta": row["meta"],
             "done": bool(row["done"]),
             "position": row["position"],
             "created_at": row["created_at"],
@@ -168,7 +188,7 @@ class Database:
         return {"ok": True}
 
     # -- Aufgaben schreiben ------------------------------------------------
-    def add_task(self, list_id: str, text: str, meta: str | None = None) -> dict[str, Any]:
+    def add_task(self, list_id: str, text: str) -> dict[str, Any]:
         now = _now()
         tid = _new_id("t")
         pos = self.conn.execute(
@@ -176,10 +196,10 @@ class Database:
             (list_id,),
         ).fetchone()["p"]
         self.conn.execute(
-            "INSERT INTO tasks (id, list_id, text, meta, done, position,"
+            "INSERT INTO tasks (id, list_id, text, done, position,"
             " created_at, updated_at)"
-            " VALUES (?, ?, ?, ?, 0, ?, ?, ?)",
-            (tid, list_id, text, meta, pos, now, now),
+            " VALUES (?, ?, ?, 0, ?, ?, ?)",
+            (tid, list_id, text, pos, now, now),
         )
         self.conn.commit()
         row = self.conn.execute("SELECT * FROM tasks WHERE id = ?", (tid,)).fetchone()
@@ -200,8 +220,8 @@ class Database:
         return {"id": task_id, "done": bool(new_done)}
 
     def edit_task(self, task_id: str, fields: dict[str, Any]) -> dict[str, Any]:
-        """Erlaubte Felder: ``text``, ``meta``, ``done``."""
-        allowed = {"text", "meta", "done"}
+        """Erlaubte Felder: ``text``, ``done`` (kein ``meta`` mehr, N11.1.3)."""
+        allowed = {"text", "done"}
         sets = []
         vals: list[Any] = []
         for key, value in fields.items():
