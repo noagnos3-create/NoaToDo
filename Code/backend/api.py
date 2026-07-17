@@ -13,23 +13,82 @@ from __future__ import annotations
 import ctypes
 import functools
 import os
+import re
+import secrets
 import threading
+import time
+from collections import deque
+from datetime import datetime
 from typing import Any, Callable
 
 from . import db as db_module
 
+# ---------------------------------------------------------------------------
+# Fehler-Hygiene (Gate G29 / Bauplan N11.12).
+#
+# Der kanonische Fehlercode-Katalog steht in Bauplan B.2 und ist die einzige
+# Wahrheit: ans Frontend geht IMMER nur ein Code aus dieser Tabelle plus der
+# statische englische Text, nie str(exc), nie Pfade, Tracebacks, SQL-Fragmente
+# oder Nutzertext. Details landen ausschliesslich im redigierten
+# In-Memory-Ringpuffer (Api._errors, einsehbar im Status-Modal, geleert bei
+# Sperre/Panik/Killswitch/Quit). Im Release existiert kein persistentes Logfile.
+# ---------------------------------------------------------------------------
+ERROR_MESSAGES = {
+    "not_found": "Item not found.",
+    "invalid": "Invalid input.",
+    "locked": "App is locked.",
+    "passphrase": "Wrong passphrase.",
+    "rate_limited": "Too many attempts.",
+    "vault": "Vault cannot be opened.",
+    "canceled": "Canceled.",
+    "busy": "A dialog is already open.",
+    "memory": "Not enough memory. Close other apps and try again.",
+    "internal": "Something went wrong.",
+}
+
+
+def _err(code: str, **extra: Any) -> dict[str, Any]:
+    """Fehlerobjekt nach B.2: Code + statischer Katalogtext (+ Zusatzfelder)."""
+    out: dict[str, Any] = {"error": code, "message": ERROR_MESSAGES[code]}
+    out.update(extra)
+    return out
+
+
+# Alles, was wie ein Windows-/UNC-/POSIX-Pfad aussieht, wird im Ringpuffer
+# durch <path> ersetzt (N11.12.1). Bewusst grosszuegig: lieber ein Wort zu viel
+# redigiert als ein Benutzername zu wenig.
+_PATH_RE = re.compile(r"(?:[A-Za-z]:[\\/]|\\\\|~[\\/]|/(?=[\w.]))[^\s'\",;|]*")
+
+
+def _redact(text: str) -> str:
+    """Pfade maskieren und auf 200 Zeichen kappen (Ringpuffer-Redaktion)."""
+    return _PATH_RE.sub("<path>", str(text))[:200]
+
 
 def bridge(fn: Callable) -> Callable:
-    """Fängt Ausnahmen ab und liefert die Fehlerkonvention aus B.2."""
+    """Fängt Ausnahmen ab und liefert die Fehlerkonvention aus B.2 (Gate G29).
+
+    Ans Frontend gehen nur Katalog-Codes mit statischem Text; bei ``internal``
+    zusaetzlich eine kurze ``ref`` auf den Ringpuffer-Eintrag. Der Eintrag
+    selbst (Methodenname, Exception-Klasse, redigierte Kurzmeldung) bleibt im
+    RAM und ist nur ueber das Status-Modal einsehbar.
+    """
 
     @functools.wraps(fn)
     def wrapper(self, *args, **kwargs):
         try:
             return fn(self, *args, **kwargs)
         except KeyError as exc:
-            return {"error": "not_found", "message": f"Unbekannte ID: {exc}"}
+            self._log_error(fn.__name__, "not_found", exc)
+            return _err("not_found")
+        except MemoryError as exc:
+            # N11.4.3: Speicher-Not ist weder "falsche Passphrase" noch ein
+            # anonymer interner Fehler; eigener Code, kein Absturz.
+            self._log_error(fn.__name__, "memory", exc)
+            return _err("memory")
         except Exception as exc:  # pragma: no cover - defensiv
-            return {"error": "internal", "message": str(exc)}
+            ref = self._log_error(fn.__name__, "internal", exc)
+            return _err("internal", ref=ref)
 
     return wrapper
 
@@ -68,6 +127,26 @@ class Api:
                                        # (Handle wird neu erzeugt: Titelleisten-Theme
                                        # muss neu gesetzt werden)
         self._clip_timer = None   # Timer für das Auto-Leeren der Zwischenablage
+        # Redigierter Fehler-Ringpuffer (Gate G29 / N11.12.1): die letzten 50
+        # Fehler, NUR im RAM, nie auf der Platte. Eintraege sind bereits beim
+        # Schreiben redigiert (Pfade -> <path>, 200 Zeichen) und enthalten nie
+        # Bridge-Argumente. Geleert bei Sperre/Panik/Killswitch/Quit.
+        self._errors = deque(maxlen=50)
+
+    def _log_error(self, method: str, code: str, exc: BaseException) -> str:
+        """Fehler in den Ringpuffer schreiben; liefert die kurze ``ref``."""
+        ref = secrets.token_hex(2).upper()
+        self._errors.appendleft(
+            {
+                "ts": datetime.now().strftime("%H:%M:%S"),
+                "method": method,
+                "code": code,
+                "exc": type(exc).__name__,
+                "ref": ref,
+                "msg": _redact(exc),
+            }
+        )
+        return ref
 
     # =====================================================================
     # Gesamtzustand
@@ -92,14 +171,14 @@ class Api:
     def add_list(self, name: str) -> dict[str, Any]:
         name = (name or "").strip()
         if not name:
-            return {"error": "invalid", "message": "Listenname darf nicht leer sein."}
+            return _err("invalid")
         return self.db.add_list(name)
 
     @bridge
     def rename_list(self, list_id: str, name: str) -> dict[str, Any]:
         name = (name or "").strip()
         if not name:
-            return {"error": "invalid", "message": "Listenname darf nicht leer sein."}
+            return _err("invalid")
         return self.db.rename_list(list_id, name)
 
     @bridge
@@ -113,7 +192,7 @@ class Api:
     def add_task(self, list_id: str, text: str) -> dict[str, Any]:
         text = (text or "").strip()
         if not text:
-            return {"error": "invalid", "message": "Aufgabentext darf nicht leer sein."}
+            return _err("invalid")
         return self.db.add_task(list_id, text)
 
     @bridge
@@ -145,7 +224,7 @@ class Api:
     def export_list(self, list_id: str, fmt: str = "md") -> dict[str, Any]:
         lst = self._list_or_none(list_id)
         if lst is None:
-            return {"error": "not_found", "message": "Liste nicht gefunden."}
+            return _err("not_found")
         safe = "".join(c if c.isalnum() or c in " -_" else "_" for c in lst["name"]).strip()
         if fmt == "json":
             import json
@@ -184,10 +263,15 @@ class Api:
         """
         task = self.db.get_task(task_id)
         if task is None:
-            return {"error": "not_found", "message": "Aufgabe nicht gefunden."}
-        text = task["text"]
+            return _err("not_found")
+        return self._copy_secure(task["text"])
+
+    def _copy_secure(self, text: str) -> dict[str, Any]:
+        """Gemeinsamer gehaerteter Clipboard-Pfad (G23) inkl. Auto-Clear-Timer."""
         if not _set_clipboard_secure(text):
-            return {"error": "clipboard", "message": "Zwischenablage nicht verfügbar."}
+            # Kein eigener Katalog-Code: Clipboard-Ausfall ist ein interner
+            # Fehler; der @bridge-Decorator macht daraus internal + ref.
+            raise RuntimeError("clipboard unavailable")
         if self._clip_timer is not None:
             self._clip_timer.cancel()
         self._clip_timer = threading.Timer(
@@ -196,6 +280,23 @@ class Api:
         self._clip_timer.daemon = True
         self._clip_timer.start()
         return {"ok": True, "clears_in": CLIPBOARD_CLEAR_SECONDS}
+
+    @bridge
+    def copy_errors(self) -> dict[str, Any]:
+        """Kopiert den redigierten Fehler-Ringpuffer (G29) als Text.
+
+        Nutzt denselben gehaerteten Backend-Clipboard-Pfad wie ``copy_task``
+        (Gate G23: keine Win+V-History, kein Cloud-Clipboard, Auto-Clear).
+        Der Puffer ist bereits redigiert (Pfade -> <path>, keine Argumente),
+        es verlaesst also nichts Sensibles die App.
+        """
+        if not self._errors:
+            return {"ok": True, "clears_in": 0}
+        lines = [
+            f"{e['ts']} {e['method']} {e['code']} {e['exc']} ref={e['ref']} {e['msg']}"
+            for e in self._errors
+        ]
+        return self._copy_secure("\n".join(lines))
 
     # =====================================================================
     # Einstellungen
@@ -231,12 +332,12 @@ class Api:
         """
         win = self._window
         if win is None:
-            return {"error": "no_window", "message": "Kein Fenster verfügbar."}
+            raise RuntimeError("window not ready")   # -> internal + ref (G29)
         flag = bool(flag)
         if flag == self._mini:
             return {"mini": self._mini}
         if not self._apply_mini_window(win, flag):
-            return {"error": "window", "message": "Fensterumschaltung fehlgeschlagen."}
+            raise RuntimeError("mini switch failed")  # -> internal + ref (G29)
         self._mini = flag
         # Der FormBorderStyle-Wechsel hat das Fensterhandle neu erzeugt. main.py
         # passt ueber diesen Callback beim Verlassen des Mini-Modus die
@@ -334,6 +435,10 @@ class Api:
             },
             "encryption": encryption,
             "runtime": {"webview2": _webview2_version()},
+            # Redigierter Fehler-Ringpuffer (G29): neueste zuerst, nur fuer die
+            # "Recent errors"-Sektion des Status-Modals. Eintraege sind schon
+            # beim Schreiben redigiert (<path>, 200 Zeichen, keine Argumente).
+            "errors": list(self._errors),
         }
 
     # =====================================================================
@@ -392,6 +497,10 @@ class Api:
     @bridge
     def lock(self) -> dict[str, Any]:
         self.locked = True
+        # G29/N11.12.1: der Fehler-Ringpuffer ist Sitzungs-Diagnose und wird bei
+        # jedem Austritt aus dem entsperrten Zustand geleert (bis Phase 8 die
+        # gemeinsame teardown(reason)-Sequenz uebernimmt, N11.11 Schritt 3).
+        self._errors.clear()
         return {"locked": True}
 
     @bridge
@@ -404,6 +513,7 @@ class Api:
     def panic(self) -> dict[str, Any]:
         self.locked = True
         self.online = False
+        self._errors.clear()   # G29: keine Diagnose-Historie im gesperrten Zustand
         return {"locked": True}
 
     @bridge
@@ -415,6 +525,7 @@ class Api:
         Programm; der nächste Start verhält sich wie ein Erststart ohne
         Demo-Daten (Details in db.killswitch).
         """
+        self._errors.clear()   # G29: Diagnose-Historie faellt mit den Daten
         return self.db.killswitch()
 
     @bridge
@@ -427,9 +538,10 @@ class Api:
         hier könnte die Nachrichtenschleife verklemmen. Das sichere Wischen der
         Spuren (PROFILE_DIR, Gate G14) folgt in Phase 8 auf genau diesem Pfad.
         """
+        self._errors.clear()   # G29: Ringpuffer verlaesst die Sitzung nicht
         win = self._window
         if win is None:
-            return {"error": "no_window", "message": "Kein Fenster verfügbar."}
+            raise RuntimeError("window not ready")   # -> internal + ref (G29)
         form = getattr(win, "native", None)
         if form is not None:
             try:

@@ -527,12 +527,36 @@ function renderModal() {
           <span class="mono" style="margin-left:auto;font-size:11px;color:var(--text-faint)">${r[1]}</span>
           ${r[3] ? `<span class="tag" style="color:${r[2]};min-width:64px;text-align:right">${r[3]}</span>` : ''}
         </div>`).join('');
+      // "Recent errors" (Gate G29 / N11.12.1): der redigierte Fehler-Ringpuffer
+      // des Backends, eingeklappt, mit Kopier-Knopf ueber den gehaerteten
+      // G23-Clipboard-Pfad (copy_errors). Jede Zeile ist bereits backendseitig
+      // redigiert (<path> statt Pfaden, keine Bridge-Argumente).
+      const errs = (statusData && statusData.errors) || [];
+      const errRows = errs.length
+        ? errs.map((er) => `
+          <div class="mono" style="font-size:10.5px;color:var(--text-dim);padding:3px 0;border-bottom:1px dashed var(--border);word-break:break-all">
+            ${esc(er.ts)} <b>${esc(er.method)}</b> ${esc(er.code)} ${esc(er.exc)}${er.ref ? ' ref=' + esc(er.ref) : ''}${er.msg ? ' &middot; ' + esc(er.msg) : ''}
+          </div>`).join('')
+        : `<div class="empty-note">// none</div>`;
+      const errSection = `
+        <div style="margin-top:14px">
+          <button class="section-head${errorsOpen ? ' open' : ' collapsed'}" data-act="toggle-errors" style="width:100%">
+            <span class="s-pill">
+              <span class="s-title">Recent errors</span>
+              <span class="s-count">${errs.length}</span>
+            </span>
+          </button>
+          ${errorsOpen ? `
+          <div style="max-height:180px;overflow-y:auto;margin-top:6px">${errRows}</div>
+          ${errs.length ? `<button class="btn" data-act="copy-errors" style="margin-top:8px">${I.Copy} Copy</button>` : ''}` : ''}
+        </div>`;
       return scrim(`
         <div class="modal">
           <div class="modal-body">
             <div class="modal-icon accent">${I.Diag}</div>
             <h3>App status</h3>
             <div style="margin-top:16px;display:flex;flex-direction:column;gap:2px">${body}</div>
+            ${errSection}
           </div>
           <div class="modal-actions"><button class="btn btn-primary" data-act="modal-close">Close</button></div>
         </div>`);
@@ -696,6 +720,11 @@ function renderLock() {
 }
 // true, solange die Aufschliess-Animation nach richtigem Passwort laeuft.
 let lockUnlocking = false;
+// Frisch geholtes get_status()-Ergebnis fuer das Status-Modal (transient),
+// plus Auf/Zu-Zustand der "Recent errors"-Sektion (G29). Kein Teil von state:
+// rein praesentationsbezogen, verfaellt mit dem Modal.
+let statusData = null;
+let errorsOpen = false;
 
 // ===========================================================================
 // Panik-Flow (Nachtrag N10). Entsichert wie eine Cockpit-Waffenabdeckung,
@@ -826,7 +855,7 @@ function startKillswitch() {
       const res = await req;
       if (res && res.error) {
         // Loeschen fehlgeschlagen: NICHT so tun, als waere es passiert.
-        pushToast(res.message || 'Killswitch failed');
+        handleError(res);
         return;
       }
       await api().quit_app();
@@ -987,7 +1016,7 @@ async function submitNewTask(text) {
   if (!text) return;
   const list = activeList();
   const res = await api().add_task(list.id, text);
-  if (res && res.error) return pushToast(res.message || 'Error');
+  if (handleError(res)) return;
   list.open.push(res);
   // Pille nach dem Absenden wieder schliessen: zum Hinzufuegen einer weiteren
   // Aufgabe muss erneut auf das Plus gedrueckt werden.
@@ -1000,7 +1029,7 @@ async function commitNewList(name) {
   state.adding = false;
   if (!name) { render(); return; }
   const res = await api().add_list(name);
-  if (res && res.error) { render(); return pushToast(res.message || 'Error'); }
+  if (res && res.error) { render(); handleError(res); return; }
   state.lists.push(res);
   state.activeId = res.id;
   render();
@@ -1068,7 +1097,7 @@ async function toggleTask(id) {
   if (isChecking) playDoneSound();
 
   const res = await api().toggle_task(id);
-  if (res && res.error) return pushToast(res.message || 'Error');
+  if (handleError(res)) return;
   // Aufgabe lokal zwischen open/done verschieben (wie im Konzept).
   for (const l of state.lists) {
     let i = l.open.findIndex((x) => x.id === id);
@@ -1088,7 +1117,7 @@ async function commitTaskEdit() {
   if (!text) return pushToast('Task text cannot be empty');
   const res = await api().edit_task(id, { text: text });
   state.editingId = null;
-  if (res && res.error) { render(); return pushToast(res.message || 'Error'); }
+  if (res && res.error) { render(); handleError(res); return; }
   for (const l of state.lists) {
     const t = l.open.find((x) => x.id === id) || l.done.find((x) => x.id === id);
     if (t) { t.text = res.text; break; }
@@ -1099,7 +1128,7 @@ async function commitTaskEdit() {
 
 async function deleteTask(id) {
   const res = await api().delete_task(id);
-  if (res && res.error) return pushToast(res.message || 'Error');
+  if (handleError(res)) return;
   for (const l of state.lists) {
     l.open = l.open.filter((t) => t.id !== id);
     l.done = l.done.filter((t) => t.id !== id);
@@ -1113,7 +1142,7 @@ async function deleteTask(id) {
 async function doRename(name) {
   const list = activeList();
   const res = await api().rename_list(list.id, name);
-  if (res && res.error) return pushToast(res.message || 'Error');
+  if (handleError(res)) return;
   list.name = name;
   state.modal = null;
   render();
@@ -1134,7 +1163,7 @@ async function doRenameList(id, name) {
   // Leer oder unveraendert: stillschweigend abbrechen.
   if (!trimmed || trimmed === list.name) { state.renamingId = null; state.listEditDock = false; render(); return; }
   const res = await api().rename_list(id, trimmed);
-  if (res && res.error) return pushToast(res.message || 'Error');
+  if (handleError(res)) return;
   list.name = trimmed;
   state.renamingId = null;
   state.listEditDock = false;
@@ -1146,7 +1175,7 @@ async function doDeleteList() {
   const id = state.confirmDeleteId;
   if (!id) return;
   const res = await api().delete_list(id);
-  if (res && res.error) return pushToast(res.message || 'Error');
+  if (handleError(res)) return;
   const removed = state.lists.find((l) => l.id === id);
   state.lists = state.lists.filter((l) => l.id !== id);
   // Aktive Liste neu setzen, falls die geloeschte ausgewaehlt war.
@@ -1222,7 +1251,7 @@ async function doExport() {
   const list = activeList();
   if (!list) return;
   const res = await api().export_list(list.id, 'md');
-  if (res && res.error) return pushToast(res.message || 'Error');
+  if (handleError(res)) return;
   // Phase 7 ergänzt den echten Speicher-Dialog; vorerst Bestätigung.
   pushToast('Exported list', res.filename);
 }
@@ -1233,13 +1262,13 @@ async function doExport() {
 async function doCopy() {
   if (!state.selectedId) return pushToast('Select a task first');
   const res = await api().copy_task(state.selectedId);
-  if (res && res.error) return pushToast(res.message || 'Error');
+  if (handleError(res)) return;
   pushToast('Task copied', 'clipboard clears in ' + (res.clears_in || 60) + 's');
 }
 
 async function doMini(flag) {
   const res = await api().set_mini(flag);
-  if (res && res.error) { pushToast(res.message || 'Mini window failed'); return; }
+  if (handleError(res)) return;
   state.mini = res && typeof res.mini === 'boolean' ? res.mini : flag;
   // Ein offenes "Neue Aufgabe"-Eingabefeld beim Moduswechsel IMMER schliessen
   // (in beide Richtungen): es soll nicht aus dem Mini- ins grosse Fenster oder
@@ -1389,6 +1418,53 @@ async function lockSubmit(value) {
 function flashThemeSwitch() {
   root.classList.add('theme-switching');
   requestAnimationFrame(() => requestAnimationFrame(() => root.classList.remove('theme-switching')));
+}
+
+// ===========================================================================
+// Zentrale Fehlerbehandlung nach dem B.2-Fehlercode-Katalog (Gate G29).
+// Das Backend liefert nur noch Codes + statische Texte (nie str(exc), nie
+// Pfade). Toast-Politik (B.2): Toast NUR bei not_found, invalid, busy und
+// internal (mit ref); locked und canceled sind bewusst stumm; passphrase/
+// rate_limited/vault/memory haben ihre eigene Darstellung im Lock-/
+// Fehlerbildschirm und bekommen ebenfalls nie einen Toast.
+// Liefert true, wenn res ein Fehler war (Aufrufer bricht dann ab).
+// ===========================================================================
+function handleError(res) {
+  if (!res || !res.error) return false;
+  const code = res.error;
+  if (code === 'not_found') {
+    // Die Ansicht war veraltet: Toast, danach still frisch laden (B.2).
+    pushToast(res.message || 'Item not found.');
+    refreshState();
+  } else if (code === 'invalid' || code === 'busy') {
+    pushToast(res.message || 'Invalid input.');
+  } else if (code === 'internal') {
+    pushToast(res.message || 'Something went wrong.', res.ref ? 'ref ' + res.ref : '');
+  } else if (code === 'locked') {
+    // Stumm (Renn-Fall, z.B. Auto-Lock waehrend einer laufenden Aktion):
+    // einfach den Lock-Screen zeigen.
+    state.locked = true;
+    render();
+  }
+  // canceled (und alles Uebrige): stumm, kein Toast.
+  return true;
+}
+
+// Gesamtzustand still neu vom Backend laden (nach not_found: die eigene
+// Ansicht war veraltet). UI-Zustand bleibt, eine verschwundene aktive Liste
+// wird geschlossen.
+async function refreshState() {
+  try {
+    const st = await api().get_state();
+    if (st && st.lists) {
+      state.lists = st.lists;
+      state.online = !!st.online;
+      if (state.activeId && !state.lists.some((l) => l.id === state.activeId)) {
+        state.activeId = null; state.selectedId = null; state.editingId = null;
+      }
+    }
+  } catch (e) { /* Backend nicht erreichbar: bestehende Ansicht behalten */ }
+  render();
 }
 
 // ===========================================================================
@@ -1558,7 +1634,24 @@ async function onClick(e) {
       else { state.modal = 'rename'; render(); }
       break;
     case 'tb-delete': if (activeList() && state.selectedId) await deleteTask(state.selectedId); break;
-    case 'tb-status': state.modal = 'status'; render(); break;
+    case 'tb-status':
+      // Status-Modal sofort zeigen, die Backend-Daten (u.a. den G29-Fehler-
+      // Ringpuffer) asynchron nachladen und nur nachrendern, solange das
+      // Modal noch offen ist.
+      state.modal = 'status'; statusData = null; errorsOpen = false; render();
+      api().get_status().then((d) => {
+        if (!d || d.error) return;
+        statusData = d;
+        if (state.modal === 'status') render();
+      });
+      break;
+    case 'toggle-errors': errorsOpen = !errorsOpen; render(); break;
+    case 'copy-errors': {
+      const res = await api().copy_errors();
+      if (handleError(res)) break;
+      pushToast('Errors copied', res.clears_in ? 'clipboard clears in ' + res.clears_in + 's' : '');
+      break;
+    }
     case 'exit-focus': state.focus = false; render(); break;
     case 'set-accent': await setAccent(a.dataset.color); break;
     case 'set': await setSetting(a.dataset.key, a.dataset.value); break;
