@@ -353,6 +353,85 @@ class Database:
         self.conn.commit()
         return {"ok": True}
 
+    def _renumber_sections(self, list_id: str) -> None:
+        """``position`` je Sektion 0..n-1 neu vergeben (B.1-Invariante, U13).
+
+        Reine Konsistenz-Nacharbeit nach einem Verschieben: ``open`` und
+        ``done`` behalten je eine eigene, lueckenlose 0..n-Sequenz. Bewusst
+        ohne ``updated_at``-Anfassen der Nachbarn (nur die bewegte Aufgabe
+        traegt einen neuen Zeitstempel).
+        """
+        for done in (0, 1):
+            rows = self.conn.execute(
+                "SELECT id FROM tasks WHERE list_id = ? AND done = ?"
+                " ORDER BY position, created_at",
+                (list_id, done),
+            ).fetchall()
+            for pos, r in enumerate(rows):
+                self.conn.execute(
+                    "UPDATE tasks SET position = ? WHERE id = ?", (pos, r["id"])
+                )
+
+    def move_task(self, task_id: str, target_list_id: str) -> dict[str, Any]:
+        """Aufgabe in eine andere Liste verschieben (N7/N11.2.2, U11-Entscheid).
+
+        Beide IDs werden geprueft: fehlende Aufgabe oder Zielliste ->
+        ``KeyError`` (Katalog: ``not_found``), Ziel = aktuelle Liste ->
+        ``InvalidInput`` (``invalid``). Die Aufgabe BEHAELT ihren
+        ``done``-Status und haengt ans Ende ihrer Sektion in der Zielliste;
+        danach werden Quell- und Zielliste je Sektion 0..n-1 durchnummeriert.
+        """
+        row = self.conn.execute(
+            "SELECT * FROM tasks WHERE id = ?", (task_id,)
+        ).fetchone()
+        if row is None:
+            raise KeyError(task_id)
+        if self._get_list(target_list_id) is None:
+            raise KeyError(target_list_id)
+        if row["list_id"] == target_list_id:
+            raise InvalidInput("target is the current list")
+        source_list_id = row["list_id"]
+        pos = self.conn.execute(
+            "SELECT COALESCE(MAX(position), -1) + 1 AS p FROM tasks"
+            " WHERE list_id = ? AND done = ?",
+            (target_list_id, row["done"]),
+        ).fetchone()["p"]
+        self.conn.execute(
+            "UPDATE tasks SET list_id = ?, position = ?, updated_at = ?"
+            " WHERE id = ?",
+            (target_list_id, pos, _now(), task_id),
+        )
+        self._renumber_sections(source_list_id)
+        self._renumber_sections(target_list_id)
+        self.conn.commit()
+        row = self.conn.execute(
+            "SELECT * FROM tasks WHERE id = ?", (task_id,)
+        ).fetchone()
+        return self._task_dict(row)
+
+    def reorder_lists(self, ordered_ids: list[str]) -> dict[str, Any]:
+        """Sidebar-Reihenfolge der Listen speichern (N7/N11.2.2, U11).
+
+        Dieselbe Alles-oder-nichts-Regel wie ``reorder``: ``ordered_ids``
+        muss als Menge EXAKT alle Listen-IDs sein (keine fehlende, doppelte
+        oder fremde ID), sonst ``InvalidInput`` und es wird nichts
+        geschrieben. Bei gueltiger Eingabe wird ``lists.position`` 0..n-1 in
+        der uebergebenen Reihenfolge neu vergeben.
+        """
+        all_ids = {
+            r["id"] for r in self.conn.execute("SELECT id FROM lists").fetchall()
+        }
+        if len(ordered_ids) != len(set(ordered_ids)) or set(ordered_ids) != all_ids:
+            raise InvalidInput("ordered_ids must match the full list set")
+        now = _now()
+        for pos, lid in enumerate(ordered_ids):
+            self.conn.execute(
+                "UPDATE lists SET position = ?, updated_at = ? WHERE id = ?",
+                (pos, now, lid),
+            )
+        self.conn.commit()
+        return {"ok": True}
+
     # -- Einstellungen -----------------------------------------------------
     def get_setting(self, key: str, default: Any = None) -> Any:
         row = self.conn.execute(

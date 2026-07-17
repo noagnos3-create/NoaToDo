@@ -389,6 +389,25 @@ class Api:
     def reorder(self, list_id: str, ordered_ids: list[str]) -> dict[str, Any]:
         return self.db.reorder(list_id, ordered_ids)
 
+    @bridge(schema={"task_id": v_id, "target_list_id": v_id})
+    def move_task(self, task_id: str, target_list_id: str) -> dict[str, Any]:
+        """Aufgabe in eine andere Liste verschieben (N7/N11.2, Phase 7).
+
+        Randfaelle nach N11.2.2 (U11): fehlende Aufgabe/Zielliste ->
+        ``not_found``, Ziel = aktuelle Liste -> ``invalid``; ``done`` bleibt
+        erhalten, die Aufgabe haengt ans Ende ihrer Sektion in der Zielliste.
+        """
+        return self.db.move_task(task_id, target_list_id)
+
+    @bridge(schema={"ordered_ids": v_str_list})
+    def reorder_lists(self, ordered_ids: list[str]) -> dict[str, Any]:
+        """Sidebar-Reihenfolge der Listen speichern (N7/N11.2, Phase 7).
+
+        Validierung nach N11.2.2 (U11): exakt die volle Listenmenge, sonst
+        ``invalid`` und nichts wird geschrieben (alles oder nichts).
+        """
+        return self.db.reorder_lists(ordered_ids)
+
     # =====================================================================
     # Export / Kopieren (Grundgerüst; Save-Dialog folgt in Phase 7)
     # =====================================================================

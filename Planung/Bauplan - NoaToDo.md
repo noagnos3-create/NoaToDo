@@ -272,8 +272,8 @@ Das ist die **vollständige Methodenliste**, die `backend/api.py` bereitstellt u
 | `edit_task(id, fields)` | `str,obj` | `{ …task }` | Aufgaben-Text ändern (nur noch `text`, N11.1.3) |
 | `delete_task(id)` | `str` | `{ ok:true }` | Aufgabe löschen |
 | `reorder(list_id, ordered_ids)` | `str,[str]` | `{ ok:true }` | Drag-&-Drop-Reihenfolge der Aufgaben speichern |
-| `reorder_lists(ordered_ids)` | `[str]` | `{ ok:true }` | Reihenfolge der Listen in der Sidebar speichern (ab Phase 7, N11.2) |
-| `move_task(id, target_list_id)` | `str,str` | `{ ...task }` | Aufgabe in eine andere Liste verschieben (ans Ende der Ziel-Liste; ab Phase 7, N11.2) |
+| `reorder_lists(ordered_ids)` | `[str]` | `{ ok:true }` | Reihenfolge der Listen in der Sidebar speichern (Phase 7, N11.2; Randfaelle nach N11.2.2; im Code umgesetzt 2026-07-17: Drag and Drop der Sidebar-Eintraege) |
+| `move_task(id, target_list_id)` | `str,str` | `{ ...task }` | Aufgabe in eine andere Liste verschieben (behaelt `done`, ans Ende ihrer Sektion in der Ziel-Liste; Phase 7, N11.2; Randfaelle nach N11.2.2; im Code umgesetzt 2026-07-17: Drag auf einen Sidebar-Eintrag plus "Move to..."-Kontextmenue per Rechtsklick auf die Karte) |
 | `export_list(id, format)` | `str,'md'\|'txt'` | `{ filename, content }` | Eine Liste exportieren (nur noch md/txt, N11.1.5) |
 | `export_all(format)` | `'md'\|'txt'` | `{ filename, content }` | Alle Listen mit allen Aufgaben in eine Datei exportieren (Schritt "alle Listen" des zweistufigen Exports, N11.2) |
 | `copy_task(id)` | `str` | `{ ok, clears_in }` | EINE ausgewählte Aufgabe gehärtet ins Clipboard (Backend-seitig, keine Win+V-History, kein Cloud-Clipboard, Auto-Clear nach 60 s; ersetzt das frühere `copy_list`, ganze Listen kopiert man bewusst nicht mehr, dafür gibt es den Export) |
@@ -1123,7 +1123,10 @@ ungültig; insbesondere gibt es kein blankes `N` für "Neue Liste" mehr.)*
 - **Mini-Modus:** nur über den Rail-Knopf erreichbar; `Esc` verlässt ihn.
 
 **Maus-Gesten** (kein Tastenkürzel, gehören aber ins Shortcuts-Modal): Einfachklick
-auf eine Aufgabe = Auswahl, Doppelklick = Inline-Edit, Ziehen = Sortieren.
+auf eine Aufgabe = Auswahl, Doppelklick = Inline-Edit, Ziehen = Sortieren; seit
+Phase 7 (N11.2, 2026-07-17) ausserdem: Listen-Eintrag in der Sidebar ziehen =
+Listen sortieren (`reorder_lists`), Aufgabe auf einen Sidebar-Eintrag ziehen oder
+Rechtsklick auf die Karte ("Move to...") = Aufgabe verschieben (`move_task`).
 
 **Gestrichen:** `Ctrl+Shift+!` (früher als Notfall-Sperre, zuletzt als verstärkte
 Sperre ohne Rückfrage gedacht) ist ersatzlos entfernt und darf nicht wieder
@@ -2933,6 +2936,12 @@ aus Phase 6.5 / Gate G23, es gibt bewusst kein Listen-Kopieren mehr.)
    Kontextmenü, Zielposition ans Ende der Ziel-Liste) und `reorder_lists(ordered_ids)`
    (Drag and Drop der Listen in der Sidebar). Validierung wie `add_task` (G20).
    „Clear completed" und Volltextsuche werden nicht gebaut.
+   **Im Code umgesetzt (2026-07-17):** beide Methoden in `db.py`/`api.py` mit den
+   N11.2.2-Randfällen (alles oder nichts, Neunummerierung je Sektion 0..n-1,
+   `done` bleibt beim Verschieben erhalten); Frontend: Sidebar-Einträge sind
+   draggable (Sortieren), eine gezogene Aufgabe kann auf einen Sidebar-Eintrag
+   fallen gelassen werden, Rechtsklick auf eine Aufgaben-Karte öffnet das
+   „Move to…"-Kontextmenü; die Maus-Gesten stehen in B.5 und im Shortcuts-Modal.
 
 #### Export-Härtung (Etikett G21) [Sec]
 
@@ -3753,11 +3762,11 @@ gilt vor dem Audit-Dokument: bei Widerspruch gewinnt diese Tabelle.*
 | 3.2 Blur legt eine Liste an | 🟡 gueltig | Am Code bestaetigt (`app.js`, `blur` committet das Neue-Liste-Feld): Wegklicken erzeugt ungewollt eine Liste. |
 | 3.3 Kein Undo, nirgends | 🔵/❌ entschieden | Undo gibt es **nur** beim Listen-Loeschen (Phase 7, N11.2); Undo fuer Tasks/Abhaken/Umbenennen ist **hinfaellig**. |
 | 3.4 Doppelklick/Klick sind unsichtbare Konventionen | 🟡 gueltig (halb erledigt) | Maus-Gesten stehen im Shortcuts-Modal (erledigt); die Hover-Aktionen auf der Karte bleiben offen (siehe 1.6). |
-| 3.5 Kein Rechtsklick-Kontextmenue | 🟡 gueltig (halb erledigt) | Fuer Sidebar-Listen existiert es (`ctxList`), fuer Task-Karten nicht; ein Task-Kontextmenue wuerde 1.6/3.4/3.7 miterschlagen. |
-| 3.6 Drag ohne Affordance/Alternative | 🟡 gueltig | Kein Griff, kein Drop-Indikator, keine Tastatur-Alternative. |
-| 3.7 Aufgaben zwischen Listen verschieben | 🔵 eingeplant | `move_task(id, target_list_id)` in Phase 7 (N7/N11.2). |
+| 3.5 Kein Rechtsklick-Kontextmenue | ✅ erledigt (2026-07-17) | Sidebar-Listen: `ctxList`; Task-Karten: „Move to…"-Kontextmenue (`ctxTask`, Phase 7/N11.2). |
+| 3.6 Drag ohne Affordance/Alternative | 🟡 gueltig (reduziert) | Sidebar-Eintraege zeigen als Drop-Ziel jetzt einen Akzent-Rahmen (`.drop-target`); Griff-Affordance und Tastatur-Alternative fehlen weiterhin. |
+| 3.7 Aufgaben zwischen Listen verschieben | ✅ erledigt (2026-07-17) | `move_task(id, target_list_id)` umgesetzt (Phase 7, N7/N11.2; Drag auf Sidebar-Eintrag + „Move to…"-Kontextmenue). |
 | 3.8 Completed-Sektion | 🟡/❌ gemischt | `doneOpen`-Reset beim Listenwechsel bleibt **gueltig**; **"Clear completed" ist gestrichen** (N11.1) und das Meta-Argument **hinfaellig** (Meta-Feld entfaellt, N11.1.3). |
-| 3.9 Listen nicht sortierbar | 🔵 eingeplant | `reorder_lists(ordered_ids)` in Phase 7 (N7/N11.2). |
+| 3.9 Listen nicht sortierbar | ✅ erledigt (2026-07-17) | `reorder_lists(ordered_ids)` umgesetzt (Phase 7, N7/N11.2; Drag and Drop in der Sidebar). |
 | 3.10 Keine Tastaturnavigation fuer Aufgaben | 🟡 gueltig | Pfeile/Space/F2/Entf fehlen weiterhin; groesster offener A11y- und Power-User-Punkt. |
 | 3.11 Listenwechsel per Tastatur | ✅ erledigt | `Ctrl+1` bis `Ctrl+9` und `Ctrl+Pfeil hoch/runter` (B.5). |
 | 3.12 Einzeltasten-Hotkeys riskant (`G`, `F`) | 🟡 gueltig (**gewichtiger geworden**) | Die Sync-Begruendung ist hinfaellig, aber `G` schaltet seit N11.5 den **echten Windows-Flugmodus** (alle Funkgeraete des PCs): ein versehentliches `G` hat jetzt reale Folgen, Bestaetigung oder deutlich sichtbarer Indikator (4.2) sind zu entscheiden. |

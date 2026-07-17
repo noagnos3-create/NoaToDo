@@ -1432,3 +1432,14 @@ input { font: inherit; }
 }
 .task.selected .t-text { color: var(--text); }
 .task.selected .t-grip, .task.selected .t-del { opacity: .55; }
+
+/* --- Phase 7 (N7/N11.2): Drag & Drop fuer Listen + Aufgaben-Verschieben --- */
+/* Gezogener Sidebar-Eintrag (reorder_lists): halbtransparent, solange er
+   als DOM-Vorschau mitwandert. */
+.list-item.dragging { opacity: .45; }
+/* Sidebar-Eintrag als Drop-Ziel einer gezogenen Aufgabe (move_task). */
+.list-item.drop-target {
+  background: var(--accent-wash);
+  box-shadow: inset 0 0 0 1.5px var(--accent-line);
+  color: var(--text);
+}

@@ -85,6 +85,7 @@ let state = {
   menu: null,        // 'profile'
   modal: null,       // 'status' | 'rename' | 'delete' | 'shortcuts' | 'settings'
   ctxList: null,     // Rechtsklick-Kontextmenue einer Liste: { id, x, y } | null
+  ctxTask: null,     // Rechtsklick-Kontextmenue einer Aufgabe ("Move to...", N11.2): { id, x, y } | null
   renamingId: null,  // Liste, die gerade inline (Pille in der Sidebar) umbenannt wird
   confirmDeleteId: null, // Liste, fuer die die Inline-Loeschbestaetigung in der Sidebar offen ist
   listEditDock: false, // true: Inline-Umbenennen/Loeschen wird im unteren Dock gezeigt (Rechtsklick auf den grossen Namen) statt in der Sidebar
@@ -173,8 +174,11 @@ function renderSidebar() {
     if (!state.listEditDock && state.confirmDeleteId === l.id) return renderDeletePill(l);
     const count = l.open.length;
     const cls = 'list-item' + (l.id === state.activeId ? ' active' : '') + (count === 0 ? ' zero' : '');
+    // draggable (N7/N11.2): Listen lassen sich in der Sidebar umsortieren
+    // (reorder_lists); ausserdem ist jeder Eintrag Drop-Ziel fuer eine
+    // gezogene Aufgabe (move_task).
     return `
-      <button class="${cls}" data-act="select-list" data-id="${esc(l.id)}">
+      <button class="${cls}" data-act="select-list" data-id="${esc(l.id)}" draggable="true">
         <span class="li-dot"></span>
         <span class="li-name">${esc(l.name)}</span>
         <span class="li-count">${count}</span>
@@ -500,6 +504,25 @@ function renderListCtx() {
     </div>`;
 }
 
+// Kontextmenue einer Aufgabe (Rechtsklick auf die Karte): "Move to..." in eine
+// andere Liste (move_task, N7/N11.2). Gleiche Optik/Verankerung wie das
+// Listen-Kontextmenue; ohne zweite Liste steht ein stummer Hinweis drin.
+function renderTaskCtx() {
+  if (!state.ctxTask) return '';
+  const { x, y } = state.ctxTask;
+  const targets = state.lists.filter((l) => l.id !== state.activeId);
+  const items = targets.length
+    ? targets.map((l) => `
+      <button class="menu-item" data-act="ctx-move-task" data-id="${esc(l.id)}">${esc(l.name)}</button>`).join('')
+    : `<div class="empty-note" style="padding:8px 10px">// no other list</div>`;
+  return `
+    <div class="menu task-ctx" data-keep
+         style="position:fixed;left:${x}px;top:${y}px;min-width:180px;max-height:280px;overflow-y:auto">
+      <div class="menu-head" style="padding:8px 10px"><small class="mono" style="color:var(--text-faint)">Move to</small></div>
+      ${items}
+    </div>`;
+}
+
 function scrim(inner) {
   return `<div class="scrim" data-act="scrim-close"><div data-keep>${inner}</div></div>`;
 }
@@ -611,6 +634,8 @@ function renderModal() {
         ['Select task', ['click']],
         ['Edit task', ['2× click']],
         ['Reorder tasks', ['drag']],
+        ['Reorder lists', ['drag']],
+        ['Move task to list', ['drag', 'right-click']],
       ];
       const row = (s) => `
         <div class="sc-row"><span>${s[0]}</span>
@@ -920,6 +945,7 @@ function render() {
     renderToolbar() +
     renderRailPin() +
     renderListCtx() +
+    renderTaskCtx() +
     renderModal() +
     renderPanic() +
     renderLock();
@@ -1199,6 +1225,20 @@ async function doDeleteList() {
   });
 }
 
+// Aufgabe in eine andere Liste verschieben (move_task, N7/N11.2): per Drag auf
+// einen Sidebar-Eintrag oder ueber das "Move to..."-Kontextmenue. done bleibt
+// erhalten, die Aufgabe haengt ans Ende ihrer Sektion in der Zielliste (U11).
+async function doMoveTask(taskId, targetListId) {
+  if (!taskId || !targetListId || targetListId === state.activeId) { render(); return; }
+  const target = state.lists.find((l) => l.id === targetListId);
+  const res = await api().move_task(taskId, targetListId);
+  if (handleError(res)) return;
+  if (state.selectedId === taskId) state.selectedId = null;
+  if (state.editingId === taskId) state.editingId = null;
+  await refreshState();
+  pushToast('Task moved', target ? target.name : '');
+}
+
 async function setOnline(flag) {
   const res = await api().set_online(flag);
   state.online = res && typeof res.online === 'boolean' ? res.online : flag;
@@ -1359,7 +1399,7 @@ function onMouseMove(e) {
 function clearWorkspace() {
   state.lists = [];
   state.activeId = null;
-  state.menu = null; state.modal = null; state.ctxList = null;
+  state.menu = null; state.modal = null; state.ctxList = null; state.ctxTask = null;
   state.renamingId = null; state.confirmDeleteId = null; state.listEditDock = false;
   state.adding = false; state.addingTask = false; state.doneOpen = false;
   state.editingId = null; state.selectedId = null;
@@ -1537,6 +1577,9 @@ function closeMenusIfOutside(e, a) {
   }
   if (state.ctxList && !e.target.closest('.list-ctx')) {
     state.ctxList = null; changed = true;
+  }
+  if (state.ctxTask && !e.target.closest('.task-ctx')) {
+    state.ctxTask = null; changed = true;
   }
   // Klick ausserhalb der Inline-Pillen (Sidebar .list-inline ODER Dock .dock-edit)
   // verwirft Umbenennen / Loeschbestaetigung.
@@ -1726,6 +1769,14 @@ async function onClick(e) {
       state.listEditDock = fromDock;
       render(); break;
     }
+    case 'ctx-move-task': {
+      // "Move to..." aus dem Aufgaben-Kontextmenue (move_task, N7/N11.2).
+      const taskId = state.ctxTask && state.ctxTask.id;
+      state.ctxTask = null;
+      if (taskId && id) await doMoveTask(taskId, id);
+      else render();
+      break;
+    }
     case 'cancel-rename-list': state.renamingId = null; state.listEditDock = false; render(); break;
     case 'cancel-delete-list': state.confirmDeleteId = null; state.listEditDock = false; render(); break;
     case 'do-delete-list': await doDeleteList(); break;
@@ -1772,12 +1823,26 @@ function onContextMenu(e) {
   if (state.locked || state.mini) return;
   // In Eingabefeldern das native Menue (Kopieren/Einfuegen) erhalten.
   if (/^(INPUT|TEXTAREA)$/.test(e.target.tagName)) return;
+  // Rechtsklick auf eine Aufgaben-Karte: "Move to..."-Menue (move_task,
+  // N7/N11.2). Nicht waehrend der Inline-Bearbeitung dieser Karte.
+  const taskCard = e.target.closest('.task[data-task-id]');
+  if (taskCard && state.editingId !== taskCard.dataset.taskId) {
+    e.preventDefault();
+    const x = Math.min(e.clientX, window.innerWidth - 200);
+    const y = Math.min(e.clientY, window.innerHeight - 300);
+    state.ctxTask = { id: taskCard.dataset.taskId, x, y };
+    state.ctxList = null;
+    state.menu = null;
+    render();
+    return;
+  }
   const item = e.target.closest('.list-item[data-id]');
   if (item) {
     e.preventDefault();
     const x = Math.min(e.clientX, window.innerWidth - 190);
     const y = Math.min(e.clientY, window.innerHeight - 100);
     state.ctxList = { id: item.dataset.id, x, y };
+    state.ctxTask = null;
     state.menu = null;
     render();
     return;
@@ -1791,12 +1856,13 @@ function onContextMenu(e) {
     const x = Math.max(8, Math.min(r.left, window.innerWidth - 190));
     const y = r.top - 8;
     state.ctxList = { id: state.activeId, x, y, fromDock: true };
+    state.ctxTask = null;
     state.menu = null;
     render();
     return;
   }
   e.preventDefault();
-  if (state.ctxList) { state.ctxList = null; render(); }
+  if (state.ctxList || state.ctxTask) { state.ctxList = null; state.ctxTask = null; render(); }
 }
 
 // ===========================================================================
@@ -1817,7 +1883,7 @@ function onKeyGlobal(e) {
     if (state.mini) { doMini(false); return; }
     state.menu = null; state.modal = null;
     state.focus = false; state.adding = false; state.addingTask = false;
-    state.editingId = null; state.selectedId = null; state.ctxList = null;
+    state.editingId = null; state.selectedId = null; state.ctxList = null; state.ctxTask = null;
     state.renamingId = null; state.confirmDeleteId = null; state.listEditDock = false;
     // Panik-Panel schliessen, aber den laufenden/fertigen Wipe-Schirm stehen lassen.
     if (state.panic && state.panic.stage === 'panel') state.panic = null;
@@ -1907,17 +1973,68 @@ function onKeyGlobal(e) {
 let _lastTaskClick = { id: null, t: 0 };
 
 // ===========================================================================
-// Drag & Drop, Reihenfolge offener Aufgaben (Bridge: reorder)
+// Drag & Drop (Phase 7, N7/N11.2): drei Faelle an denselben vier globalen
+// Listenern, unterschieden ueber dragId (Aufgabe) vs. listDragId (Liste):
+//   1. Aufgabe innerhalb der offenen Sektion umsortieren (Bridge: reorder)
+//   2. Aufgabe auf einen Sidebar-Eintrag ziehen = verschieben (move_task)
+//   3. Listen-Eintrag in der Sidebar umsortieren (reorder_lists)
 // ===========================================================================
-let dragId = null;
+let dragId = null;      // gezogene Aufgabe (nur offene Karten sind draggable)
+let listDragId = null;  // gezogener Sidebar-Listeneintrag
+
+function clearDropTarget() {
+  document.querySelectorAll('.list-item.drop-target')
+    .forEach((el) => el.classList.remove('drop-target'));
+}
+
 function onDragStart(e) {
   const row = e.target.closest('.task[draggable="true"]');
-  if (!row) return;
-  dragId = row.dataset.taskId;
-  row.classList.add('dragging');
+  if (row) {
+    dragId = row.dataset.taskId;
+    row.classList.add('dragging');
+    e.dataTransfer.effectAllowed = 'move';
+    return;
+  }
+  const li = e.target.closest('.list-item[draggable="true"]');
+  if (!li) return;
+  listDragId = li.dataset.id;
+  li.classList.add('dragging');
   e.dataTransfer.effectAllowed = 'move';
+  // Offene Inline-Pillen (Umbenennen/Loeschen) verwerfen: sie ersetzen ihren
+  // Listeneintrag im DOM, und reorder_lists braucht die VOLLE Listenmenge.
+  if (state.renamingId || state.confirmDeleteId) {
+    state.renamingId = null; state.confirmDeleteId = null; state.listEditDock = false;
+    render();
+  }
 }
+
 function onDragOver(e) {
+  // Fall 2: Aufgabe schwebt ueber einem Sidebar-Eintrag -> Drop-Ziel markieren.
+  if (dragId != null) {
+    const li = e.target.closest('.list-item[data-id]');
+    clearDropTarget();
+    if (li && li.dataset.id !== state.activeId) {
+      e.preventDefault();
+      li.classList.add('drop-target');
+      return;
+    }
+  }
+  // Fall 3: Listen-Eintrag innerhalb der Sidebar sortieren (DOM-Vorschau).
+  if (listDragId != null) {
+    const scroll = e.target.closest('.list-scroll');
+    if (!scroll) return;
+    e.preventDefault();
+    const dragging = scroll.querySelector('.list-item.dragging');
+    if (!dragging) return;
+    const after = [...scroll.querySelectorAll('.list-item:not(.dragging)')].find((el) => {
+      const r = el.getBoundingClientRect();
+      return e.clientY < r.top + r.height / 2;
+    });
+    if (after) scroll.insertBefore(dragging, after);
+    else scroll.appendChild(dragging);
+    return;
+  }
+  // Fall 1: Aufgabe innerhalb der offenen Sektion sortieren (DOM-Vorschau).
   const listEl = e.target.closest('[data-tasklist="open"]');
   if (!listEl || dragId == null) return;
   e.preventDefault();
@@ -1930,7 +2047,35 @@ function onDragOver(e) {
   if (after) listEl.insertBefore(dragging, after);
   else listEl.appendChild(dragging);
 }
+
 async function onDrop(e) {
+  // Fall 2: Aufgabe auf einen Sidebar-Eintrag fallen lassen -> move_task.
+  if (dragId != null) {
+    const li = e.target.closest('.list-item[data-id]');
+    if (li) {
+      e.preventDefault();
+      const taskId = dragId;
+      dragId = null;
+      clearDropTarget();
+      if (li.dataset.id !== state.activeId) await doMoveTask(taskId, li.dataset.id);
+      return;
+    }
+  }
+  // Fall 3: Listen-Reihenfolge speichern -> reorder_lists (N11.2.2: exakt die
+  // volle Listenmenge, sonst lehnt das Backend ab und nichts wird geschrieben).
+  if (listDragId != null) {
+    const scroll = e.target.closest('.list-scroll');
+    if (!scroll) return;
+    e.preventDefault();
+    listDragId = null;
+    const ids = [...scroll.querySelectorAll('.list-item')].map((el) => el.dataset.id);
+    const res = await api().reorder_lists(ids);
+    if (handleError(res)) return;
+    state.lists.sort((x, y) => ids.indexOf(x.id) - ids.indexOf(y.id));
+    render();
+    return;
+  }
+  // Fall 1: Aufgaben-Reihenfolge speichern -> reorder.
   const listEl = e.target.closest('[data-tasklist="open"]');
   if (!listEl || dragId == null) return;
   e.preventDefault();
@@ -1945,9 +2090,14 @@ async function onDrop(e) {
   if (handleError(res)) return;
   render();
 }
+
 function onDragEnd() {
-  const d = document.querySelector('.task.dragging');
+  const d = document.querySelector('.task.dragging, .list-item.dragging');
   if (d) d.classList.remove('dragging');
+  clearDropTarget();
+  // Wurde eine Listen-Sortierung abgebrochen (Drop ausserhalb der Sidebar),
+  // steht die DOM-Vorschau noch falsch: einmal frisch aus state rendern.
+  if (listDragId != null) { listDragId = null; render(); }
   dragId = null;
 }
 

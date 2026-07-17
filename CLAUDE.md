@@ -214,8 +214,8 @@ All frontend<->backend communication goes through these methods on the `Api` cla
 | `edit_task(id, fields)` | str, obj | `{ ...task }` (text only, no meta, N11.1.3) |
 | `delete_task(id)` | str | `{ ok }` |
 | `reorder(list_id, ordered_ids)` | str, [str] | `{ ok }` (task order within a list) |
-| `reorder_lists(ordered_ids)` | [str] | `{ ok }` (planned, N11.2: sidebar list order) |
-| `move_task(id, target_list_id)` | str, str | `{ ...task }` (planned, N11.2: move task to another list) |
+| `reorder_lists(ordered_ids)` | [str] | `{ ok }` (sidebar list order via drag and drop; N11.2.2 edge cases: exactly the full list set or `invalid`, implemented 2026-07-17) |
+| `move_task(id, target_list_id)` | str, str | `{ ...task }` (move task to another list: drag onto a sidebar entry or right-click "Move to…" menu; keeps `done`, appends to the end of its section in the target, N11.2.2, implemented 2026-07-17) |
 | `export_list(id, format)` | str, `'md'`\|`'txt'` | `{ filename, content }` (N11: JSON dropped) |
 | `export_all(format)` | `'md'`\|`'txt'` | `{ filename, content }` (planned, N11.2: all lists in one file) |
 | `copy_task(id)` | str | `{ ok, clears_in }` (hardened backend clipboard copy of ONE task) |
@@ -306,7 +306,7 @@ Bauplan B.5 is the **single source of truth** for shortcuts (fully re-derived fr
 | Shortcut help | `?` |
 | Close all | `Esc` (closes menus/modals/inputs, clears selection and focus mode; in mini mode it exits mini; closes the panic panel but never the running/finished wipe screen; also works while typing) |
 
-Deliberately WITHOUT a shortcut (per B.5, do not add one): the panic flow (rail button only, two-stage arming; decided 2026-07-13, Bauplan N5, the former `Ctrl+Shift+!` idea is dropped for good), copy (rail button only, gate G23, no `Ctrl+C` app shortcut), and mini mode (rail button only; `Esc` exits it). Mouse gestures (click = select, double-click = inline edit, drag = reorder) are documented in the shortcuts modal.
+Deliberately WITHOUT a shortcut (per B.5, do not add one): the panic flow (rail button only, two-stage arming; decided 2026-07-13, Bauplan N5, the former `Ctrl+Shift+!` idea is dropped for good), copy (rail button only, gate G23, no `Ctrl+C` app shortcut), and mini mode (rail button only; `Esc` exits it). Mouse gestures (click = select, double-click = inline edit, drag = reorder tasks; since Phase 7 also: drag a sidebar entry = reorder lists, drag a task onto a sidebar entry or right-click a card ("Move to…") = move task) are documented in the shortcuts modal.
 
 Letter hotkeys (`F`, `G`, `?`) must not fire while focus is inside an input or textarea; the exceptions are `Esc` and the `Ctrl+N`/`Ctrl+Shift+N` toggles (so the second press can close the freshly opened field). Both call `e.preventDefault()` so the triggering letter does not land in the freshly focused input (and to suppress the browser's default new-window action). While the app is locked, all shortcuts are disabled; any printable key instead focuses the lock-screen password input (the character itself is then inserted normally).
 
