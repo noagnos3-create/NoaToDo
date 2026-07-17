@@ -296,7 +296,7 @@ Bauplan B.5 is the **single source of truth** for shortcuts (fully re-derived fr
 | Switch list | `Ctrl+ArrowUp` / `Ctrl+ArrowDown` (sidebar open and a list open; stops at the ends, no wrap-around) |
 | Open list 1-9 | `Ctrl+1` bis `Ctrl+9` (opens the n-th sidebar list, 1 = topmost; same key again toggles it closed; only when the sidebar is open, a list open with the sidebar closed does not count) |
 | Lock app | `Ctrl+L` |
-| Export open list | `Ctrl+E` (exports only the currently open list) |
+| Export | `Ctrl+E` (today: exports the currently open list directly; Phase 7 target per N11.2: opens the two-step export pill; with no open list the "current list" scope option is greyed out, only "all lists" is selectable, N11.2.3) |
 | Toggle theme | `Ctrl+J` (from `auto`: override to the opposite of the shown theme; from a fixed theme: the other fixed theme; back to `auto` only via the Settings segment) |
 | Online/offline | `G` |
 | Shortcut help | `?` |

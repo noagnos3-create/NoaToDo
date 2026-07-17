@@ -1097,7 +1097,7 @@ ungültig; insbesondere gibt es kein blankes `N` für "Neue Liste" mehr.)*
 | Liste wechseln | `Ctrl+↑` / `Ctrl+↓` | Sidebar offen UND eine Liste offen; stoppt an den Enden, kein Umlauf |
 | Liste 1-9 öffnen | `Ctrl+1` bis `Ctrl+9` | nur bei offener Sidebar (eine offene Liste bei geschlossener Sidebar reicht nicht); 1 = oberste; dieselbe Nummer erneut schließt die Liste (Toggle) |
 | App sperren | `Ctrl+L` | |
-| Aktive Liste exportieren | `Ctrl+E` | exportiert nur die gerade offene Liste |
+| Exportieren | `Ctrl+E` | heute: exportiert direkt die offene Liste; ab Phase 7 (N11.2): öffnet die zweistufige Export-Pille; ohne offene Liste ist die Umfang-Option "aktuelle Liste" ausgegraut, nur "alle Listen" wählbar (N11.2.3) |
 | Theme umschalten | `Ctrl+J` | aus `auto` heraus: Override auf das Gegenteil des aktuell angezeigten Themes; aus einem festen Theme: das andere feste; Rückkehr zu `auto` nur über das Settings-Segment (U16) |
 | Online/Offline | `G` | |
 | Tastenkürzel-Hilfe | `?` | |
@@ -2868,6 +2868,11 @@ aus Phase 6.5 / Gate G23, es gibt bewusst kein Listen-Kopieren mehr.)
    Rail-Button „Export" (bzw. `Ctrl+E`) öffnet zuerst eine kleine Pille links an der
    rechten Rail: **Schritt 1 Umfang** (aktuelle Liste `export_list(id, format)` oder alle
    Listen `export_all(format)`), **Schritt 2 Format** (`md`/`txt`), danach der Save-Dialog.
+   **Ohne offene Liste (N11.2.3, 2026-07-17):** Export-Button und `Ctrl+E` öffnen die Pille
+   trotzdem, aber die Umfang-Option "aktuelle Liste" ist **ausgegraut** (sichtbar, nicht
+   wählbar, kein Fehler-Toast); nur "alle Listen" ist wählbar. Ein `export_list`-Aufruf ohne
+   gültige Listen-ID bleibt davon unberührt `not_found` (die Ausgrauung ist UI-Führung,
+   keine Ersatz-Validierung, die Bridge prüft weiter selbst, G20).
    `md`: Überschrift = Listenname (bei „alle Listen" jede Liste als größere Überschrift,
    die Aufgaben darunter kleiner), `- [ ]`/`- [x]` je Aufgabe. Kein Meta mehr (N11.1.3).
    `txt` analog als reiner Text. **Doppelte Listennamen sind erlaubt (U12):** der Name ist
@@ -3650,6 +3655,7 @@ liegen durchgestrichen in Anhang 3, Umbau-Etappe 5.)
 | N11.2 / U10, U12 | 2026-07-09 | Zweistufiger Export (md/txt), Undo nur beim Listen-Loeschen | Phase 7 + B.2 (Historie: Anhang 3) |
 | N11.2.1 / U9 | 2026-07-13 | Undo-Architektur: RAM-Puffer, kein Soft-Delete | B.2 |
 | N11.2.2 / U11 | 2026-07-15 | Randfaelle von `reorder`/`reorder_lists`/`move_task` | B.2 (Validierung: G20) |
+| N11.2.3 | 2026-07-17 | Export ohne offene Liste: Umfang-Option "aktuelle Liste" ausgegraut, nur "alle Listen" waehlbar | Phase 7 (+ B.5 `Ctrl+E`) |
 | N11.3 / U8 | 2026-07-09, U8-Details 2026-07-13 | Ersteinrichtung, Passphrase-Regel (nur Mindestlaenge 12), Reset, Passphrase-Wechsel (a bis d) | B.2 (+ B.4 Onboarding, B.7/G8 KDF-Upgrade) |
 | N11.4 | 2026-07-09 | Auto-Sperre-Default und Entsperr-Rate-Limit-Leiter | B.8.3 + B.8.4 |
 | N11.4.1 / U6 | 2026-07-13 | Rate-Limit-Zustand persistiert (config.json, zwei Uhren, persist-before-verify) | B.8.4 (+ B.11) |
