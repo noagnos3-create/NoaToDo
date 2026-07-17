@@ -357,6 +357,69 @@ def _purge_webview_cache() -> None:
                 dirs.remove(name)
 
 
+def _is_allowed_navigation(uri: str) -> bool:
+    """Gate G12: nur die eigene lokale Frontend-Seite ist erlaubtes Ziel.
+
+    Erlaubt sind ``about:`` (interne Leerseiten) und ``file:``-URIs, die in den
+    eigenen ``frontend``-Ordner zeigen. ALLES andere (http/https, fremde
+    file-Pfade, sonstige Schemata) wird verweigert: die App ist rein lokal und
+    navigiert nie woandershin; ein per XSS eingeschleustes
+    ``window.location='https://...'`` liefe sonst als Exfiltrationskanal an
+    der CSP vorbei (die CSP deckt Subressourcen, nicht die Top-Navigation).
+    """
+    from urllib.parse import unquote, urlparse
+
+    u = (uri or "").strip().lower()
+    if u.startswith("about:"):
+        return True
+    if not u.startswith("file:"):
+        return False
+    frontend_root = os.path.join(HERE, "frontend").replace("\\", "/").lower()
+    path = unquote(urlparse(u).path or "").replace("\\", "/").lstrip("/")
+    return path.startswith(frontend_root.lstrip("/"))
+
+
+def _wire_navigation_guard(window) -> None:
+    """Haengt den G12-Navigations-Waechter an das WebView2-Control.
+
+    ``NavigationStarting`` feuert fuer jede Top-Level-Navigation
+    (``window.location``, Redirects, ``load_url``); nicht erlaubte Ziele werden
+    mit ``args.Cancel`` verworfen, die App bleibt auf der lokalen
+    ``index.html``. ``window.open`` landet dank
+    ``webview.settings['OPEN_EXTERNAL_LINKS_IN_BROWSER'] = False`` (in main)
+    nicht im System-Browser, sondern als ``load_url`` im selben Fenster und
+    damit ebenfalls in diesem Waechter. Laeuft ueber den UI-Thread
+    (Projektregel: keine WinForms-Zugriffe aus Worker-Threads).
+    """
+
+    def _attach():
+        try:
+            browser = getattr(window.native, "browser", None)
+            control = getattr(browser, "webview", None)  # WinForms WebView2
+            if control is None:
+                return
+
+            def on_nav(_sender, args):
+                try:
+                    uri = str(args.Uri)
+                except Exception:
+                    uri = ""
+                if not _is_allowed_navigation(uri):
+                    args.Cancel = True
+                    # Kein URI im Normal-Log (koennte eingeschleuste Daten
+                    # tragen); Details nur im Debug-Modus (N11.12.2).
+                    if _debug_enabled():
+                        print(f"[NoaToDo] G12: Navigation verweigert: {uri}", flush=True)
+                    else:
+                        print("[NoaToDo] G12: externe Navigation verweigert.", flush=True)
+
+            control.NavigationStarting += on_nav
+        except Exception:
+            pass
+
+    _run_on_ui_thread(window, _attach)
+
+
 def _frontend_stamp() -> str:
     """Aenderungszeit der wichtigsten Frontend-Dateien als kurzer Stempel.
 
@@ -446,6 +509,10 @@ def main() -> None:
     api._window = window  # privat, sonst kollidiert es mit PyWebViews Methoden-Introspektion
 
     def on_start():
+        # Gate G12: externe Navigation abriegeln (window.location/window.open
+        # zu http/https werden verweigert, die App bleibt auf index.html).
+        _wire_navigation_guard(window)
+
         # Windows-Sitzungssperre-Hook entfaellt bewusst (N11.8.4: Win+L loest keine
         # App-Sperre aus; die Auto-Sperre laeuft stattdessen als Hintergrund-Timer).
         # Alle nativen Fenster-Operationen laufen ueber den UI-Thread (BeginInvoke),
@@ -515,6 +582,11 @@ def main() -> None:
     # Aufgabeninhalte (siehe Kommentar an PROFILE_DIR). Das sichere Wischen dieses
     # Ordners bei lock()/panic()/sauberem Quit folgt in Phase 8 (Bauplan G14).
     os.makedirs(PROFILE_DIR, exist_ok=True)
+    # Gate G12: window.open/target=_blank NIE im System-Browser oeffnen. Mit
+    # False laedt pywebviews NewWindowRequested-Handler das Ziel stattdessen
+    # per load_url im selben Fenster, wo der NavigationStarting-Waechter
+    # (_wire_navigation_guard) jede externe Adresse verwirft.
+    webview.settings["OPEN_EXTERNAL_LINKS_IN_BROWSER"] = False
     webview.start(
         on_start,
         debug=_debug_enabled(),
