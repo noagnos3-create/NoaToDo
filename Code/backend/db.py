@@ -515,6 +515,7 @@ _DEFAULT_SETTINGS = {
     "dark": "true",
     "density": "comfortable",
     "sidebar": "open",
+    "exportDone": "true",
 }
 
 

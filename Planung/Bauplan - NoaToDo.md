@@ -313,16 +313,16 @@ des Erfolgsobjekts `{ error: "code", message: "…", ref: "…" }` liefern.
 
 | Code | Bedeutung | `message` (statisch) | Frontend-Verhalten |
 |---|---|---|---|
-| `not_found` | Unbekannte ID (Liste/Aufgabe existiert nicht mehr) | „Item not found." | Toast, danach `get_state()` neu laden (die Ansicht war veraltet) |
-| `invalid` | Argument verletzt die Validierung aus G20 (falscher Typ, unbekannter Settings-Key, unbrauchbare ID) | „Invalid input." | Toast; die Eingabe bleibt stehen, damit sie korrigiert werden kann |
+| `not_found` | Unbekannte ID (Liste/Aufgabe existiert nicht mehr) | „Item not found." | **kein Toast** (N11.16), nur still `get_state()` neu laden (die Ansicht war veraltet) |
+| `invalid` | Argument verletzt die Validierung aus G20 (falscher Typ, unbekannter Settings-Key, unbrauchbare ID) | „Invalid input." | **kein Toast** (N11.16); die Eingabe bleibt stehen, damit sie korrigiert werden kann |
 | `locked` | App ist gesperrt, Methode steht nicht in `ALLOWED_WHEN_LOCKED` (G13) | „App is locked." | **stumm** (kein Toast): Frontend zeigt den Lock-Screen. Der Code ist im Normalbetrieb ein Renn-Fall (z.B. Auto-Lock während einer laufenden Aktion) und keine Nutzer-Fehlermeldung |
 | `passphrase` | `unlock()`: falsche Passphrase (AEAD-Tag schlägt fehl, G15) | „Wrong passphrase." | **kein Toast**, sondern die Fehleranzeige im Lock-Screen (N4/N6), plus Rate-Limit-Ladder aus B.8.4 (N11.4) |
 | `rate_limited` | `unlock()`: Sperrzeit der Ladder läuft noch; zusätzliches Feld `retry_in` (Sekunden) | „Too many attempts." | **kein Toast**, sondern Countdown im Lock-Screen; Eingabefeld deaktiviert |
 | `vault` | Tresor-Datei fehlt, ist beschädigt oder der Pepper aus dem Credential Manager ist weg (Windows-Konto verloren, N11.3) | „Vault cannot be opened." | **kein Toast**, sondern der Boot-/Entsperr-Fehlerbildschirm (N6) mit den Auswegen Wiederholen und Reset |
 | `canceled` | Nutzer hat einen nativen Dialog abgebrochen (Save-Dialog des Exports) | „Canceled." | **stumm** (kein Toast, kein Fehlerbild): ein Abbruch ist kein Fehler |
-| `busy` | Es ist bereits ein **nativer Dialog offen** (Export-Save, Onboarding-Ordnerwahl); ein zweiter wird abgelehnt (N11.11.5) | „A dialog is already open." | Toast; kein Zustandswechsel. Tritt im Normalbetrieb nicht auf (der Dialog ist modal), fängt aber Doppelklick-Renner und Bridge-Aufrufe an der UI vorbei ab |
+| `busy` | Es ist bereits ein **nativer Dialog offen** (Export-Save, Onboarding-Ordnerwahl); ein zweiter wird abgelehnt (N11.11.5) | „A dialog is already open." | **kein Toast** (N11.16); kein Zustandswechsel. Tritt im Normalbetrieb nicht auf (der Dialog ist modal), fängt aber Doppelklick-Renner und Bridge-Aufrufe an der UI vorbei ab |
 | `memory` | `unlock()`/`create_vault()`/`change_passphrase()`: die Argon2id-Allokation scheiterte (`MemoryError`), die Maschine hat gerade zu wenig freien RAM. **Kein** falsches Passwort, **keine** Beschädigung (N11.4.3) | „Not enough memory. Close other apps and try again." | **kein Toast**, sondern inline im jeweiligen Auth-Screen (Lock-Screen bzw. Onboarding/Passphrase ändern), mit Wiederholen; **kein** Shake, **kein** Reset-Angebot, **kein** Countdown, und die Rate-Limit-Ladder wird **nicht** vorangetrieben |
-| `internal` | Alles Unerwartete (letzte Auffanglinie im `@bridge`-Decorator) | „Something went wrong." | Toast mit dem generischen Text und der `ref`; Details nur über das Status-Modal (Ringpuffer) einsehbar |
+| `internal` | Alles Unerwartete (letzte Auffanglinie im `@bridge`-Decorator) | „Something went wrong." | **kein Toast** (N11.16); der Fehler (mit `ref`) bleibt nur über das Status-Modal (G29-Ringpuffer „Recent errors") einsehbar |
 
 Diese Tabelle ist die einzige Wahrheit für Fehlercodes. Wer einen Code hinzufügt,
 ergänzt ihn hier **und** in der Frontend-Behandlung; ein Code ohne Zeile in dieser
@@ -330,11 +330,14 @@ Tabelle darf nicht ans Frontend gehen. Ringpuffer und Logging-Politik: siehe den
 Abschnitt „Fehler-Hygiene, Fehlercode-Katalog und Logging-Politik" (Etikett N11.12)
 unten in B.2.
 
-**Toast-Politik auf einen Blick (löst U23, präzisiert den früheren Pauschalsatz „das
-Frontend zeigt das als Toast"):** Ein Toast erscheint **nur** bei `not_found`, `invalid`,
-`busy` und `internal`. Bewusst **kein** Toast sind die Normal-/Rennzustände `locked` und
-`canceled` (stumm) sowie die Entsperr-Fehler `passphrase`, `rate_limited` und `vault`:
-die haben ihre **eigene Darstellung im Lock-/Fehlerbildschirm** (N4/N6), nie einen Toast.
+**Toast-Politik auf einen Blick (löst U23; seit N11.16, 2026-07-17, verschärft, Nutzerwunsch:
+keine Benachrichtigungen):** **Kein** Fehlercode erzeugt mehr einen Toast. `not_found` lädt
+die veraltete Ansicht **still** neu, `locked` zeigt den Lock-Screen, `invalid`/`busy`/`canceled`
+sind **stumm**, `internal` bleibt nur über das Status-Modal (G29-Ringpuffer „Recent errors",
+mit `ref`) einsehbar, und die Entsperr-Fehler `passphrase`/`rate_limited`/`vault`/`memory` haben
+ihre **eigene Darstellung im Lock-/Fehlerbildschirm** (N4/N6). Der **einzige** verbliebene Toast
+in der ganzen App ist der **Undo-Toast** beim Listen-Löschen (N11.2.1). Der frühere Zustand
+(Toast bei `not_found`/`invalid`/`busy`/`internal`) ist damit überholt.
 **„Kein Tresor" ist kein Fehlercode:** es gibt kein `no_vault`; der Fall ist der
 Onboarding-**Boot-Zustand** aus `get_boot_state()` (N11.8.2, U7) und damit ebenfalls
 toastfrei. Ein fehlender oder beschädigter Tresor **zur Laufzeit** ist dagegen `vault`
@@ -509,14 +512,14 @@ true}`; `set_setting` akzeptiert beliebige Keys. Pflicht in `api.py`: (a)
 (ausser `\n` und `\t`) vor dem Schreiben strippen. (b) `reorder`/`reorder_lists` lehnen ab, wenn
 `ordered_ids` keine Liste von Strings ist; `move_task` validiert die IDs. (c) `set_setting`
 akzeptiert nur Keys aus einer Whitelist (`accent`, `theme`, `density`, `sidebar`, `railPinned`,
-`sidebarWidth`, `sound`, `autoLock` plus künftig dort dokumentierte, N11.7), sonst `{"error":
+`sidebarWidth`, `sound`, `autoLock`, `exportDone` plus künftig dort dokumentierte, N11.7), sonst `{"error":
 "invalid"}`. (d) **Werte und Typen prüfen, nicht nur Keys und Längen (V5, 2026-07-15):**
 `set_setting` validiert auch den **Wert** je Key: `theme` gegen `auto|light|dark`,
 `density`/`sidebar` gegen ihre Enum-Werte, `accent` gegen die feste Preset-Whitelist (die sechs
 Hex-Werte aus B.3/B.6; der Wert landet als CSS-Variable im DOM, mit der Whitelist ist
 CSS-Injection über Settings komplett tot), `sidebarWidth` wird schon beim **Schreiben** auf
 180-520 geklemmt (nicht erst beim Lesen geparst), `sound` bool, `autoLock` ganzzahlig aus {0, 1,
-5, 15, 30, 60}; `edit_task.fields` wird typgeprüft (nur bekannte Felder, `text` String, `done`
+5, 15, 30, 60}, `exportDone` bool; `edit_task.fields` wird typgeprüft (nur bekannte Felder, `text` String, `done`
 bool). Bevorzugte Umsetzung: ein kleines **deklaratives Schema pro Bridge-Methode am
 `@bridge`-Decorator**, das Phase 9 direkt gegen die Regeln testen kann.
 
@@ -671,9 +674,10 @@ bool). Bevorzugte Umsetzung: ein kleines **deklaratives Schema pro Bridge-Method
     Pille zeigt dann weiter online, `partial:true`. Beim Online-Schalten (unkritische
     Richtung) genuegt ein aktives Radio fuer `online:true`. Im Zweifel immer die ehrlichere,
     weniger "sichere" Anzeige.
-  - **UI bei Teil-Erfolg:** ein `pushToast` mit **statischem englischem Text** (G29), der das
-    verweigernde Radio benennt, z.B. "Bluetooth could not be turned off". Die Pille springt
-    auf den real erreichten Zustand, nicht auf den gewuenschten.
+  - **UI bei Teil-Erfolg:** die Pille springt auf den real erreichten Zustand, nicht auf den
+    gewuenschten (`partial:true`), und benennt das verweigernde Radio (z.B. "Bluetooth could
+    not be turned off") ueber Tooltip/Statuszeile. Einen **Toast** gibt es dafuer seit N11.16
+    nicht mehr; der ehrliche Pillen-Zustand ist die Meldung.
   - **Kein Doppel-Schalten.** Hoechstens **eine** Radio-Operation gleichzeitig; waehrend eine
     laeuft, ist die Pille im Warte-Zustand und weitere `G`-/Klick-Ausloeser werden ignoriert
     (kein Ueberlappen, kein inkonsistenter Mischzustand).
@@ -890,7 +894,7 @@ Gruppen durch Trenner:
 6. **Emergency** (⚠, rot), öffnet das **PanicPanel** (Pille an der Rail, kein Modal mehr, N10); bewusst ohne Tastenkürzel, Panik ist nur per Maus erreichbar (N5).
    (Trenner)
 7. **Copy task** (⧉): kopiert die per Klick **ausgewählte** Aufgabe (gehärtet,
-   siehe G23); ohne Auswahl nur ein Hinweis-Toast. Kein Tastenkürzel.
+   siehe G23); ohne Auswahl passiert still nichts (kein Hinweis-Toast mehr, N11.16). Kein Tastenkürzel.
 8. **Rename list / Edit task** (✎), kontextuell: Ist eine Aufgabe ausgewählt,
    öffnet der Stift deren Inline-Bearbeitung; sonst das Umbenennen-Modal der Liste.
 9. **Delete list** (🗑), öffnet Löschen-Modal.
@@ -919,7 +923,9 @@ Gruppen durch Trenner:
      bei `Auto` live dem Windows-Theme; `Ctrl+J` setzt hier den manuellen Override,
      N11.6), `accent` (die 6 Swatches), `density` (`Comfortable` | `Compact`).
   2. **Sound:** `sound` (Schalter, Erledigt-Blip an/aus, Default an, N11.6).
-  3. **Security:** `autoLock` (Minuten bis zur Auto-Sperre, `0` = nie, Default 15,
+  3. **Export:** `exportDone` (Segment `Include` | `Exclude`, ob erledigte Aufgaben in
+     die Export-Dateien kommen, Default `Include` = an, U10 Punkt 6, 2026-07-17).
+  4. **Security:** `autoLock` (Minuten bis zur Auto-Sperre, `0` = nie, Default 15,
      N11.4) und **Passphrase ändern** (Phase 8, N11.3: alte Passphrase, neue Passphrase
      mindestens 12 Zeichen, Wiederholung, Warnung „kein Recovery").
   Kein Toolbar-Modus-Schalter mehr (gestrichen, N11.7), keine Benachrichtigungs-Sektion
@@ -949,7 +955,16 @@ Gruppen durch Trenner:
   Sidebar/keine Rail. Sie erscheinen genau dann, wenn `get_boot_state()`
   `state: 'onboarding'` liefert (frischer Rechner, nach Reset, nach Killswitch).
   Details unten.
-- **Toasts**, kurze Bestätigungen unten mittig (z.B. „List created", „Exported list").
+- **Toasts** gibt es bewusst nur noch **einen einzigen**: den **Undo-Toast** beim
+  Listen-Löschen (N11.2.1). Er steht **unten links, direkt rechts neben der Sidebar**
+  (Nutzerwunsch 2026-07-17: gut sichtbar und klickbar an der Stelle, wo die gelöschte
+  Liste stand), verankert an der Sidebar-Breite (0 wenn geschlossen), mit sichtbarem
+  Ablaufbalken über die ca. 6 s Standzeit. **Alle anderen Toasts sind gestrichen
+  (N11.16, Nutzerwunsch: keine Benachrichtigungen):** weder Erfolgs-Bestätigungen
+  („List created", „Task updated", „Exported", „Task moved", „Back online" usw.) noch
+  Fehler-/Validierungshinweise poppen auf; eine geglückte Aktion wird nicht quittiert,
+  Fehler laufen still bzw. bleiben im Status-Modal („Recent errors", G29) einsehbar
+  (Toast-Politik: B.2).
 
 **Onboarding: die drei Screens (verbindlich, N11.13)**
 
@@ -1171,7 +1186,8 @@ deckt den "schnell alles zu"-Fall damit vollständig ab.
 `accent` (Hex), `theme` (`auto`|`light`|`dark`, Default `auto`, ersetzt das frühere
 `dark`, siehe die N11.6-Detail-Festlegungen unten in B.6), `density` (`comfortable`|`compact`), `sidebar` (`open`|`closed`),
 `sound` (bool, Erledigt-Ton, Default `true`, N11.6), `autoLock` (Minuten bis zur
-Auto-Sperre, `0` = nie, Default `15`, N11.4). Werden beim Start aus `get_state()`
+Auto-Sperre, `0` = nie, Default `15`, N11.4), `exportDone` (bool, erledigte Aufgaben in
+den Export aufnehmen, Default `true` = an, 2026-07-17, U10 Punkt 6). Werden beim Start aus `get_state()`
 gelesen und auf das `.app`-Element als `data-*`/`--accent` gesetzt; Änderungen sofort
 via `set_setting` zurückschreiben. Der frühere Key `toolbar` entfällt (die Rail ist
 immer `floating`). Bei `theme=auto` folgt die App live dem Windows-Hell/Dunkel-Zustand
@@ -2111,7 +2127,7 @@ auch forensisch belastbar.
 > | **G8** | **8** | offen | seit 2026-06-08 | Argon2id-Parameter im Code ablesen (Memory ≥ 256 MB, time_cost ≥ 3); das Setup akzeptiert 12 gleiche Zeichen als Passphrase, und die UI zeigt keinerlei Stärkemesser oder Zeichenregeln. | **Starke Argon2id-Parameter** (Memory ≥ 256-512 MB, time_cost ≥ 3) **plus die Passphrase-Politik aus N11.3 (B.2): ausschliesslich Mindestlänge 12 Zeichen, kein Stärkemesser, keine Zeichenregeln.** Die Passphrase ist der einzige reale Schwachpunkt (Offline-Brute-Force), abgefedert wird das allein über die Argon2id-Kosten und den Pepper; das ist wichtiger als die zweite Cipher-Schicht. Frühere Fassungen verlangten eine „erzwungene Passphrase-Stärke mit Stärke-Anzeige"; das ist bewusst gestrichen und darf nicht wieder eingebaut werden (ehrliche Konsequenz: `aaaaaaaaaaaa` ist gültig). |
 > | **🔴 G9** | **8** | offen | seit 2026-06-08 | `grep DEV_AES_KEY` über `Code/` liefert 0 Treffer; `db.connect()` ohne passphrase-abgeleiteten Schlüssel schlägt fehl. | **`DEV_AES_KEY` & jeden statischen Schlüssel-Default ersatzlos entfernen.** Es darf **keinen** Code-Pfad geben, der die DB ohne passphrase-abgeleiteten Schlüssel öffnet. Sonst öffnet die „verschlüsselte" DB mit einem öffentlich im Quellcode stehenden String → **effektiv null Verschlüsselung**, während der Status fälschlich „AES-256 + ChaCha20" meldet. Wichtigstes Gate der Phase 8. Dazu gehören der saubere Erst-Einrichtungs-Flow (Passphrase anlegen) und die Migration der bestehenden Dev-DB auf den echten Schlüssel. |
 > | **G11** | **0 / 9 (Build)** | ✅ erfüllt über `requirements.lock.txt`; Rest (Hash-Checking im Build) offen für Phase 9 | 2026-07-13 | Jede Zeile in `requirements.lock.txt` trägt eine feste `==`-Version; der Release-Build (Phase 9) installiert ausschliesslich aus der Lock-Datei mit `--require-hashes`; die Ziel-Python-Version ist auf **3.11.x** festgeschrieben (Doku und Build-Umgebung), und der Release-Build laeuft nachweislich unter 3.11.x. | **Abhängigkeiten pinnen.** Die verbindliche gepinnte Menge ist `requirements.lock.txt` (liegt vor; `requirements.txt` bleibt bewusst die lose Liste des Direktbedarfs; frühere Fassungen dieses Gates verlangten das Pinning fälschlich in `requirements.txt` selbst). Rest-Pflicht in Phase 9: der Release-Build installiert nur aus der Lock-Datei, mit `pip` Hash-Checking. Eine getauschte Lib = Totalkompromittierung der Tresor-App. **Auch der Interpreter ist eine gepinnte Abhaengigkeit (U25):** die Ziel-Python-Version ist **3.11.x** (heutiges Setup: Microsoft-Store-Python 3.11), festgehalten in der Doku und in der Build-Umgebung (Phase 9), weil `sqlcipher3-wheels` Wheels nur fuer bestimmte CPython-Versionen liefert (eine falsche Version = kein passendes Wheel = stiller Bruch) und die `.exe` gegen genau diesen Interpreter gebaut werden muss. Gilt laufend: bei jedem Dependency-Update bewusst prüfen. |
-> | **G12** | **vor 7 (vorgezogen aus 3/8)** | ✅ umgesetzt 2026-07-17 (`_wire_navigation_guard` in `main.py`: `NavigationStarting`-Waechter verwirft alles ausser `about:` und `file:` in den eigenen `frontend`-Ordner; `webview.settings['OPEN_EXTERNAL_LINKS_IN_BROWSER'] = False` leitet `window.open` in denselben Waechter statt in den System-Browser; DevTools-Prüfweg mit der Phase-7-Abnahme verifiziert) | festgestellt 2026-07-13 (kein Navigations-Handler in `main.py`) | Mit `NOATODO_DEBUG=1` in der DevTools-Konsole `window.location='https://example.com'` und `window.open('https://example.com')` ausführen: beides wird verweigert, die App bleibt auf der lokalen `index.html`. | **WebView-Navigation abriegeln.** Navigations-/New-Window-Events in PyWebView abfangen und jede **externe** Navigation (`window.location`/`window.open` zu externem `http`) verweigern. Die App ist rein lokal und navigiert nie woandershin. |
+> | **G12** | **vor 7 (vorgezogen aus 3/8)** | ✅ umgesetzt 2026-07-17 (`_wire_navigation_guard` in `main.py`: `NavigationStarting`-Waechter verwirft alles ausser `about:` und `file:` in den eigenen `frontend`-Ordner; `webview.settings['OPEN_EXTERNAL_LINKS_IN_BROWSER'] = False` leitet `window.open` in denselben Waechter statt in den System-Browser; DevTools-Prüfweg mit der Phase-7-Abnahme verifiziert. **Loopback-Ausnahme, korrigiert 2026-07-17:** PyWebView 5.x liefert das Frontend NICHT per `file://` aus, sondern grundsaetzlich ueber einen eigenen lokalen HTTP-Server (`http://127.0.0.1:<port>/`), und zwar in JEDEM Modus, nicht nur mit `NOATODO_DEBUG`. Erlaubt wird deshalb `http://` auf Loopback (127.0.0.1/localhost/::1) BEDINGUNGSLOS, nie an den Debug-Modus gekoppelt. Die zuerst nachgetragene, NUR-im-Debug-Variante (Phase-7-Abnahme, beruhte auf der falschen Annahme, nur der Debug-Modus nutze den HTTP-Server) liess das normale Fenster schwarz, weil G12 den eigenen Startaufruf verwarf (per instrumentiertem Lauf 2026-07-17 nachgewiesen: auch ohne Debug laedt `http://127.0.0.1:<port>/index.html`), und haette den Release-Build ebenso geschwaerzt, weil der Build `NOATODO_DEBUG` hart ignoriert (G34), `_debug_enabled()` dort also `False` ist und eine debug-gekoppelte Ausnahme verschwaende. Nur Loopback ist erlaubt; jede ENTFERNTE `http`/`https`-Adresse (der eigentliche Exfiltrations-Vektor) bleibt verweigert, die Sicherheitsabsicht ist unveraendert) | festgestellt 2026-07-13 (kein Navigations-Handler in `main.py`) | Mit `NOATODO_DEBUG=1` in der DevTools-Konsole `window.location='https://example.com'` und `window.open('https://example.com')` ausführen: beides wird verweigert, die App bleibt auf der lokalen `index.html`. | **WebView-Navigation abriegeln.** Navigations-/New-Window-Events in PyWebView abfangen und jede **externe** Navigation (`window.location`/`window.open` zu externem `http`) verweigern. Die App ist rein lokal und navigiert nie woandershin. |
 > | **🔴 G13** | **8** | offen | seit 2026-06-10 | Test iteriert gesperrt über ALLE Bridge-Methoden: alles ausserhalb der Allowlist liefert `{"error": "locked"}`, `get_state()` nur `{"locked": true}`, während `quit_app()`/`killswitch()` gesperrt funktionieren. | **Serverseitige Lock-Durchsetzung (als Allowlist).** Volltext in B.2 (Etikett G13). |
 > | **G14** | **8 (Teile vorgezogen)** | teils erledigt: fester Profilordner + Altlasten-Wisch ✅, sicheres Wischen offen | 2026-06-20 | Nach normalem Betrieb liegen keine `%TEMP%\tmp*\EBWebView`-Altlasten; ab Phase 8: nach Lock/Panic/Quit (auch Fenster-X) ist `PROFILE_DIR` gewischt, und ein Neustart nach hartem Kill scheitert nicht mit `0x800700AA`. | **Keine WebView2-Datenspuren auf der Platte.** Volltext in B.8.5 (Etikett G14). |
 > | **G15** | **8** | offen | seit 2026-06-10 | Im `.enc`-Header existiert kein Hash-Feld; eine falsche Passphrase erzeugt einen AEAD-Fehler mit der Meldung "Passphrase falsch"; die getrennten HKDF-`info`-Labels stehen im Code. | **Schlüsselableitung mit Domain-Separation, KEIN gespeicherter Verifikations-Hash.** Argon2id erzeugt aus dem Pepper-gebundenen `ikm` (verbindliche Konstruktion in G18, V2a) + Salt **ein** 32-Byte-Master-Secret; daraus per HKDF-SHA256 mit getrennten `info`-Labels (`b"noatodo/aes-v1"`, `b"noatodo/chacha-v1"`) `aes_key` und `chacha_key` ableiten. Es wird **kein** Argon2-Hash der Passphrase gespeichert: Die Prüfung beim Entsperren ist der Erfolg oder Misserfolg der ChaCha20-Poly1305-Entschlüsselung (der Poly1305-Tag verifiziert die Passphrase implizit; falsche Passphrase = AEAD-Exception = Meldung "Passphrase falsch"). So liegt kein zusätzliches Orakel-Material für Offline-Angreifer auf der Platte. Ersetzt die ältere Formulierung in B.7 ("Argon2-Hash zum Prüfen speichern", "Teilstücke des KDF-Outputs"). |
@@ -2786,7 +2802,7 @@ interaktiv. Dies ist die Vanilla-Umsetzung der React-Komponenten.
 | `ProfileMenu` | `renderMenus()` | das Profil-Dropdown |
 | Modals | `renderModal(kind)` | Status/Rename/Delete/Shortcuts/Settings (Panik ist kein Modal mehr, sondern das PanicPanel an der Rail, N10) |
 | `LockScreen` | `renderLock()` | Sperrbildschirm |
-| `Toasts` | `pushToast()` | Toast-Stack |
+| `Undo-Toast` | `pushUndoToast()` | nur der Listen-Undo (N11.2.1); der generische `pushToast()` ist mit N11.16 entfernt |
 | `Icons` | `Icons` (Objekt) | die SVG-Icons (siehe **Anhang 4**, 1:1 aus Konzept) |
 
 1. **Zustand** im Frontend ist nur ein Cache (`state = { lists, activeId, settings,
@@ -2951,20 +2967,29 @@ aus Phase 6.5 / Gate G23, es gibt bewusst kein Listen-Kopieren mehr.)
    3. **Kodierung: UTF-8 ohne BOM**, Zeilenenden **CRLF (`\r\n`)** (Windows-Editoren
       wie Notepad zeigen die Datei sonst als eine Zeile). Gilt für `md` und `txt`.
    4. **Verhalten bei Dialog-Abbruch:** bricht der Nutzer den Save-Dialog ab, wird
-      **keine Datei geschrieben und kein „Exported"-Toast** gezeigt. Die Methode gibt
+      **keine Datei geschrieben und keine Meldung** gezeigt. Die Methode gibt
       den Code `canceled` zurück, der nach G29/B.2 **bewusst still** ist (kein Toast,
       keine Fehlermeldung, keine falsche Erfolgsmeldung, G22). Dies ist ein
       **Abnahmepunkt von G21c** (Save-Dialog): Abbruch = kein Nebeneffekt, keine
-      Meldung.
+      Meldung. (Ein **Erfolg** wird seit N11.16 ebenfalls nicht mehr per Toast quittiert.)
    5. **Listen-Reihenfolge im Gesamtexport:** `export_all` schreibt die Listen in
       **Sidebar-Reihenfolge** (`lists.position`, dieselbe wie am Bildschirm), damit der
       Export der sichtbaren Ordnung entspricht; gilt für `md` und `txt`.
+   6. **Erledigte Aufgaben ein-/ausblendbar (Setting `exportDone`, Default an, 2026-07-17):**
+      Ob abgehakte Aufgaben (die `done`-Sektion, `- [x]` bzw. `[x] `) im Export erscheinen,
+      steuert der Bool-Setting `exportDone` (Standard `true` = an) aus der Sektion "Export"
+      im Settings-Modal (B.7). Bei `false` entfallen nur die erledigten Zeilen; die
+      Listen-Überschrift (`# Name` bzw. Name + `=`-Zeile) und alle offenen Aufgaben bleiben.
+      Gilt für `export_list` **und** `export_all`, für `md` **und** `txt`. Der Setting wirkt
+      global (keine Pro-Export-Abfrage), damit die zweistufige Pille schlank bleibt.
 
    **Im Code umgesetzt (2026-07-17):** zweistufige Export-Pille im Frontend
    (`renderExportPill` in `app.js`, links neben der Rail; Rail-Button und `Ctrl+E`
    toggeln sie, `Esc`/Klick daneben schliesst, N11.2.3-Ausgrauung ohne offene Liste),
-   `export_all(format)` als neue Bridge-Methode, JSON-Zweig entfernt; alle fünf
-   U10-Festlegungen und die G21-Härtung siehe den G21-Block unten.
+   `export_all(format)` als neue Bridge-Methode, JSON-Zweig entfernt; alle sechs
+   U10-Festlegungen und die G21-Härtung siehe den G21-Block unten. Der `exportDone`-Filter
+   sitzt in `_export_md`/`_export_txt` (Parameter `include_done`), gespeist aus
+   `Api._export_include_done()`.
 2. **Undo beim Listen-Löschen** (UX-Pflicht aus Phase 6.5): `delete_list` hält
    die gelöschte Liste samt Aufgaben zunächst zurück, neue Bridge-Methode
    `undo_delete_list(id)` stellt wieder her; das Frontend zeigt den Toast
@@ -3008,8 +3033,9 @@ Gerätenamen-Präfix; Fallback `NoaToDo-Liste` nach U10), `_one_line()` setzt (b
 (gilt auch für Listennamen in Überschriften), und `_export_via_dialog()` setzt (c) um:
 Save-Dialog über den `_native_dialog()`-Kontext (N11.11.5: höchstens ein Dialog, zweiter
 Aufruf -> `busy`), Datei UTF-8 ohne BOM mit CRLF (U10 Punkt 3), Abbruch -> `canceled`
-ohne Nebeneffekt (U10 Punkt 4). Gilt für `export_list` und `export_all`; das Frontend
-zeigt den "Exported"-Toast nur nach echtem Schreiberfolg.
+ohne Nebeneffekt (U10 Punkt 4). Gilt für `export_list` und `export_all`; ein echter
+Schreibfehler laeuft ueber `handleError`, ein Erfolg wird seit N11.16 nicht mehr per
+Toast quittiert (Nutzerwunsch: keine Bestaetigungs-Benachrichtigungen).
 
 > **🔒 PFLICHT-GATES für Phase 7 (keines optional; Definition, Status, Termin und
 > Prüfweg stehen ausschliesslich in der normativen Gate-Tabelle in B.9, diese
@@ -3727,6 +3753,7 @@ liegen durchgestrichen in Anhang 3, Umbau-Etappe 5.)
 | N11.2.1 / U9 | 2026-07-13 | Undo-Architektur: RAM-Puffer, kein Soft-Delete | B.2 |
 | N11.2.2 / U11 | 2026-07-15 | Randfaelle von `reorder`/`reorder_lists`/`move_task` | B.2 (Validierung: G20) |
 | N11.2.3 | 2026-07-17 | Export ohne offene Liste: Umfang-Option "aktuelle Liste" ausgegraut, nur "alle Listen" waehlbar | Phase 7 (+ B.5 `Ctrl+E`) |
+| N11.2.4 | 2026-07-17 | Setting `exportDone`: erledigte Aufgaben im Export ein-/ausblendbar (Default an), global fuer `export_list`/`export_all`, md und txt | Phase 7 (U10 Punkt 6) + B.6 (+ G20 Whitelist) |
 | N11.3 / U8 | 2026-07-09, U8-Details 2026-07-13 | Ersteinrichtung, Passphrase-Regel (nur Mindestlaenge 12), Reset, Passphrase-Wechsel (a bis d) | B.2 (+ B.4 Onboarding, B.7/G8 KDF-Upgrade) |
 | N11.4 | 2026-07-09 | Auto-Sperre-Default und Entsperr-Rate-Limit-Leiter | B.8.3 + B.8.4 |
 | N11.4.1 / U6 | 2026-07-13 | Rate-Limit-Zustand persistiert (config.json, zwei Uhren, persist-before-verify) | B.8.4 (+ B.11) |
@@ -3747,6 +3774,7 @@ liegen durchgestrichen in Anhang 3, Umbau-Etappe 5.)
 | N11.13 / U1 | 2026-07-13 | Onboarding-/Tresor-Bridge, dreiwertiger Boot-Zustand | B.2 + B.4 (Historie: Anhang 3) |
 | N11.14 / S7 | 2026-07-13 | Triage des UX/UI-Audits | Anhang 2 |
 | N11.15 (.1-.6) / U2, V8 | 2026-07-13, .5/.6: 2026-07-15 | `config.json`: Schema, Fehlerfaelle, unerreichbarer Tresor, Redirect, Ueberschreib-Schutz | B.11 |
+| N11.16 | 2026-07-17 | Alle Toasts bis auf den Undo-Toast (N11.2.1) ersatzlos entfernt (Nutzerwunsch: keine Benachrichtigungen): erst die Erfolgs-Bestaetigungen, dann auch die Fehler-/Validierungs-Toasts; Fehler laufen still bzw. bleiben ueber das Status-Modal (G29-Ringpuffer) einsehbar | B.4 + B.2 (Toast-Politik + Fehlercode-Katalog) |
 
 
 
@@ -3801,13 +3829,13 @@ gilt vor dem Audit-Dokument: bei Widerspruch gewinnt diese Tabelle.*
 | 1.2 Task-Loeschen ohne Bestaetigung, totes Delete-Modal | ✅/❌ erledigt (2026-07-17) | Sofort-Loeschen **bleibt** bewusst so (Undo gibt es nur fuer Listen, N11.2); der tote `case 'delete'`-Modalcode (Render-Block, `doDelete`, `do-delete`-Handler, Enum-Eintrag im State-Kommentar) wurde restlos entfernt. |
 | 1.3 Glocke + Profil-Menue (tot, Fake-Daten) | ✅/❌ erledigt (2026-07-17) | Glocke ist **hinfaellig** (Benachrichtigungen ersatzlos entfernt, 2026-07-09); das Profil-Menue war komplett unerreichbarer toter Code (kein Avatar/Trigger im Header) und wurde samt `state.menu`/`open-profile` restlos entfernt (Phase 6.5 "Profil-Menue aufraeumen", mit Phase 7 umgesetzt). |
 | 1.4 Status-Modal mit Fantasiewerten **[Sec]** | ✅ erledigt (2026-07-17) | Gate **G22** umgesetzt: das Status-Modal zeigt seit 2026-07-16 den ehrlichen Dev-Zustand (`active:false`, Warnfarbe, `dev_key`), dazu seit 2026-07-17 der G29-Ringpuffer ("Recent errors", N11.12); echte Verschluesselungswerte zeigt der Status erst ab Phase 8 (G22-Restsatz in B.9, siehe auch 8.4). |
-| 1.5 Export meldet Erfolg ohne Datei | ✅ erledigt (2026-07-17) | Gate **G21c** umgesetzt: echter Save-Dialog, Datei wird wirklich geschrieben, Toast nur nach Schreiberfolg, Abbruch still (`canceled`); Format `md`/`txt` (N11.1.5), JSON hinfaellig. |
+| 1.5 Export meldet Erfolg ohne Datei | ✅ erledigt (2026-07-17) | Gate **G21c** umgesetzt: echter Save-Dialog, Datei wird wirklich geschrieben, Abbruch still (`canceled`); Format `md`/`txt` (N11.1.5), JSON hinfaellig. (Der frühere Erfolgs-Toast quittierte nur echten Schreiberfolg; er ist seit N11.16 ganz entfernt, ein Erfolg wird nicht mehr gemeldet.) |
 | 1.6 CSS-/Handler-Leichen (`.t-del`, `.t-grip`, `.title-row`, `.airplane-pill`) | ✅ erledigt (2026-07-17) | Entscheid Phase 7: **loeschen**, alle vier CSS-Bloecke plus `del-task`-Handler entfernt; ein Hover-Papierkorb wird nicht nachgeruestet (Loeschen bleibt bewusst ueber die Rail, S7). |
 | 1.7 Neue-Liste-Feld unsichtbar bei geschlossener Sidebar | 🟡 gueltig | Die Taste heisst heute `Ctrl+Shift+N` (B.5), der Bug ist derselbe: sie setzt `state.adding = true`, ohne die Sidebar zu oeffnen (`app.js`), das Feld liegt dann unsichtbar hinter der zugeklappten Sidebar. |
 | 2.1 Sprachmix DE/EN | ✅ erledigt | UI ist durchgehend englisch, deutsche `title`-Tooltips gibt es nicht mehr (am Code geprueft). |
 | 2.2 Mac-Symbole (⌘) | ✅ erledigt | Ueberall `Ctrl`/`Shift`. |
 | 2.3 Shortcuts-Modal unvollstaendig | ✅ erledigt / ❌ teils | Modal ist aus B.5 vollstaendig (inkl. `Esc`, `?`, Maus-Gesten); der geforderte **Mini-Shortcut ist hinfaellig** (bewusst kein Shortcut, B.5: Mini nur per Rail). |
-| 2.4 Irrefuehrende Toast-Texte | ✅ erledigt (2026-07-17) | "Back online, syncing" existiert nicht mehr; der Export-Toast kommt nur noch nach echtem Schreiberfolg (G21c); die Verschluesselungs-/Wipe-Behauptungen sind ueber G22 ehrlich (Status-Modal seit 2026-07-16, Panik-Schirme seit 2026-07-17). |
+| 2.4 Irrefuehrende Toast-Texte | ✅ erledigt (2026-07-17) | "Back online, syncing" existiert nicht mehr; **alle** Toasts bis auf den Undo-Toast sind seit N11.16 entfernt (Nutzerwunsch, erst die Erfolgs-, dann die Fehler-/Validierungs-Toasts), es kann also gar kein irrefuehrender Toast-Text mehr erscheinen; interne Fehler bleiben ueber das Status-Modal (G29) einsehbar; die Verschluesselungs-/Wipe-Behauptungen sind ueber G22 ehrlich (Status-Modal seit 2026-07-16, Panik-Schirme seit 2026-07-17). |
 | 2.5 Empty-States fuehren nicht | 🟡 gueltig | Kleine Politur, unverbindlich. |
 | 3.1 `Esc` raeumt alles gleichzeitig ab | 🟡 gueltig | Gestaffeltes `Esc` (Modal -> Eingabe -> Auswahl -> Fokus/Mini) ist weiter offen; B.5 beschreibt heute bewusst das Alles-auf-einmal-Verhalten, eine Aenderung muss B.5 mitziehen. |
 | 3.2 Blur legt eine Liste an | 🟡 gueltig | Am Code bestaetigt (`app.js`, `blur` committet das Neue-Liste-Feld): Wegklicken erzeugt ungewollt eine Liste. |
@@ -3833,7 +3861,7 @@ gilt vor dem Audit-Dokument: bei Widerspruch gewinnt diese Tabelle.*
 | 4.6 Kontrast (WCAG) | 🟡 gueltig | Kontrast-Audit steht aus. |
 | 4.7 Theme "System" fehlt | 🔵 eingeplant | N11.6: `theme` = `auto\|light\|dark`, Default `auto`, folgt Windows live. |
 | 4.8 Scrollbars inkonsistent | 🟡 gueltig | Mini/Fokus haben Default-Scrollbars. |
-| 4.9 Toast-Verhalten (Dauer, Stapel, Position) | 🟡 gueltig | Passt zu N11.12: Fehler-Toasts brauchen laengere Standzeit als Bestaetigungen. |
+| 4.9 Toast-Verhalten (Dauer, Stapel, Position) | ⬜ groesstenteils hinfaellig (N11.16) | Erfolgs- und Fehler-Toasts gibt es nicht mehr; es bleibt nur der **eine** Undo-Toast (unten links, ca. 6 s, mit Ablaufbalken, kein Stapel). Nur dessen Standzeit/Position ist ueberhaupt noch eine Frage. |
 | 4.10 Enter-Hinweis in der Dock-Eingabe | 🟡 gueltig | Kleine Politur. |
 | 4.11 Selektion vs. Bearbeiten-Optik | 🟡 gueltig | `.editing` staerker differenzieren. |
 | 4.12 Sidebar-Toggle-Icon (Plus) | 🟡 gueltig | Panel-/Menue-Icon statt Plus (`Icons.Menu` liegt ungenutzt bereit). |
@@ -3994,7 +4022,8 @@ Einleitung sofort an Ort und Stelle eingearbeitet und hier nur noch protokollier
 
 - **Settings-Whitelist (G20) neu:** entfernt werden `notify`, `notifyInApp`,
   `notifyWindows` (bereits weg) und das ohnehin unbenutzte `toolbar`; hinzu kommen
-  `theme` (`auto`/`light`/`dark`), `sound` (bool), `autoLock` (Minuten, `0` = nie).
+  `theme` (`auto`/`light`/`dark`), `sound` (bool), `autoLock` (Minuten, `0` = nie),
+  `exportDone` (bool, erledigte Aufgaben in den Export, Default an, 2026-07-17).
   Weiter gueltig: `accent`, `density`, `sidebar`, `railPinned`, `sidebarWidth`. Der
   `seeded`-Marker bleibt Backend-Marker (verhindert kuenftiges Demo-Seeding generell,
   da ohnehin nie geseedet wird). `dark` entfaellt zugunsten von `theme` (N11.6).

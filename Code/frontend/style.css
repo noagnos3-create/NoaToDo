@@ -582,7 +582,10 @@ input { font: inherit; }
   background: var(--surface);
   border: 1px solid var(--accent-line); box-shadow: var(--shadow-lg);
 }
-.list-pill.confirm { border-color: color-mix(in oklab, var(--danger) 45%, var(--border)); }
+/* Loeschbestaetigung: Papierkorb links (wie zuvor), Abbrechen-X rechts, klar
+   getrennt (nicht direkt nebeneinander), damit man nicht versehentlich loescht. */
+.list-pill.confirm { border-color: color-mix(in oklab, var(--danger) 45%, var(--border));
+  justify-content: space-between; gap: 18px; }
 .list-pill input {
   flex: 1; min-width: 0;
   background: none; border: none; outline: none;
@@ -798,7 +801,9 @@ input { font: inherit; }
   -webkit-backdrop-filter: blur(12px) saturate(1.25);
   backdrop-filter: blur(12px) saturate(1.25);
 }
-.dock-edit-pill.confirm { border-color: color-mix(in oklab, var(--danger) 45%, var(--border)); }
+/* wie oben: Papierkorb links, Abbrechen-X rechts, klar getrennt. */
+.dock-edit-pill.confirm { border-color: color-mix(in oklab, var(--danger) 45%, var(--border));
+  justify-content: space-between; gap: 40px; }
 .dock-edit-pill input {
   flex: 1; min-width: 240px; max-width: 44vw;
   background: none; border: none; outline: none;
@@ -1299,26 +1304,64 @@ input { font: inherit; }
 .kill-btn.armed .kill-ok { transform: translate(0, -50%); opacity: 1; }
 .kill-btn.armed:hover { background: color-mix(in oklab, var(--danger) 20%, var(--surface-3)); }
 
-/* toast */
-/* bottom angehoben, damit Toasts ueber dem fest verankerten .list-dock stehen. */
-.toast-wrap { position: fixed; bottom: 92px; left: 50%; transform: translateX(-50%); z-index: 70; display: flex; flex-direction: column; gap: 8px; align-items: center; }
-.toast {
-  display: flex; align-items: center; gap: 10px;
-  padding: 11px 16px; border-radius: 11px;
-  background: var(--text); color: var(--bg);
-  font-size: 13px; font-weight: 500; box-shadow: var(--shadow-lg);
-  animation: rise .2s ease;
+/* Der generische Erfolgs-/Fehler-Toast (.toast-wrap/.toast) ist mit N11.16
+   entfernt (Nutzerwunsch: keine Benachrichtigungen). Es bleibt nur der
+   Undo-Toast unten. */
+
+/* Undo-Toast fuers Listen-Loeschen (N11.2.1): eigener Layer, unten links neben
+   der Sidebar verankert (--content-left = Sidebar-Breite, 0 wenn geschlossen). */
+.undo-wrap {
+  position: fixed; left: calc(var(--content-left, 0px) + 18px);
+  bottom: 20px; z-index: 71;
 }
-.toast svg { width: 16px; height: 16px; color: var(--accent); }
-.toast .mono { font-family: var(--font-mono); font-size: 11.5px; opacity: .7; }
-/* Undo-Knopf im "List deleted"-Toast (N11.2.1) */
-.toast .toast-undo {
-  margin-left: 6px; padding: 3px 10px; border-radius: 999px;
+.undo-toast {
+  position: relative; overflow: hidden;
+  display: flex; align-items: center; gap: 10px;
+  padding: 10px 12px 10px 16px; border-radius: 999px;
+  /* WICHTIG: Der Undo-Layer haengt an <body>, AUSSERHALB von .app#root (sonst
+     wuerde ihn render() ueber root.innerHTML verwerfen). Die Theme-Tokens
+     (--surface/--text/--border ...) sitzen aber nur auf .app[data-theme] und
+     werden nicht an einen Geschwister-Knoten vererbt. `var(--surface)` waere
+     hier also ungueltig -> transparenter Grund + schwarzer Erbtext, im Darkmode
+     praktisch unsichtbar. Darum feste Farbwerte (aus den Design-Tokens): hell
+     als Standard, dunkel per Geschwister-Kombinator vom .app-Element unten. */
+  background: #faf6ee; color: #2c2519;
+  border: 1px solid #cdbfa4; box-shadow: 0 12px 48px rgba(50,38,20,.18);
+  font-size: 13px; font-weight: 500;
+  animation: undo-in .22s cubic-bezier(.2,.9,.3,1);
+}
+/* Darkmode: Pille hebt sich klar vom fast schwarzen Hintergrund ab (--surface-3
+   auf --bg, kraeftiger Rand, weil der Schatten auf Dunkel kaum traegt). */
+.app[data-theme="dark"] ~ .undo-wrap .undo-toast {
+  background: #322b20; color: #ece3d2;
+  border-color: #4a4231; box-shadow: 0 16px 60px rgba(0,0,0,.6);
+}
+.undo-toast.leaving { animation: undo-out .18s ease forwards; }
+.undo-toast svg { width: 16px; height: 16px; color: #cf5638; flex: none; }
+.app[data-theme="dark"] ~ .undo-wrap .undo-toast svg { color: #e0623e; }
+.undo-toast .undo-name {
+  font-family: var(--font-mono); font-size: 11.5px; opacity: .65;
+  max-width: 180px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.undo-toast .toast-undo {
+  margin-left: 4px; padding: 5px 13px; border-radius: 999px;
   background: var(--accent); color: #fff; border: none; cursor: pointer;
   font-family: var(--font-mono); font-size: 11px; font-weight: 600;
-  letter-spacing: .04em; text-transform: uppercase;
+  letter-spacing: .04em; text-transform: uppercase; flex: none;
 }
-.toast .toast-undo:hover { filter: brightness(1.08); }
+.undo-toast .toast-undo:hover { filter: brightness(1.08); }
+/* Ablaufbalken: schrumpft ueber die Anzeigedauer nach links weg. Seitlich
+   eingerueckt und selbst abgerundet, damit er in der runden Pille (border-radius
+   999px) nicht an den gerundeten Ecken abgeschnitten wirkt. */
+.undo-toast .undo-bar {
+  position: absolute; left: 16px; right: 16px; bottom: 4px; height: 2px;
+  border-radius: 2px;
+  background: var(--accent); transform-origin: left center;
+  animation: undo-countdown linear forwards;
+}
+@keyframes undo-in { from { opacity: 0; transform: translateY(10px) scale(.98); } }
+@keyframes undo-out { to { opacity: 0; transform: translateY(8px) scale(.98); } }
+@keyframes undo-countdown { from { transform: scaleX(1); } to { transform: scaleX(0); } }
 
 /* accent picker popover */
 .swatches { display: flex; gap: 9px; padding: 4px 4px 8px; }

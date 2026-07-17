@@ -166,6 +166,7 @@ SETTINGS_SCHEMA: dict[str, tuple] = {
     "sidebarWidth": ("int_clamp", 180, 520),
     "sound": ("bool",),
     "autoLock": ("int_enum", (0, 1, 5, 15, 30, 60)),
+    "exportDone": ("bool",),  # erledigte Aufgaben in den Export aufnehmen (Default an)
 }
 
 
@@ -247,8 +248,13 @@ def _one_line(text: str) -> str:
     return re.sub(r"[\r\n]+", " ", str(text))
 
 
-def _export_md(lists: list[dict[str, Any]]) -> list[str]:
-    """md-Zeilen (U10): `#`-Überschrift je Liste, `- [ ]`/`- [x]` je Aufgabe."""
+def _export_md(lists: list[dict[str, Any]], include_done: bool = True) -> list[str]:
+    """md-Zeilen (U10): `#`-Überschrift je Liste, `- [ ]`/`- [x]` je Aufgabe.
+
+    ``include_done`` (Setting ``exportDone``): erledigte Aufgaben nur ausgeben,
+    wenn wahr (Default an). Bei aus bleibt die `#`-Überschrift der Liste stehen,
+    nur die `- [x]`-Zeilen entfallen.
+    """
     lines: list[str] = []
     for lst in lists:
         if lines:
@@ -257,14 +263,19 @@ def _export_md(lists: list[dict[str, Any]]) -> list[str]:
         lines.append("")
         for t in lst["open"]:
             lines.append(f"- [ ] {_one_line(t['text'])}")
-        for t in lst["done"]:
-            lines.append(f"- [x] {_one_line(t['text'])}")
+        if include_done:
+            for t in lst["done"]:
+                lines.append(f"- [x] {_one_line(t['text'])}")
     return lines
 
 
-def _export_txt(lists: list[dict[str, Any]]) -> list[str]:
+def _export_txt(lists: list[dict[str, Any]], include_done: bool = True) -> list[str]:
     """txt-Zeilen (U10 Punkt 2): Name, `=`-Zeile, `[ ] `/`[x] ` ohne
-    Einrückung; bei mehreren Listen trennt eine Leerzeile."""
+    Einrückung; bei mehreren Listen trennt eine Leerzeile.
+
+    ``include_done`` (Setting ``exportDone``): erledigte Aufgaben nur ausgeben,
+    wenn wahr (Default an).
+    """
     lines: list[str] = []
     for lst in lists:
         if lines:
@@ -274,8 +285,9 @@ def _export_txt(lists: list[dict[str, Any]]) -> list[str]:
         lines.append("=" * max(1, len(name)))
         for t in lst["open"]:
             lines.append(f"[ ] {_one_line(t['text'])}")
-        for t in lst["done"]:
-            lines.append(f"[x] {_one_line(t['text'])}")
+        if include_done:
+            for t in lst["done"]:
+                lines.append(f"[x] {_one_line(t['text'])}")
     return lines
 
 
@@ -351,7 +363,7 @@ def bridge(fn: Callable | None = None, *, schema: dict[str, Callable] | None = N
 
 
 # Typumwandlung beim Lesen der settings-Tabelle (dort liegt alles als String).
-_BOOL_SETTINGS = {"dark"}
+_BOOL_SETTINGS = {"dark", "exportDone"}
 
 
 def _typed_settings(raw: dict[str, str]) -> dict[str, Any]:
@@ -559,6 +571,11 @@ class Api:
             fh.write(_crlf(lines))
         return {"ok": True, "filename": os.path.basename(str(result))}
 
+    def _export_include_done(self) -> bool:
+        """Setting ``exportDone`` (Default an): sollen erledigte Aufgaben mit in
+        den Export? Gilt für ``export_list`` und ``export_all`` gleichermaßen."""
+        return self.db.get_setting("exportDone", "true") != "false"
+
     @bridge(schema={"list_id": v_id, "fmt": v_fmt})
     def export_list(self, list_id: str, fmt: str = "md") -> dict[str, Any]:
         """Eine Liste als md/txt exportieren (zweistufiger Export, Schritt
@@ -566,11 +583,13 @@ class Api:
 
         Der Dateinamens-Vorschlag ist der über G21/V6 sanitisierte Listenname;
         die Endung setzt das gewählte Format, nie der Nutzer-Text (U10).
+        Erledigte Aufgaben nur, wenn das Setting ``exportDone`` an ist.
         """
         lst = self._list_or_none(list_id)
         if lst is None:
             return _err("not_found")
-        lines = _export_md([lst]) if fmt == "md" else _export_txt([lst])
+        done = self._export_include_done()
+        lines = _export_md([lst], done) if fmt == "md" else _export_txt([lst], done)
         return self._export_via_dialog(
             f"{_sanitize_export_name(lst['name'])}.{fmt}", lines
         )
@@ -583,9 +602,11 @@ class Api:
         Listennamen stehen wörtlich und dürfen doppelt vorkommen (U12), je
         Liste als größere Überschrift. Dateinamens-Vorschlag:
         ``NoaToDo-Export-YYYY-MM-DD.<fmt>`` (lokales Datum, U10 Punkt 1).
+        Erledigte Aufgaben nur, wenn das Setting ``exportDone`` an ist.
         """
         lists = self.db.get_lists_with_tasks()
-        lines = _export_md(lists) if fmt == "md" else _export_txt(lists)
+        done = self._export_include_done()
+        lines = _export_md(lists, done) if fmt == "md" else _export_txt(lists, done)
         date = datetime.now().strftime("%Y-%m-%d")
         return self._export_via_dialog(f"NoaToDo-Export-{date}.{fmt}", lines)
 

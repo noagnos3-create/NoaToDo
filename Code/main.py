@@ -366,12 +366,26 @@ def _is_allowed_navigation(uri: str) -> bool:
     navigiert nie woandershin; ein per XSS eingeschleustes
     ``window.location='https://...'`` liefe sonst als Exfiltrationskanal an
     der CSP vorbei (die CSP deckt Subressourcen, nicht die Top-Navigation).
+
+    Loopback-Ausnahme (korrigiert 2026-07-17): PyWebView 5.x liefert das
+    Frontend NICHT per ``file://`` aus, sondern grundsaetzlich ueber einen
+    eigenen lokalen HTTP-Server (``http://127.0.0.1:<port>/``), und zwar in
+    JEDEM Modus, nicht nur mit NOATODO_DEBUG. Die Ausnahme darf daher nicht an
+    den Debug-Modus gekoppelt sein: der Release-Build ignoriert NOATODO_DEBUG
+    hart (G34), eine Debug-Kopplung wuerde also gerade dort (und in jedem
+    normalen Start) den eigenen Startaufruf blockieren und das Fenster schwarz
+    lassen. Erlaubt wird ausschliesslich Loopback (127.0.0.1/localhost/::1);
+    jede entfernte http/https-Adresse (der eigentliche Exfiltrations-Vektor,
+    gegen den G12 schuetzt) bleibt weiter verweigert.
     """
     from urllib.parse import unquote, urlparse
 
     u = (uri or "").strip().lower()
     if u.startswith("about:"):
         return True
+    if u.startswith("http://"):
+        host = (urlparse(u).hostname or "")
+        return host in ("127.0.0.1", "localhost", "::1")
     if not u.startswith("file:"):
         return False
     frontend_root = os.path.join(HERE, "frontend").replace("\\", "/").lower()

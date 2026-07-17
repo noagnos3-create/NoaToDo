@@ -702,6 +702,8 @@ function renderSettings() {
           <div class="settings-col">
             ${head('Workspace')}
             ${row('Sidebar', seg('sidebar', [['open', 'Open'], ['closed', 'Closed']], s.sidebar))}
+            ${head('Export')}
+            ${row('Completed tasks', seg('exportDone', [['true', 'Include'], ['false', 'Exclude']], String(s.exportDone !== false)), 'Whether done tasks appear in exported files')}
           </div>
         </div>
       </div>
@@ -716,7 +718,7 @@ function syncSettingsUi() {
   const s = state.settings;
   document.querySelectorAll('.seg-btn[data-key]').forEach((b) => {
     const key = b.dataset.key;
-    const cur = key === 'dark' ? String(!!s.dark) : s[key];
+    const cur = BOOL_SETTINGS.has(key) ? String(!!s[key]) : s[key];
     b.classList.toggle('on', b.dataset.value === cur);
   });
   document.querySelectorAll('.swatch[data-color]').forEach((el) => {
@@ -920,6 +922,7 @@ function applyChrome() {
   applyRail();
   root.style.setProperty('--accent', state.settings.accent || '#d97757');
   root.style.setProperty('--sidebar-width', (state.sidebarWidth || 256) + 'px');
+  syncSidebarAnchor();
 }
 
 // Sichtbarkeit der rechten Tool-Rail (ausserhalb von Fokus/Mini):
@@ -1079,7 +1082,6 @@ async function commitNewList(name) {
   state.lists.push(res);
   state.activeId = res.id;
   render();
-  pushToast('List created', name);
 }
 
 // ===========================================================================
@@ -1162,7 +1164,7 @@ async function commitTaskEdit() {
   const ti = document.getElementById('edit-task-text');
   if (!id || !ti) { state.editingId = null; return; }
   const text = ti.value.trim();
-  if (!text) return pushToast('Task text cannot be empty');
+  if (!text) return;   // leer: Bearbeitung bleibt offen, keine Meldung (N11.16)
   const res = await api().edit_task(id, { text: text });
   state.editingId = null;
   if (res && res.error) { render(); handleError(res); return; }
@@ -1171,7 +1173,6 @@ async function commitTaskEdit() {
     if (t) { t.text = res.text; break; }
   }
   render();
-  pushToast('Task updated');
 }
 
 async function deleteTask(id) {
@@ -1184,7 +1185,6 @@ async function deleteTask(id) {
   if (state.editingId === id) state.editingId = null;
   if (state.selectedId === id) state.selectedId = null;
   render();
-  pushToast('Task deleted');
 }
 
 async function doRename(name) {
@@ -1194,7 +1194,6 @@ async function doRename(name) {
   list.name = name;
   state.modal = null;
   render();
-  pushToast('List renamed', name);
 }
 
 // Inline-Umbenennen committen (Pille in der Sidebar, Enter oder gueltige Eingabe).
@@ -1210,7 +1209,6 @@ async function doRenameList(id, name) {
   state.renamingId = null;
   state.listEditDock = false;
   render();
-  pushToast('List renamed', trimmed);
 }
 
 async function doDeleteList() {
@@ -1235,7 +1233,6 @@ async function doDeleteList() {
     const undoRes = await api().undo_delete_list(id);
     if (handleError(undoRes)) return;
     await refreshState();
-    pushToast('List restored', removed ? removed.name : '');
   });
 }
 
@@ -1244,13 +1241,11 @@ async function doDeleteList() {
 // erhalten, die Aufgabe haengt ans Ende ihrer Sektion in der Zielliste (U11).
 async function doMoveTask(taskId, targetListId) {
   if (!taskId || !targetListId || targetListId === state.activeId) { render(); return; }
-  const target = state.lists.find((l) => l.id === targetListId);
   const res = await api().move_task(taskId, targetListId);
   if (handleError(res)) return;
   if (state.selectedId === taskId) state.selectedId = null;
   if (state.editingId === taskId) state.editingId = null;
   await refreshState();
-  pushToast('Task moved', target ? target.name : '');
 }
 
 async function setOnline(flag) {
@@ -1260,7 +1255,6 @@ async function setOnline(flag) {
   if (state.online) startWifiPoll();
   else stopWifiPoll();
   render();
-  pushToast(flag ? 'Back online' : 'Offline mode', flag ? 'network enabled' : 'working offline');
 }
 
 // Echte WLAN-Signalstaerke vom Backend holen und nur das Symbol aktualisieren
@@ -1287,10 +1281,22 @@ function stopWifiPoll() {
   if (wifiTimer) { clearInterval(wifiTimer); wifiTimer = null; }
 }
 
+// Settings, die als Bool in state.settings liegen (Backend liefert sie via
+// _BOOL_SETTINGS als echten Bool; die Seg-Buttons tragen 'true'/'false').
+const BOOL_SETTINGS = new Set(['dark', 'exportDone']);
+
+// Fehlende Bool-Settings auf ihren Default ziehen (als echten Bool), damit
+// renderSettings und syncSettingsUi denselben Zustand zeigen. `exportDone`
+// kann bei alten DBs fehlen (kein Re-Seed nach dem seeded-Marker); Default an.
+function normalizeSettings(s) {
+  s.exportDone = s.exportDone !== false;
+  return s;
+}
+
 async function setSetting(key, value) {
   // Typkonvertierung für die Anwendung im Frontend.
   let applied = value;
-  if (key === 'dark') applied = (value === true || value === 'true');
+  if (BOOL_SETTINGS.has(key)) applied = (value === true || value === 'true');
   state.settings[key] = applied;
   if (key === 'dark') flashThemeSwitch();
   // Bewusst KEIN render(): Theme/Density/Sidebar wirken ueber die Attribute
@@ -1323,9 +1329,9 @@ function toggleExportPill() {
 
 // Schritt 2 abgeschlossen: Export ausfuehren. Das Backend zeigt den Save-
 // Dialog und schreibt die Datei (G21c). "canceled" (Dialog abgebrochen) und
-// "locked" bleiben nach B.2 bewusst still; nur ein echter Erfolg (Datei
-// liegt auf der Platte) zeigt den "Exported"-Toast (G22, keine falsche
-// Erfolgsmeldung).
+// "locked" bleiben nach B.2 bewusst still; ein echter Fehler laeuft ueber
+// handleError. Ein Erfolg wird nicht bestaetigt (der Nutzer hat Ort und Namen
+// im Save-Dialog selbst gewaehlt, sieht also, dass die Datei geschrieben wird).
 async function runExport(scope, fmt) {
   state.exportPill = null;
   render();
@@ -1333,17 +1339,15 @@ async function runExport(scope, fmt) {
     ? await api().export_all(fmt)
     : await api().export_list(state.activeId, fmt);
   if (handleError(res)) return;
-  pushToast('Exported', res.filename);
 }
 
 // Kopiert die AUSGEWAEHLTE Aufgabe. Das eigentliche Kopieren passiert im
 // Backend (gehaertete Clipboard-Formate, kein Win+V-Verlauf, kein
 // Cloud-Clipboard, Auto-Clear nach 60 s), siehe Bauplan Gate G23.
 async function doCopy() {
-  if (!state.selectedId) return pushToast('Select a task first');
+  if (!state.selectedId) return;   // ohne Auswahl: still nichts tun (N11.16)
   const res = await api().copy_task(state.selectedId);
   if (handleError(res)) return;
-  pushToast('Task copied', 'clipboard clears in ' + (res.clears_in || 60) + 's');
 }
 
 async function doMini(flag) {
@@ -1385,6 +1389,7 @@ function onSidebarResizeMove(e) {
   const w = Math.max(180, Math.min(520, _resizeStartW + (e.clientX - _resizeStartX)));
   state.sidebarWidth = w;
   root.style.setProperty('--sidebar-width', w + 'px');
+  syncSidebarAnchor();
 }
 
 function onSidebarResizeEnd() {
@@ -1487,7 +1492,7 @@ async function lockSubmit(value) {
   setTimeout(() => {
     if (st && st.lists) {
       state.lists = st.lists;
-      state.settings = Object.assign({}, st.settings, { sidebar: 'closed' });
+      state.settings = normalizeSettings(Object.assign({}, st.settings, { sidebar: 'closed' }));
       state.online = !!st.online;
     }
     lockUnlocking = false;
@@ -1505,30 +1510,26 @@ function flashThemeSwitch() {
 // ===========================================================================
 // Zentrale Fehlerbehandlung nach dem B.2-Fehlercode-Katalog (Gate G29).
 // Das Backend liefert nur noch Codes + statische Texte (nie str(exc), nie
-// Pfade). Toast-Politik (B.2): Toast NUR bei not_found, invalid, busy und
-// internal (mit ref); locked und canceled sind bewusst stumm; passphrase/
-// rate_limited/vault/memory haben ihre eigene Darstellung im Lock-/
-// Fehlerbildschirm und bekommen ebenfalls nie einen Toast.
+// Pfade). Seit N11.16 (Nutzerwunsch: keine Benachrichtigungen) zeigt das
+// Frontend zu KEINEM Fehlercode mehr einen Toast; sichtbar bleiben nur die
+// notwendigen Zustandswechsel: not_found laedt die (veraltete) Ansicht still
+// neu, locked zeigt den Lock-Screen. internal-Fehler bleiben ueber den
+// G29-Ringpuffer im Status-Modal ("Recent errors") einsehbar.
 // Liefert true, wenn res ein Fehler war (Aufrufer bricht dann ab).
 // ===========================================================================
 function handleError(res) {
   if (!res || !res.error) return false;
   const code = res.error;
   if (code === 'not_found') {
-    // Die Ansicht war veraltet: Toast, danach still frisch laden (B.2).
-    pushToast(res.message || 'Item not found.');
+    // Die Ansicht war veraltet: still frisch laden (B.2), keine Meldung.
     refreshState();
-  } else if (code === 'invalid' || code === 'busy') {
-    pushToast(res.message || 'Invalid input.');
-  } else if (code === 'internal') {
-    pushToast(res.message || 'Something went wrong.', res.ref ? 'ref ' + res.ref : '');
   } else if (code === 'locked') {
     // Stumm (Renn-Fall, z.B. Auto-Lock waehrend einer laufenden Aktion):
     // einfach den Lock-Screen zeigen.
     state.locked = true;
     render();
   }
-  // canceled (und alles Uebrige): stumm, kein Toast.
+  // invalid/busy/internal/canceled und alles Uebrige: stumm, kein Toast.
   return true;
 }
 
@@ -1550,51 +1551,65 @@ async function refreshState() {
 }
 
 // ===========================================================================
-// Toasts (eigener Layer außerhalb von #root -> kein Re-Render/Fokusverlust)
+// Toasts: Seit N11.16 (Nutzerwunsch: keine Benachrichtigungen) gibt es NUR
+// noch den Undo-Toast beim Listen-Loeschen. Es gibt bewusst keinen generischen
+// Erfolgs-/Fehler-Toast mehr (kein `pushToast`); Fehler laufen still oder ueber
+// das Status-Modal ("Recent errors", G29). Keinen wieder einfuehren.
 // ===========================================================================
-let toastLayer = null;
-function pushToast(text, mono) {
-  if (!toastLayer) {
-    toastLayer = document.createElement('div');
-    toastLayer.className = 'toast-wrap';
-    document.body.appendChild(toastLayer);
-  }
-  const node = document.createElement('div');
-  node.className = 'toast';
-  node.innerHTML = Icons.Check + esc(text) + (mono ? `<span class="mono">${esc(mono)}</span>` : '');
-  toastLayer.appendChild(node);
-  setTimeout(() => { if (node.parentNode) node.parentNode.removeChild(node); }, 2400);
-}
 
-// Toast mit Undo-Knopf (N11.2.1, nur fuers Listen-Loeschen): steht ca. 6 s,
-// der Knopf ruft onUndo genau einmal und raeumt den Toast sofort weg. Der
-// 6-s-Timer gehoert der UI; der Backend-Puffer lebt unabhaengig davon weiter
-// (ein spaetes Undo ueber einen neuen Weg duerfte gelingen, das ist gewollt).
+// Toast mit Undo-Knopf (N11.2.1, nur fuers Listen-Loeschen): eigener Layer,
+// unten links neben der Sidebar (nicht mittig wie die normalen Toasts). Steht
+// ca. 6 s mit sichtbarem Ablaufbalken, der Knopf ruft onUndo genau einmal und
+// raeumt den Toast sofort weg. Der 6-s-Timer gehoert der UI; der Backend-Puffer
+// lebt unabhaengig davon weiter (ein spaetes Undo ueber einen neuen Weg duerfte
+// gelingen, das ist gewollt).
+const UNDO_TOAST_MS = 6000;
+let undoLayer = null;
 function pushUndoToast(text, mono, onUndo) {
-  if (!toastLayer) {
-    toastLayer = document.createElement('div');
-    toastLayer.className = 'toast-wrap';
-    document.body.appendChild(toastLayer);
+  if (!undoLayer) {
+    undoLayer = document.createElement('div');
+    undoLayer.className = 'undo-wrap';
+    document.body.appendChild(undoLayer);
   }
+  // Nur ein Undo-Toast zur Zeit (der Backend-Puffer haelt ohnehin nur die
+  // zuletzt geloeschte Liste): einen alten sofort ersetzen.
+  undoLayer.innerHTML = '';
+  syncSidebarAnchor();
+
   const node = document.createElement('div');
-  node.className = 'toast';
-  node.innerHTML = Icons.Trash + esc(text) + (mono ? `<span class="mono">${esc(mono)}</span>` : '');
-  const btn = document.createElement('button');
-  btn.className = 'toast-undo';
-  btn.textContent = 'Undo';
-  btn.addEventListener('click', () => {
-    if (node.parentNode) node.parentNode.removeChild(node);
+  node.className = 'undo-toast';
+  node.innerHTML = Icons.Trash + esc(text)
+    + (mono ? `<span class="undo-name">${esc(mono)}</span>` : '')
+    + `<button class="toast-undo">Undo</button>`
+    + `<span class="undo-bar" style="animation-duration:${UNDO_TOAST_MS}ms"></span>`;
+
+  let timer = null;
+  const dismiss = () => {
+    if (timer) { clearTimeout(timer); timer = null; }
+    if (!node.parentNode) return;
+    node.classList.add('leaving');
+    setTimeout(() => { if (node.parentNode) node.parentNode.removeChild(node); }, 180);
+  };
+  node.querySelector('.toast-undo').addEventListener('click', () => {
+    dismiss();
     onUndo();
   });
-  node.appendChild(btn);
-  toastLayer.appendChild(node);
-  setTimeout(() => { if (node.parentNode) node.parentNode.removeChild(node); }, 6000);
+  undoLayer.appendChild(node);
+  timer = setTimeout(dismiss, UNDO_TOAST_MS);
+}
+
+// Setzt die Ankerbreite fuer den unten-links verankerten Undo-Toast: Breite der
+// Sidebar, wenn offen, sonst 0. Auf documentElement, weil der Toast-Layer als
+// Kind von <body> die Variable von #root (=.app) nicht erben wuerde.
+function syncSidebarAnchor() {
+  const off = sidebarVisible() ? (state.sidebarWidth || 256) : 0;
+  document.documentElement.style.setProperty('--content-left', off + 'px');
 }
 
 // Alle sichtbaren Toasts sofort wegraeumen (beim Sperren/Panik: kein
 // Undo-Knopf und keine Meldung darf den Lock-Screen ueberlagern).
 function clearToasts() {
-  if (toastLayer) toastLayer.innerHTML = '';
+  if (undoLayer) undoLayer.innerHTML = '';
 }
 
 // ===========================================================================
@@ -1780,7 +1795,6 @@ async function onClick(e) {
     case 'copy-errors': {
       const res = await api().copy_errors();
       if (handleError(res)) break;
-      pushToast('Errors copied', res.clears_in ? 'clipboard clears in ' + res.clears_in + 's' : '');
       break;
     }
     case 'exit-focus': state.focus = false; render(); break;
@@ -2158,6 +2172,7 @@ async function boot() {
   try {
     const st = await api().get_state();
     Object.assign(state, st);
+    normalizeSettings(state.settings);
     // Pin-Zustand der Tool-Rail aus den Settings rekonstruieren (als String abgelegt).
     // Sidebar-Breite wiederherstellen (als String gespeichert).
     const sw = parseInt(state.settings.sidebarWidth || '256', 10);
