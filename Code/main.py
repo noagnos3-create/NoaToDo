@@ -18,6 +18,7 @@ import time
 import webview
 
 from backend import config as config_module
+from backend import radio as radio_module
 from backend import security as security_module
 from backend.api import Api
 
@@ -578,13 +579,8 @@ def _wipe_profile_dir() -> None:
 
 
 def _finish_native_teardown() -> None:
-    """teardown-Schritt 9 nach dem Fenster-Abbau: PROFILE_DIR wischen (G14).
-
-    Schritt 10 (Funk-Wiederherstellung) ist heute ein No-op: die App schaltet
-    (noch) keinen echten Flugmodus (N11.5 ist nicht Teil der Phase 8), also
-    steht in ``config.json.radio_baseline`` nichts wiederherzustellen. Der
-    Platzhalter bleibt bewusst als benannter Schritt stehen.
-    """
+    """teardown-Schritt 9 nach dem Fenster-Abbau: PROFILE_DIR wischen (G14),
+    danach Schritt 10 (Funk-Ausgangszustand wiederherstellen, N11.5/N11.10)."""
     _wipe_profile_dir()
     _restore_radio_if_needed()
 
@@ -593,9 +589,12 @@ def _restore_radio_if_needed() -> None:
     """teardown Schritt 10 (N11.5/N11.10): Funk-Ausgangszustand wiederherstellen.
 
     Nur wenn die App den Flugmodus selbst eingeschaltet hatte
-    (``config.json.radio_baseline`` gesetzt). Da der echte Flugmodus-Umschalter
-    (N11.5) noch nicht gebaut ist, ist ``radio_baseline`` immer ``null`` und
-    diese Funktion ein bewusster No-op-Platzhalter (der benannte Schritt bleibt).
+    (``config.json.radio_baseline`` gesetzt): den beim ersten App-Offline
+    gemerkten Zustand real wieder herstellen (WLAN/Bluetooth/Mobilfunk) und den
+    Merker loeschen. Bei Sperre/Auto-Lock ist die Sequenz hier schon beendet, es
+    passiert also nie beim Sperren (N11.10). Best effort. Derselbe Aufruf raeumt
+    beim naechsten Start einen durch einen Absturz liegengebliebenen Merker auf
+    (Crash-Recovery, N11.10).
     """
     try:
         cfg = config_module.load_config()
@@ -603,8 +602,11 @@ def _restore_radio_if_needed() -> None:
         return
     if not cfg or not cfg.get("radio_baseline"):
         return
-    # Hier kaeme mit N11.5 das echte Zuruecksetzen der Radios her; bis dahin
-    # nur den Merker aufraeumen, falls einer verwaist herumliegt.
+    baseline = cfg.get("radio_baseline")
+    try:
+        radio_module.get_controller().restore(baseline)
+    except Exception:
+        pass
     cfg["radio_baseline"] = None
     try:
         config_module.save_config(cfg)
@@ -785,6 +787,11 @@ def main() -> None:
     # Verwaiste (verschluesselte) Arbeitsdateien eines Absturzes verwerfen
     # (N11.9: keine Crash-Recovery aus der Arbeitsdatei).
     security_module.cleanup_work_dir()
+    # N11.10 Crash-Recovery: hat ein frueherer Lauf den Flugmodus eingeschaltet
+    # und ist abgestuerzt, ohne Schritt 10 zu erreichen, liegt der Ausgangs-Merker
+    # noch in config.json. Ihn hier einmalig wiederherstellen und wegraeumen, damit
+    # der Funk nicht dauerhaft aus bleibt.
+    _restore_radio_if_needed()
     # Spike-Betriebsbedingung (N11.18): setup_app() (SetCompatibleTextRendering-
     # Default) MUSS vor dem ersten nativen Fenster laufen; es ist idempotent, der
     # spaetere webview.start() ueberspringt es dann. Ohne diesen Aufruf wirft der

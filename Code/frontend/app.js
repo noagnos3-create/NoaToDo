@@ -114,6 +114,11 @@ const api = () => window.pywebview.api;
 // Bestandteil der Backend-Wahrheit.
 let wifiLevel = 3;
 let netAnim = false;
+// N11.5: laeuft gerade eine echte Radio-Umschaltung (kein Doppel-Schalten),
+// und ein ehrlicher Hinweistext fuer den Pillen-Tooltip bei Teil-Erfolg /
+// verweigertem Zugriff ("no radio access", "Bluetooth could not be turned off").
+let netBusy = false;
+let netNote = null;
 // HTML-Escaping fuer JEDE Einsetzung von (potenziell) Fremddaten in innerHTML.
 // Maskiert & < > " ', deckt damit Text-, doppelt- UND einfach-gequotete
 // Attribut-Kontexte ab. Das fehlende ' war eine latente Luecke: sobald ein
@@ -467,14 +472,21 @@ function renderToolbar() {
 // genau diesen einen Render gesetzt, danach sofort wieder geloescht).
 function renderNetBtn() {
   const icon = state.online ? wifiSvg(wifiLevel) : Icons.Plane;
-  const label = state.online ? 'Go offline' : 'Go online';
   const anim = netAnim ? ' net-anim' : '';
   netAnim = false;
+  // Tooltip: waehrend einer laufenden Radio-Umschaltung "Switching…", bei
+  // Teil-Erfolg/verweigertem Zugriff der ehrliche Hinweis (N11.5, U15: die Pille
+  // ist die Meldung, es gibt keinen Toast). Sonst der normale Umschalt-Hinweis.
+  const busy = netBusy ? ' busy' : '';
+  let tip;
+  if (netBusy) tip = 'Switching…';
+  else if (netNote) tip = esc(netNote);
+  else tip = (state.online ? 'Go offline' : 'Go online') + '<span class="k">G</span>';
   // Bewusst OHNE Akzentfarbe/aktive Umrandung: online ist der Normalzustand,
   // der Knopf sieht aus wie jeder andere Rail-Knopf.
-  return `<button class="tool-btn" data-act="net">`
+  return `<button class="tool-btn${busy}" data-act="net">`
     + `<span class="net-ico${anim}">${icon}</span>`
-    + `<span class="tip">${label}<span class="k">G</span></span></button>`;
+    + `<span class="tip">${tip}</span></button>`;
 }
 
 // Das fruehere Profil-Menue (hartkodierter Name "Noa Andersen", tote Eintraege
@@ -1454,8 +1466,26 @@ async function doMoveTask(taskId, targetListId) {
 }
 
 async function setOnline(flag) {
-  const res = await api().set_online(flag);
-  state.online = res && typeof res.online === 'boolean' ? res.online : flag;
+  // Kein Doppel-Schalten (N11.5/U15): laeuft schon eine Umschaltung, ignorieren.
+  if (netBusy) return;
+  netBusy = true; netNote = null; render();   // Pille in den Warte-Zustand
+  let res = null;
+  try { res = await api().set_online(flag); }
+  catch (e) { /* still: die Pille faellt gleich auf den Realzustand zurueck */ }
+  netBusy = false;
+  if (res && typeof res.online === 'boolean') {
+    // Immer der verifizierte Realzustand, nie die blosse Absicht (U15).
+    state.online = res.online;
+    if (res.access === 'denied' || res.access === 'unavailable') {
+      netNote = 'no radio access';
+    } else if (res.partial && res.refused) {
+      netNote = res.refused + ' could not be turned ' + (flag ? 'on' : 'off');
+    } else {
+      netNote = null;
+    }
+  } else if (res && (res.access === 'denied' || res.access === 'unavailable')) {
+    netNote = 'no radio access';   // Zustand unveraendert, nur ehrlich degradiert
+  }
   netAnim = true;              // naechster Render: Symbol fliegt herein und purzelt
   if (state.online) startWifiPoll();
   else stopWifiPoll();
@@ -1488,10 +1518,21 @@ async function doChangePass() {
 // Symbol beim Pollen nicht erneut "hereinfliegt").
 let wifiTimer = null;
 async function refreshWifi() {
-  if (!state.online) return;
+  // Poll pausiert bei offline, verstecktem/minimiertem Fenster und im Lock-
+  // Screen (U15): nichts anzuzeigen bzw. Bridge eingefroren.
+  if (!state.online || document.hidden || state.locked) return;
   try {
     const r = await api().get_wifi_signal();
-    if (r && typeof r.level === 'number') {
+    if (!r) return;
+    // Rueckfalllinie zu den Radio-Ereignissen (N11.5): hat das Backend beim
+    // Abgleich einen abweichenden realen Funk-Zustand gefunden, uebernehmen.
+    if (typeof r.online === 'boolean' && r.online !== state.online) {
+      state.online = r.online;
+      if (!state.online) stopWifiPoll();
+      render();
+      return;
+    }
+    if (typeof r.level === 'number') {
       wifiLevel = r.level;
       const host = document.querySelector('.net-ico');
       if (host && state.online) host.innerHTML = wifiSvg(wifiLevel);
@@ -1501,7 +1542,7 @@ async function refreshWifi() {
 function startWifiPoll() {
   stopWifiPoll();
   refreshWifi();
-  wifiTimer = setInterval(refreshWifi, 15000);
+  wifiTimer = setInterval(refreshWifi, 10000);   // N11.5: alle 10 s
 }
 function stopWifiPoll() {
   if (wifiTimer) { clearInterval(wifiTimer); wifiTimer = null; }
@@ -2374,6 +2415,17 @@ window.noa = {
   // offenem Dialog). Raum leeren und das Cover zeigen; das Backend baut das
   // WebView anschliessend ab und das native Lock-Fenster uebernimmt.
   onLocked() { clearWorkspace(); state.locked = true; render(); },
+  // Backend -> Frontend (N11.5): der Funk-Zustand hat sich EXTERN geaendert
+  // (Nutzer schaltet in den Windows-Einstellungen). Nur die Anzeige spiegeln,
+  // der Nutzer hat hier nichts geschaltet, also kein Hinweistext.
+  onNetChange(online) {
+    if (netBusy) return;   // eine eigene Umschaltung setzt den Zustand selbst
+    state.online = !!online;
+    netNote = null;
+    netAnim = true;
+    if (state.online) startWifiPoll(); else stopWifiPoll();
+    render();
+  },
 };
 
 // ===========================================================================

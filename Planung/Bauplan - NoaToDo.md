@@ -2644,10 +2644,13 @@ Widerspruch. Das Ueberschreiben beim regulaeren Write-back eines bereits geoeffn
     WinRT-Projektionspaket; heute fehlt das in Phase 0 / `requirements` / G11. Gewaehlt
     werden die **modularen PyWinRT-Pakete** (kleinere Abhaengigkeitsflaeche als das
     Sammelpaket `winsdk`, im Zweifel pro Sicherheit die schmalere Wahl):
-    `winrt-runtime`, `winrt-Windows.Devices.Radios`, `winrt-Windows.Devices.Enumeration`
-    sowie `winrt-Windows.Foundation` (fuer die `IAsyncOperation`-Awaits). Alle werden in
-    `requirements.txt` **und** exakt versionsgepinnt in `requirements.lock.txt`
-    aufgenommen und fallen unter die Pinning-/Supply-Chain-Pruefung aus **G11**.
+    `winrt-runtime`, `winrt-Windows.Devices.Radios`, `winrt-Windows.Devices.Enumeration`,
+    `winrt-Windows.Foundation` (fuer die `IAsyncOperation`-Awaits) sowie
+    `winrt-Windows.Foundation.Collections` (beim Bau 2026-07-21 ergaenzt: die
+    `IVectorView` aus `GetRadiosAsync` ist ohne ihre Projektion nicht iterierbar). Alle
+    werden in `requirements.txt` **und** exakt versionsgepinnt in `requirements.lock.txt`
+    (Stand 2026-07-21: `winrt-*==3.2.1`) aufgenommen und fallen unter die
+    Pinning-/Supply-Chain-Pruefung aus **G11**.
     `winsdk` bleibt nur die dokumentierte Rueckfalloption, falls die modularen Pakete auf
     der Zielplattform nicht sauber installieren.
 
@@ -3073,8 +3076,10 @@ u.a. wurde der G12-DevTools-Prüfweg mit dieser Abnahme verifiziert.)*
 > G9, G13, G14, G15, G16, G17, G18, G19-Rest (V3), G25, G28, G31, G32, G33, G35 (Details
 > in der B.9-Gate-Tabelle). Der Zweitprofil-Spike (U3/N11.8.3) ist ausgeführt, sein
 > Ergebnis unten und in Register N11.18. **Bewusst NICHT Teil des Phase-8-Kerns (eigene
-> N11-Features, offen):** N11.5 echter Windows-Flugmodus (heute Lokal-Flag; `teardown`
-> Schritt 10 bis dahin ein No-op), N11.6 Theme-folgt-Windows + Ton-UI (heute noch das
+> N11-Features):** N11.5 echter Windows-Flugmodus ist inzwischen gebaut (erledigt
+> 2026-07-21, `backend/radio.py`: `set_online` schaltet ueber die WinRT-Radio-APIs die
+> echten Funkgeraete, `teardown` Schritt 10 stellt den Ausgangszustand real wieder her);
+> offen bleibt N11.6 Theme-folgt-Windows + Ton-UI (heute noch das
 > `dark`-Setting; `sound`/`autoLock` sind in der Whitelist, `autoLock` hat schon UI).
 > Kleine offene UX-Ergänzungen: BitLocker-Empfehlung und der SSD-Restgrenzen-Einmalhinweis
 > in der Setup-UI (die realen Werte/Löschungen dahinter existieren). Real verifiziert
@@ -4249,9 +4254,9 @@ Icon verwenden.
 ## Schnell-Checkliste (für die ausführende KI)
 
 *(Stand 2026-07-21: Phasen 0 bis 8 sind abgeschlossen, die App laeuft lokal mit echter
-Doppel-Verschluesselung, Onboarding, Sperre/Entsperre, Auto-Sperre, Killswitch/Reset. Es
-fehlt nur noch Phase 9 (Build/Packaging) sowie die eigenstaendigen N11-Features N11.5
-(echter Flugmodus) und N11.6 (Theme-folgt-Windows + Ton-UI). Die Haken fuer 0 bis 5
+Doppel-Verschluesselung, Onboarding, Sperre/Entsperre, Auto-Sperre, Killswitch/Reset. Der
+echte Flugmodus (N11.5) ist ebenfalls gebaut. Es fehlt nur noch Phase 9 (Build/Packaging)
+sowie das eigenstaendige N11-Feature N11.6 (Theme-folgt-Windows + Ton-UI). Die Haken fuer 0 bis 5
 wurden am 2026-07-13 nachgetragen. Pflege-Regel: Diese Liste wird bei **jedem**
 Phasenabschluss sofort mit Datum abgehakt. Ein offener Haken bei einer laengst fertigen
 Phase ist eine Einladung, von vorne zu bauen.)*
@@ -4266,7 +4271,7 @@ Phase ist eine Einladung, von vorne zu bauen.)*
 - [x] Phase 6.5, UX-Nacharbeiten (Inline-Edit, Task-Löschen, Task-Auswahl, gehärtete Einzel-Task-Kopie ✅G23, Strg+C entfernt, Mini-on-top, Screenshot-Schutz ❌G26 verworfen); Rest-Pflichten in 7 verplant
 - [x] Phase 7, zweistufiger Export (nur md/txt, N11.2) + Undo (nur Listen-Löschen) + `move_task`/`reorder_lists` **+ 🔒 G20 (lokale Eingabe-Validierung), G21 (Export-Härtung + Save-Dialog), G22 (ehrlicher Status), G29 (Fehler-Hygiene + Fehlercode-Katalog B.2 + Logging-Politik, N11.12), G12 vorgezogen: alle ✅** (erledigt 2026-07-17; G23 schon 2026-06-10)
 - [x] 🔒 G30 (Doku, **vor** Phase 8): Bedrohungsmodell **B.10** gelesen und beim Bauen zugrunde gelegt (Angreiferklassen K1-K6, Nicht-Ziele, Voraussetzungen; Abschnitt ergänzt 2026-07-13 aus Plananalyse S4). Jedes neue Gate trägt seine Klasse in B.10.6 nach (gelesen 2026-07-21 als erster Handgriff der Phase 8)
-- [x] Phase 8, Lock / Emergency / Doppel-Kaskade AES-256 + ChaCha20 (B.7) **+ 🔒 G6 (In-Memory-DB, N11.18-Ausnahme: verschlüsselte Arbeitsdatei per Fallback, da `sqlcipher3` kein `serialize` bietet), G7 (Hex-Raw-Key), G8 (Argon2id-Kosten; Passphrase nur Mindestlänge 12, kein Stärkemesser, N11.3), 🔴 G9 (`DEV_AES_KEY` entfernt), 🔴 G13 (Lock serverseitig als Allowlist), G14 (PROFILE_DIR sicher gewischt bei lock/autolock/panic/quit inkl. Fenster-X, verwaiste `msedgewebview2.exe` beendet), G15 (HKDF/kein Hash), G16 (.enc-Format), G17 (Write-back), G18 (DPAPI-Pepper), G19-Rest (V3: Mutex auf `Global\NoaToDo-<SID>`), G25 (RAM-Hygiene), G28 (Verschlüsselungs-Beweis, `tools/verify_crypto.py`), G31 (BitLocker-Status, `VirtualLock`), G32 (Tresor-Ort + Cloud-Warnung), G33 (Dev-Altdaten entsorgt), 🔴 G35 (eine `teardown(reason)`-Sequenz): alle ✅** (erledigt 2026-07-21). **Offen (bewusst nicht Phase-8-Kern, eigene N11-Features):** N11.5 echter Windows-Flugmodus (heute Lokal-Flag; `teardown` Schritt 10 ist bis dahin ein No-op), N11.6 Theme-folgt-Windows + Ton-UI (heute noch `dark`-Setting; `sound`/`autoLock` sind schon in der Whitelist, `autoLock` hat UI). **Native Lock-Fenster-Entscheidung (Spike N11.18):** kein Zwei-Profil-WebView, natives WinForms-Lock-Fenster ohne `LOCK_PROFILE_DIR`
+- [x] Phase 8, Lock / Emergency / Doppel-Kaskade AES-256 + ChaCha20 (B.7) **+ 🔒 G6 (In-Memory-DB, N11.18-Ausnahme: verschlüsselte Arbeitsdatei per Fallback, da `sqlcipher3` kein `serialize` bietet), G7 (Hex-Raw-Key), G8 (Argon2id-Kosten; Passphrase nur Mindestlänge 12, kein Stärkemesser, N11.3), 🔴 G9 (`DEV_AES_KEY` entfernt), 🔴 G13 (Lock serverseitig als Allowlist), G14 (PROFILE_DIR sicher gewischt bei lock/autolock/panic/quit inkl. Fenster-X, verwaiste `msedgewebview2.exe` beendet), G15 (HKDF/kein Hash), G16 (.enc-Format), G17 (Write-back), G18 (DPAPI-Pepper), G19-Rest (V3: Mutex auf `Global\NoaToDo-<SID>`), G25 (RAM-Hygiene), G28 (Verschlüsselungs-Beweis, `tools/verify_crypto.py`), G31 (BitLocker-Status, `VirtualLock`), G32 (Tresor-Ort + Cloud-Warnung), G33 (Dev-Altdaten entsorgt), 🔴 G35 (eine `teardown(reason)`-Sequenz): alle ✅** (erledigt 2026-07-21). **Eigene N11-Features:** N11.5 echter Windows-Flugmodus ist gebaut (erledigt 2026-07-21, `backend/radio.py` ueber die WinRT-Radio-APIs; `teardown` Schritt 10 stellt real wieder her). **Offen:** N11.6 Theme-folgt-Windows + Ton-UI (heute noch `dark`-Setting; `sound`/`autoLock` sind schon in der Whitelist, `autoLock` hat UI). **Native Lock-Fenster-Entscheidung (Spike N11.18):** kein Zwei-Profil-WebView, natives WinForms-Lock-Fenster ohne `LOCK_PROFILE_DIR`
 - [ ] Phase 9, Auslieferung + Tests + Build (portable `NoaToDo.exe`, PyInstaller/Nuitka, WebView2-Runtime, Erststart auf fremdem Rechner) **+ 🔒 G27 (Binary-Härtung + Frontend-Integritäts-Manifest, A5 2026-07-15), G34 (Release-Härtung: `NOATODO_DEBUG` wirkungslos, DevTools/Accelerator-Keys/Kontextmenü aus; Sofort-Teil `text_select=False` mit Termin 2026-07-20; A4/A6, 2026-07-15), G11 (Hash-gepinnter Build), G29-Buildprüfung (kein Debug-Modus, kein Logfile, N11.12.2)**
 - [ ] UX-Nachtrag 2026-06-13 (Normen in den Verträgen; Protokoll: Anhang 1, Historie: Anhang 3): N2 Offline-Statuspille, N4 Lock-Screen-Passphrase-UX (8), N5 Panik nur per Maus, kein Hotkey (Entscheid 2026-07-13), N6 Entsperr-Fehlerbildschirm (8), N7 move_task/reorder_lists (Phase 7; clear_completed gestrichen), N8 Roadmap (D.3), N9 Fenster startet maximiert (N11.6), N10 verstärkter Lock + Off-Knopf + Killswitch (UI ✅ 2026-07-08, Sicherheits-Rest Phase 8), N11 Lücken-Klärung 2026-07-09 (verbindlich), N11.10 Sperre schaltet nicht mehr offline (2026-07-13, W1-Entscheid), N11.11 gemeinsame Sperr-/Beenden-Sequenz + Gate G35 (2026-07-13, S5-Entscheid), N11.12 Fehler-Hygiene + Fehlercode-Katalog + Logging-Politik + Gate G29 (2026-07-13, S6-Entscheid), N11.14 Triage des UX/UI-Audits (2026-07-13, S7-Entscheid; **die Triage-Tabelle ist der Status des Audits, nicht das Audit-Dokument**), N11.13 Onboarding-/Tresor-Bridge + dreiwertiger Boot-Zustand + Onboarding-Screens (2026-07-13, U1-Entscheid)
 

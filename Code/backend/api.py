@@ -24,6 +24,7 @@ from typing import Any, Callable
 
 from . import config as config_module
 from . import db as db_module
+from . import radio as radio_module
 from . import security as security_module
 
 # ---------------------------------------------------------------------------
@@ -1004,16 +1005,99 @@ class Api:
         }
 
     # =====================================================================
-    # Netzwerk / Offline-Modus
+    # Netzwerk / echter Flugmodus (N11.5)
     #
-    # Die App arbeitet rein lokal. Der Online/Offline-Schalter ist ein reiner
-    # Datenschutz-/Flugmodus-Umschalter (keine Cloud, kein Sync); ``online`` und
-    # das WLAN-Symbol sind nur kosmetische Statusanzeigen.
+    # Der Online/Offline-Schalter (Flugzeug/Globus, Taste ``G``) schaltet seit
+    # N11.5 den ECHTEN Windows-Flugmodus: offline = alle Funkgeraete des PCs
+    # (WLAN/Bluetooth/Mobilfunk) real aus, online = wieder an. Umgesetzt in
+    # ``backend/radio.py`` ueber die WinRT-Radio-APIs. Fehlen die Pakete oder ist
+    # der Zugriff verweigert, degradiert der Schalter sichtbar ("no radio
+    # access") und behauptet NIE faelschlich, dunkel zu sein (U14/U15/B.10).
     # =====================================================================
     @bridge(schema={"flag": v_bool})
     def set_online(self, flag: bool) -> dict[str, Any]:
-        self.online = flag
-        return {"online": self.online}
+        """Echten Flugmodus schalten, verifizierten Realzustand zurueckgeben (U15).
+
+        Antwortet erst nach Abschluss mit ``{online, partial, access, refused}``.
+        Beim Offline-Schalten wird der Funk-Ausgangszustand einmalig in
+        ``config.json`` gemerkt (N11.10 Crash-Fall), damit der Beenden-Schritt 10
+        ihn wiederherstellen kann. ``self.online`` traegt danach den ehrlichen,
+        aggregierten Realzustand (nie die blosse Absicht).
+        """
+        ctrl = radio_module.get_controller()
+        if not ctrl.available:
+            # Kein Radio-Zugriff moeglich: NIE faelschlich "offline" behaupten.
+            return {"online": self.online, "partial": True, "access": "unavailable",
+                    "refused": None}
+        # Vor dem ersten Ausschalten den Ausgangszustand persistieren (N11.10).
+        if not flag:
+            self._capture_radio_baseline(ctrl)
+        res = ctrl.set_online(flag)
+        self._ensure_radio_mirror(ctrl)
+        online = res.get("online")
+        if isinstance(online, bool):
+            self.online = online
+        else:
+            # busy/error/unavailable: keinen Zustand faelschen, Realwert melden.
+            online = self.online
+        return {"online": online, "partial": bool(res.get("partial")),
+                "access": res.get("access"), "refused": res.get("refused")}
+
+    def _capture_radio_baseline(self, ctrl: "radio_module.RadioController") -> None:
+        """Ausgangszustand des Funks einmalig in ``config.json`` merken (N11.10).
+
+        Nur wenn ein echter Tresor-Pfad existiert (waehrend des Onboardings gibt
+        es noch keine gueltige config.json) und noch kein Merker gesetzt ist (der
+        erste App-Offline-Schritt haelt den Vor-App-Zustand fest, spaetere
+        Umschaltungen ueberschreiben ihn nicht).
+        """
+        if not self._vault_path:
+            return
+        try:
+            cfg = self._load_config()
+        except Exception:
+            return
+        if cfg.get("radio_baseline"):
+            return
+        snap = ctrl.snapshot()
+        if not snap:
+            return
+        cfg["radio_baseline"] = snap
+        try:
+            self._save_config(cfg)
+        except Exception:
+            pass
+
+    def _ensure_radio_mirror(self, ctrl: "radio_module.RadioController | None" = None) -> None:
+        """Externe Funk-Aenderungen ereignisbasiert ins Frontend spiegeln (N11.5).
+
+        Idempotent: registriert den ``StateChanged``-Callback genau einmal.
+        """
+        if ctrl is None:
+            ctrl = radio_module.get_controller()
+        if not ctrl.available:
+            return
+        ctrl.set_change_callback(self._on_radio_external)
+        ctrl.subscribe()
+
+    def _on_radio_external(self, online: bool) -> None:
+        """Callback aus dem WinRT-Ereignis-Thread (radio.py).
+
+        Spiegelt eine externe Funk-Aenderung nur, wenn die App entsperrt ist und
+        das WebView-Fenster steht (gesperrt laeuft das native Lock-Fenster, dann
+        gibt es kein Ziel-DOM). Reines Statusleisten-Update ueber ``onNetChange``.
+        """
+        if self.locked or self._window is None:
+            return
+        if bool(online) == self.online:
+            return
+        self.online = bool(online)
+        try:
+            self._window.evaluate_js(
+                "window.noa && window.noa.onNetChange && window.noa.onNetChange(%s);0"
+                % ("true" if online else "false"))
+        except Exception:
+            pass
 
     @bridge
     def get_wifi_signal(self) -> dict[str, Any]:
@@ -1022,9 +1106,14 @@ class Api:
         # die Signalstaerke auf die Boegen des Symbols ab (0 = nur Punkt, kein
         # Signal / kein WLAN). Labelunabhaengig: gesucht wird eine Zeile mit
         # "Signal" und einem Prozentwert (so auch auf deutschem Windows: "Signal : 53%").
+        # Zusaetzlich (N11.5): die seltene Gegenpruefung der Rueckfalllinie. Das
+        # Frontend pollt nur online + Fenster sichtbar + entsperrt, also ein
+        # guenstiger Moment, den realen Funk-Zustand mit self.online abzugleichen
+        # (Ereignisse sind die Primaerquelle). "online" reist mit zurueck.
         import re
         import subprocess
 
+        online = self._radio_reconcile()
         try:
             out = subprocess.run(
                 ["netsh", "wlan", "show", "interfaces"],
@@ -1034,7 +1123,7 @@ class Api:
             )
             text = out.stdout.decode("utf-8", "ignore")
         except Exception:
-            return {"connected": False, "percent": None, "level": 0}
+            return {"connected": False, "percent": None, "level": 0, "online": online}
 
         percent = None
         for line in text.splitlines():
@@ -1044,14 +1133,33 @@ class Api:
                     percent = max(0, min(100, int(m.group(1))))
                     break
         if percent is None:
-            return {"connected": False, "percent": None, "level": 0}
+            return {"connected": False, "percent": None, "level": 0, "online": online}
         if percent <= 25:
             level = 1
         elif percent <= 60:
             level = 2
         else:
             level = 3
-        return {"connected": True, "percent": percent, "level": level}
+        return {"connected": True, "percent": percent, "level": level, "online": online}
+
+    def _radio_reconcile(self) -> bool:
+        """Rueckfalllinie zu den Ereignissen (N11.5): realen Funk-Zustand abgleichen.
+
+        Liest den aggregierten Realzustand und korrigiert ``self.online`` still,
+        falls er abgedriftet ist (z.B. ein Ereignis ging verloren). Gibt den
+        aktuellen ``self.online`` zurueck; ist der Funk nicht lesbar, bleibt der
+        bisherige Wert unveraendert (nichts faelschen).
+        """
+        try:
+            ctrl = radio_module.get_controller()
+            if not ctrl.available:
+                return self.online
+            real = ctrl.read_online()
+            if isinstance(real, bool) and real != self.online:
+                self.online = real
+        except Exception:
+            pass
+        return self.online
 
     # =====================================================================
     # Auto-Sperre-Aktivitaet (B.8.3 / N11.4.2)
@@ -1323,13 +1431,24 @@ class Api:
     def panic(self) -> dict[str, Any]:
         """Panik-Confirm: KEIN Ausgang (N11.11.1), fuehrt in den Endschirm.
 
-        Raeumt den Raum (Frontend) + schaltet offline (N11.10 gilt nur fuers
-        Sperren, der Panik-Flow behaelt das Offline-Schalten) + verwirft die
+        Raeumt den Raum (Frontend) + schaltet ECHT offline (N11.10: nur der
+        Panik-Flow schaltet neben dem Nutzer-Toggle noch Funk) + verwirft die
         fluechtigen RAM-Puffer. Der eigentliche Abbau (Schluessel nullen,
         Dateien) passiert erst ueber die Endschirm-Knoepfe (Finish ->
         quit_app -> teardown('quit'); Killswitch -> teardown('killswitch')).
+        Der Ausgangszustand wird gemerkt, damit das Beenden ihn wiederherstellt.
         """
-        self.online = False
+        try:
+            ctrl = radio_module.get_controller()
+            if ctrl.available:
+                self._capture_radio_baseline(ctrl)
+                res = ctrl.set_online(False)
+                if isinstance(res.get("online"), bool):
+                    # Ehrlich: bleibt ein Radio an (verweigert), zeigt online.
+                    self.online = res["online"]
+            # Ohne Radio-Zugriff bleibt self.online ehrlich stehen (U15).
+        except Exception:
+            pass
         self._errors.clear()
         self._undo_list = None
         return {"locked": True}
@@ -1385,6 +1504,17 @@ class Api:
         self.locked = False
         self._boot_state = "unlocked"
         self._teardown_in_progress = False
+        # N11.5: beim Entsperren den ECHTEN Funk-Zustand uebernehmen (nicht das
+        # Default-True raten) und die ereignisbasierte Spiegelung starten.
+        try:
+            ctrl = radio_module.get_controller()
+            if ctrl.available:
+                real = ctrl.read_online()
+                if isinstance(real, bool):
+                    self.online = real
+                self._ensure_radio_mirror(ctrl)
+        except Exception:
+            pass
 
     def _autolock_minutes(self) -> int:
         """Aktuelles Auto-Lock-Timeout in Minuten (Setting ``autoLock``, 0=nie)."""

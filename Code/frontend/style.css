@@ -880,6 +880,10 @@ input { font: inherit; }
 .tool-btn.danger { color: var(--danger); }
 .tool-btn.danger:hover { background: var(--danger-wash); }
 .tool-btn.active { color: var(--accent); background: var(--accent-wash); }
+/* N11.5: waehrend einer echten Radio-Umschaltung ist die Pille im Warte-Zustand
+   (kein Doppel-Schalten); sanftes Pulsieren, Klicks werden ohnehin ignoriert. */
+.tool-btn.busy { opacity: .55; cursor: progress; animation: net-pulse 1s ease-in-out infinite; }
+@keyframes net-pulse { 50% { opacity: .3; } }
 .tool-sep { width: 26px; height: 1px; background: var(--border); margin: 6px 0; }
 
 /* tooltip */
