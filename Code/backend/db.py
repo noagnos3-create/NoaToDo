@@ -1,8 +1,14 @@
-"""Datenschicht für NoaToDo (Bauplan Phase 1).
+"""Datenschicht für NoaToDo (Bauplan Phase 1, Schicht-1-Schluessel seit Phase 8 echt).
 
-Schicht 1 der Verschlüsselung (SQLCipher / AES-256) sitzt direkt hier: nach
-``connect()`` wird sofort ``PRAGMA key`` gesetzt. Die äußere ChaCha20-Schicht und
-die echte Argon2-Schlüsselableitung kommen in Phase 8 (``backend/security.py``).
+Schicht 1 der Verschlüsselung (SQLCipher / AES-256) sitzt direkt hier: sofort
+nach dem Öffnen wird der aus der Passphrase abgeleitete Schlüssel als **roher
+Hex-Schlüssel** gesetzt (Gate G7: ``PRAGMA key = "x'<64 Hex>'"``, kein zweites
+PBKDF2 über den schon teuer abgeleiteten Key, kein Quote-Escaping). Der frühere
+öffentliche ``DEV_AES_KEY`` ist mit Phase 8 **ersatzlos entfernt** (Gate G9): es
+gibt keinen Code-Pfad mehr, der die DB ohne den abgeleiteten Schlüssel öffnet.
+Die äußere ChaCha20-Schicht, die Argon2-Ableitung und der Tresor-Lebenszyklus
+liegen in ``backend/security.py``; diese Datei bekommt nur den fertigen 32-Byte-
+Schlüssel als ``bytes``.
 
 Die Klasse :class:`Database` kapselt eine SQLCipher-Verbindung und liefert genau
 die Strukturen, die das Frontend erwartet (siehe Bauplan B.1/B.2).
@@ -67,25 +73,38 @@ CREATE INDEX IF NOT EXISTS idx_tasks_list ON tasks(list_id);
 class Database:
     """Eine geöffnete (entschlüsselte) NoaToDo-Datenbank."""
 
-    def __init__(self, path: str, aes_key: str):
+    def __init__(self, path: str, aes_key: bytes):
         self.path = path
-        # True, solange der oeffentliche Entwicklungs-Schluessel benutzt wird
-        # (Phase 1, DEV_AES_KEY). Steuert die ehrliche Statusanzeige (Gate G22):
-        # solange dies True ist, darf die UI keine echte Verschluesselung
-        # behaupten. In Phase 8 wird der Schluessel aus der Passphrase abgeleitet,
-        # dann ist dies False.
-        self.dev_key = aes_key == DEV_AES_KEY
+        if not isinstance(aes_key, (bytes, bytearray)) or len(aes_key) != 32:
+            # Gate G9: es gibt keinen Fallback-Schluessel und keinen String-Key
+            # mehr. Ohne einen echten 32-Byte-Schluessel wird nichts geoeffnet.
+            raise ValueError("aes_key must be 32 raw bytes")
         os.makedirs(os.path.dirname(os.path.abspath(path)), exist_ok=True)
         self.conn = sqlcipher3.connect(path, check_same_thread=False)
-        # Schicht 1: Schlüssel SOFORT nach dem Öffnen setzen.
-        # PRAGMA erlaubt keine Parameter-Bindung -> Wert quoten/escapen.
-        # (aes_key ist intern abgeleitet, nie Nutzer-Roheingabe.)
-        self.conn.execute("PRAGMA key = '%s'" % aes_key.replace("'", "''"))
+        # Schicht 1: Schlüssel SOFORT nach dem Öffnen als ROHER Hex-Schlüssel
+        # setzen (Gate G7): "x'<64 Hex-Zeichen>'". So legt SQLCipher kein
+        # eigenes PBKDF2 über den schon per Argon2id abgeleiteten Key, und es
+        # gibt kein Quote-Escaping. PRAGMA erlaubt keine Parameter-Bindung; der
+        # Hex-String stammt ausschliesslich aus os-Zufall/Argon2, nie aus
+        # Nutzereingaben.
+        self.conn.execute("PRAGMA key = \"x'%s'\"" % bytes(aes_key).hex())
         self.conn.execute("PRAGMA foreign_keys = ON")
         self.conn.row_factory = sqlcipher3.Row
         self.conn.executescript(SCHEMA)
         self.conn.commit()
         self._drop_legacy_columns()
+
+    def rekey(self, new_key: bytes) -> None:
+        """Schicht-1-Schluessel wechseln (Passphrase-Wechsel, N11.3).
+
+        ``PRAGMA rekey`` verschluesselt alle Seiten mit dem neuen Schluessel
+        neu, ohne die Verbindung zu schliessen. Danach ist die Arbeitsdatei
+        nur noch mit ``new_key`` zu oeffnen.
+        """
+        if not isinstance(new_key, (bytes, bytearray)) or len(new_key) != 32:
+            raise ValueError("new_key must be 32 raw bytes")
+        self.conn.execute("PRAGMA rekey = \"x'%s'\"" % bytes(new_key).hex())
+        self.conn.commit()
 
     def _drop_legacy_columns(self) -> None:
         """Einmal-Migration: Altspalten fliegen aus Bestands-DBs.
@@ -479,57 +498,22 @@ class Database:
         )
         self.conn.commit()
 
-    # -- Killswitch (Nachtrag N10) ------------------------------------------
-    def killswitch(self) -> dict[str, Any]:
-        """Löscht unwiderruflich alle Nutzerdaten aus der Datenbank.
-
-        Wird nur vom Panik-Endschirm aus aufgerufen (zweistufig bestätigt).
-        Leert lists/tasks/settings vollständig, schreibt die
-        Standard-Settings neu und setzt den 'seeded'-Marker, damit der nächste
-        Start wie ein Erststart ohne Demo-Daten aussieht. ``secure_delete``
-        überschreibt gelöschte Seiten mit Nullen, ``VACUUM`` baut die Datei neu
-        auf, damit nichts in freien Seiten liegen bleibt. Ehrliche Einordnung:
-        auf SSD/NTFS ist das noch kein forensisches Secure-Delete; das kommt mit
-        der Phase-8-Härtung (In-Memory-DB G6, .enc-Neuaufbau G16).
-        """
-        self.conn.execute("PRAGMA secure_delete = ON")
-        self.conn.execute("DELETE FROM tasks")
-        self.conn.execute("DELETE FROM lists")
-        self.conn.execute("DELETE FROM settings")
-        for k, v in _DEFAULT_SETTINGS.items():
-            self.conn.execute(
-                "INSERT INTO settings (key, value) VALUES (?, ?)", (k, v)
-            )
-        self.conn.execute(
-            "INSERT INTO settings (key, value) VALUES ('seeded', 'true')"
-        )
-        self.conn.commit()
-        self.conn.execute("VACUUM")
-        return {"ok": True}
+# Der DB-basierte ``killswitch`` (Zeilen loeschen + VACUUM) ist mit Phase 8
+# ersatzlos entfernt (N11.8.1/B.8.7): der Killswitch ist jetzt eine reine
+# DATEI-Operation ohne Schluessel (tasks.db.enc + .bak + Metadaten + Pepper +
+# Arbeitsordner loeschen), umgesetzt in ``security.Session.delete_vault_files``.
+# Eine Zeilen-Loeschung waere mit dem gesperrten Zustand (keine Schluessel im
+# RAM) und mit G13 (Killswitch gerade gesperrt erlaubt) unvereinbar.
 
 
-# Standard-Einstellungen: schreibt der Erststart-Seed und der Killswitch (N10)
-# identisch, damit eine gekillte DB von einem Erststart nicht unterscheidbar ist.
+# Standard-Einstellungen: schreibt der Erststart-Seed in einen frisch
+# angelegten (leeren) Tresor.
 _DEFAULT_SETTINGS = {
     "accent": "#d97757",
     "dark": "true",
     "density": "comfortable",
     "sidebar": "open",
     "exportDone": "true",
+    "sound": "true",
+    "autoLock": "15",
 }
-
-
-# Entwicklungs-Standardschlüssel (Phase 1). In Phase 8 wird er aus der
-# Passphrase via Argon2id abgeleitet und nie gespeichert.
-DEV_AES_KEY = "noatodo-dev-key-phase1"
-
-_DEFAULT_DB_PATH = os.path.join(
-    os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "data", "tasks.db"
-)
-
-
-def connect(aes_key: str = DEV_AES_KEY, path: str = _DEFAULT_DB_PATH) -> Database:
-    """SQLCipher-Arbeitskopie öffnen, Schema sicherstellen, ggf. seeden."""
-    db = Database(path, aes_key)
-    db.seed_if_empty()
-    return db

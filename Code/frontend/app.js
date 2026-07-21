@@ -82,7 +82,7 @@ const ACCENTS = ['#d97757', '#c75d3a', '#5a9d6b', '#4a86c5', '#d4a23c', '#a66a9c
 // ===========================================================================
 let state = {
   lists: [], activeId: null, settings: {}, online: true, locked: false,
-  modal: null,       // 'status' | 'rename' | 'shortcuts' | 'settings'
+  modal: null,       // 'status' | 'rename' | 'shortcuts' | 'settings' | 'change'
   ctxList: null,     // Rechtsklick-Kontextmenue einer Liste: { id, x, y } | null
   ctxTask: null,     // Rechtsklick-Kontextmenue einer Aufgabe ("Move to...", N11.2): { id, x, y } | null
   exportPill: null,  // zweistufige Export-Pille (N11.2): { step:'scope'|'format', scope:'list'|'all' } | null
@@ -99,6 +99,10 @@ let state = {
   editingId: null,   // Aufgabe, die gerade inline bearbeitet wird (Doppelklick)
   selectedId: null,  // per Klick ausgewaehlte Aufgabe (Ziel fuer Copy/Edit der Rail)
   panic: null,       // Panik-Flow (N10): { armed:bool, stage:'panel'|'wiping'|'done'|'killing', killArmed:bool } | null
+  // Onboarding (Phase 8, N11.13): Boot-Zustand, KEIN Modal. Drei Schritte:
+  // 1 Ort waehlen, 2 Passphrase + Verlust-Warnung, 3 fertig/anlegen.
+  // { step, path, hasVault, warning, busy, error } | null.
+  onboarding: null,
 };
 
 const root = document.getElementById('root');
@@ -110,6 +114,11 @@ const api = () => window.pywebview.api;
 // Bestandteil der Backend-Wahrheit.
 let wifiLevel = 3;
 let netAnim = false;
+// N11.5: laeuft gerade eine echte Radio-Umschaltung (kein Doppel-Schalten),
+// und ein ehrlicher Hinweistext fuer den Pillen-Tooltip bei Teil-Erfolg /
+// verweigertem Zugriff ("no radio access", "Bluetooth could not be turned off").
+let netBusy = false;
+let netNote = null;
 // HTML-Escaping fuer JEDE Einsetzung von (potenziell) Fremddaten in innerHTML.
 // Maskiert & < > " ', deckt damit Text-, doppelt- UND einfach-gequotete
 // Attribut-Kontexte ab. Das fehlende ' war eine latente Luecke: sobald ein
@@ -463,14 +472,21 @@ function renderToolbar() {
 // genau diesen einen Render gesetzt, danach sofort wieder geloescht).
 function renderNetBtn() {
   const icon = state.online ? wifiSvg(wifiLevel) : Icons.Plane;
-  const label = state.online ? 'Go offline' : 'Go online';
   const anim = netAnim ? ' net-anim' : '';
   netAnim = false;
+  // Tooltip: waehrend einer laufenden Radio-Umschaltung "Switching…", bei
+  // Teil-Erfolg/verweigertem Zugriff der ehrliche Hinweis (N11.5, U15: die Pille
+  // ist die Meldung, es gibt keinen Toast). Sonst der normale Umschalt-Hinweis.
+  const busy = netBusy ? ' busy' : '';
+  let tip;
+  if (netBusy) tip = 'Switching…';
+  else if (netNote) tip = esc(netNote);
+  else tip = (state.online ? 'Go offline' : 'Go online') + '<span class="k">G</span>';
   // Bewusst OHNE Akzentfarbe/aktive Umrandung: online ist der Normalzustand,
   // der Knopf sieht aus wie jeder andere Rail-Knopf.
-  return `<button class="tool-btn" data-act="net">`
+  return `<button class="tool-btn${busy}" data-act="net">`
     + `<span class="net-ico${anim}">${icon}</span>`
-    + `<span class="tip">${label}<span class="k">G</span></span></button>`;
+    + `<span class="tip">${tip}</span></button>`;
 }
 
 // Das fruehere Profil-Menue (hartkodierter Name "Noa Andersen", tote Eintraege
@@ -663,6 +679,8 @@ function renderModal() {
     }
     case 'settings':
       return scrim(renderSettings());
+    case 'change':
+      return renderChangePass();
     default:
       return '';
   }
@@ -702,6 +720,9 @@ function renderSettings() {
           <div class="settings-col">
             ${head('Workspace')}
             ${row('Sidebar', seg('sidebar', [['open', 'Open'], ['closed', 'Closed']], s.sidebar))}
+            ${head('Security')}
+            ${row('Auto-lock', seg('autoLock', [['1', '1m'], ['5', '5m'], ['15', '15m'], ['30', '30m'], ['60', '60m'], ['0', 'Never']], String(s.autoLock == null ? '15' : s.autoLock)), 'Lock automatically after this much inactivity')}
+            ${row('Passphrase', `<button class="btn" data-act="open-change-pass">Change…</button>`, 'Change the vault passphrase')}
             ${head('Export')}
             ${row('Completed tasks', seg('exportDone', [['true', 'Include'], ['false', 'Exclude']], String(s.exportDone !== false)), 'Whether done tasks appear in exported files')}
           </div>
@@ -710,6 +731,31 @@ function renderSettings() {
       <div class="modal-actions"><button class="btn btn-primary" data-act="modal-close">Done</button></div>
     </div>`;
 }
+
+// Passphrase-Wechsel-Modal (N11.3, nur entsperrt): alte + neue (2x) Passphrase,
+// Mindestlaenge 12. change_passphrase prueft die alte Passphrase ueber die
+// abgeleiteten Schluessel (Rate-Limit wie beim Entsperren) und zieht die .bak
+// mit dem neuen Schluessel nach; nichts bleibt alt-lesbar.
+function renderChangePass() {
+  const I = Icons;
+  const err = changePassError ? `<div class="ob-warn" style="margin-top:12px">${esc(changePassError)}</div>` : '';
+  return scrim(`
+    <div class="modal">
+      <div class="modal-body">
+        <div class="modal-icon accent">${I.Lock}</div>
+        <h3>Change passphrase</h3>
+        <input id="cp-old" type="password" class="ob-input" placeholder="Current passphrase" autocomplete="off" spellcheck="false" style="margin-top:14px" />
+        <input id="cp-new1" type="password" class="ob-input" placeholder="New passphrase (min 12)" autocomplete="new-password" spellcheck="false" />
+        <input id="cp-new2" type="password" class="ob-input" placeholder="Repeat new passphrase" autocomplete="new-password" spellcheck="false" />
+        ${err}
+      </div>
+      <div class="modal-actions">
+        <button class="btn" data-act="modal-close">Cancel</button>
+        <button class="btn btn-primary" data-act="do-change-pass">Change</button>
+      </div>
+    </div>`);
+}
+let changePassError = null;
 
 // Zustaende aller Settings-Controls in-place nachziehen (Seg-Knoepfe,
 // Farbfelder, Kippschalter samt Kanal-Dimmen). KEIN render(): das Modal
@@ -726,35 +772,102 @@ function syncSettingsUi() {
   });
 }
 
+// Lock-Cover im WebView (Phase 8): seit dem Zweitprofil-Spike (N11.18) laeuft
+// das ECHTE Entsperren in einem nativen Lock-Fenster ohne WebView. Sobald
+// gesperrt wird, baut das Backend dieses WebView ab (teardown Schritt 9) und
+// zeigt das native Fenster. Dieses Cover ist daher nur eine kurze, nicht
+// interaktive Blende, die die Aufgaben verdeckt, bis das Fenster verschwindet
+// (und der Sonderfall N11.11.5: Auto-Sperre bei offenem Dialog, wo das WebView
+// noch kurz lebt). Kein Passwortfeld, kein Off-Knopf, keine Reset-Wege mehr,
+// die sind alle im nativen Lock-Fenster.
 function renderLock() {
   if (!state.locked) return '';
   const I = Icons;
-  // Die Passwort-Pille ist IMMER die Eingabepille (kein Klick-zum-Aufklappen):
-  // wireInputs() fokussiert sie, tippen schreibt direkt hinein. Die Breite
-  // waechst erst, wenn die Eingabe laenger als die Grundpille wird (JS, s.u.).
-  // Waehrend der Aufschliess-Animation (lockUnlocking) verschwindet die Pille
-  // und der Ring wird gruen, der Buegel des Schlosses geht auf.
-  const pill = lockUnlocking ? '' : `
-        <div class="lock-input" data-keep>
-          <input id="lock-pass" type="password" placeholder="Password" autocomplete="off" spellcheck="false" />
-        </div>`;
-  // Off-Knopf oben rechts (N10): beendet die App sofort ohne Passphrase
-  // (quit_app). Loescht nie Nutzer- oder App-Daten; der Raum wurde beim
-  // Sperren bereits bereinigt, das sichere Spuren-Wischen kommt in Phase 8.
-  const off = lockUnlocking ? '' : `
-      <button class="lock-off" data-act="lock-off" title="Quit NoaToDo">${I.Power}</button>`;
   return `
-    <div class="lock-screen${lockUnlocking ? ' unlocking' : ''}">
-      ${off}
+    <div class="lock-screen">
       <div class="lock-card">
-        <div class="lock-ring">${lockUnlocking ? I.Unlock : I.Lock}</div>
-        <h2>${lockUnlocking ? 'NoaToDo unlocked' : 'NoaToDo is locked'}</h2>
-        ${pill}
+        <div class="lock-ring">${I.Lock}</div>
+        <h2>NoaToDo is locked</h2>
       </div>
     </div>`;
 }
-// true, solange die Aufschliess-Animation nach richtigem Passwort laeuft.
-let lockUnlocking = false;
+
+// ===========================================================================
+// Onboarding (Phase 8, N11.13): Boot-Zustand, drei Vollbild-Schritte, KEIN
+// Modal (kein Esc, kein Weg in die App vorbei am Anlegen). Erscheint genau
+// dann, wenn get_boot_state() 'onboarding' liefert (frischer Rechner, nach
+// Reset, nach Killswitch). Der Tresor-Ort ist frei waehlbar (G32-Warnung), die
+// Passphrase-Regel ist ausschliesslich Mindestlaenge 12 (N11.3, kein
+// Staerkemesser), und die Verlust-Warnung ist Pflichttext mit aktiver
+// Bestaetigung.
+// ===========================================================================
+function renderOnboarding() {
+  const o = state.onboarding;
+  if (!o) return '';
+  const I = Icons;
+  if (o.step === 1) {
+    const chosen = o.path
+      ? `<div class="ob-path mono">${esc(o.path)}</div>`
+      : '';
+    const warn = o.warning
+      ? `<div class="ob-warn">${esc(o.warning)}</div>`
+      : '';
+    // Liegt im gewaehlten Ordner schon ein Tresor (N11.15.6): nur "oeffnen"
+    // anbieten, nie ueberschreiben.
+    const next = o.hasVault
+      ? `<button class="btn btn-primary" data-act="ob-open-existing">Open this vault</button>`
+      : `<button class="btn btn-primary" data-act="ob-next" ${o.path ? '' : 'disabled'}>Continue</button>`;
+    const hint = o.hasVault
+      ? `<div class="ob-note">This folder already contains a vault. It will not be overwritten; you can open it, or choose an empty folder to create a new one.</div>`
+      : '';
+    return `
+      <div class="onboarding">
+        <div class="ob-card">
+          <div class="ob-icon">${I.Shield}</div>
+          <h1>Welcome to NoaToDo</h1>
+          <p class="ob-lead">A local, encrypted vault for your lists. No cloud, no account, no sync: everything stays on this PC.</p>
+          <p class="ob-sub">Choose where the encrypted vault file should live.</p>
+          <button class="btn" data-act="ob-choose">${I.Download} Choose location</button>
+          ${chosen}${hint}${warn}
+          <div class="ob-actions">${next}</div>
+        </div>
+      </div>`;
+  }
+  if (o.step === 2) {
+    const err = o.error ? `<div class="ob-warn">${esc(o.error)}</div>` : '';
+    return `
+      <div class="onboarding">
+        <div class="ob-card">
+          <div class="ob-icon">${I.Lock}</div>
+          <h1>Set a passphrase</h1>
+          <p class="ob-sub">At least 12 characters. There are no other rules.</p>
+          <input id="ob-pass1" type="password" class="ob-input" placeholder="Passphrase" autocomplete="new-password" spellcheck="false" />
+          <input id="ob-pass2" type="password" class="ob-input" placeholder="Repeat passphrase" autocomplete="new-password" spellcheck="false" />
+          <div class="ob-lossbox">
+            <b>There is no recovery.</b> If you forget the passphrase, all data is lost, and no one can bring it back (not even the developer). The vault is also bound to this Windows account: a new Windows profile or another PC means data loss, even with the correct passphrase.
+          </div>
+          <label class="ob-check"><input type="checkbox" id="ob-understand" /> <span>I understand there is no recovery.</span></label>
+          ${err}
+          <div class="ob-actions">
+            <button class="btn" data-act="ob-back">Back</button>
+            <button class="btn btn-primary" data-act="ob-create" id="ob-create-btn" disabled>Create vault</button>
+          </div>
+        </div>
+      </div>`;
+  }
+  // step 3: busy / done
+  return `
+    <div class="onboarding">
+      <div class="ob-card">
+        <div class="ob-icon">${I.Shield}</div>
+        <h1>${o.error ? 'Could not create the vault' : 'Creating your vault…'}</h1>
+        ${o.error ? `<div class="ob-warn">${esc(o.error)}</div>
+          <div class="ob-actions">
+            <button class="btn" data-act="ob-back-2">Back</button>
+          </div>` : `<p class="ob-sub">Deriving keys and writing the encrypted file. This takes a moment on purpose.</p>`}
+      </div>
+    </div>`;
+}
 // Frisch geholtes get_status()-Ergebnis fuer das Status-Modal (transient),
 // plus Auf/Zu-Zustand der "Recent errors"-Sektion (G29). Kein Teil von state:
 // rein praesentationsbezogen, verfaellt mit dem Modal.
@@ -940,6 +1053,13 @@ function applyRail() {
 
 function render() {
   applyChrome();
+  // Onboarding ist ein Boot-Zustand ueber allem (N11.13): kein Header, keine
+  // Sidebar, keine Rail, kein Weg in die App vorbei am Anlegen.
+  if (state.onboarding) {
+    root.innerHTML = renderOnboarding();
+    wireOnboardingInputs();
+    return;
+  }
   // Panik-Wipe: sobald geloescht wird bzw. der "wiped"-Schirm steht, ist die App
   // theoretisch weg. Es darf NICHTS vom normalen UI mehr dahinter liegen (kein
   // Header mit "+", keine Sidebar, keine Rail), sonst kann man versehentlich
@@ -1018,30 +1138,15 @@ function wireInputs() {
       else if (e.key === 'Escape') { e.preventDefault(); state.renamingId = null; state.listEditDock = false; render(); }
     });
   }
-  const lp = document.getElementById('lock-pass');
-  if (lp) {
-    // Pillenbreite: die Punkte werden ECHT vermessen (Canvas measureText mit
-    // der Schrift des Feldes), die Pille waechst also erst, wenn die Eingabe
-    // wirklich am rechten Rand ankommt, nicht schon vorher. Nach oben ist sie
-    // auf etwa die Breite der "NoaToDo is locked"-Zeile begrenzt; laengere
-    // Eingaben laufen einfach im Feld weiter, ohne die Pille zu verbreitern.
-    const h2 = document.querySelector('.lock-card h2');
-    const cs = getComputedStyle(lp);
-    const meter = document.createElement('canvas').getContext('2d');
-    meter.font = `${cs.fontWeight} ${cs.fontSize} ${cs.fontFamily}`;
-    const basePx = lp.offsetWidth || 120;
-    const maxPx = Math.max(basePx, (h2 ? h2.offsetWidth : 300) - 40);
-    const fit = () => {
-      const dots = '•'.repeat(lp.value.length);
-      const w = Math.ceil(meter.measureText(dots).width) + 14; // Luft fuer den Cursor
-      lp.style.width = Math.min(maxPx, Math.max(basePx, w)) + 'px';
-    };
-    fit();
-    lp.addEventListener('input', fit);
-    lp.focus();
-    lp.addEventListener('keydown', (e) => {
-      if (e.key === 'Enter') { e.preventDefault(); lockSubmit(lp.value); }
-      else if (e.key === 'Escape') { e.preventDefault(); lp.value = ''; fit(); }
+  wireOnboardingInputs();
+  const cpo = document.getElementById('cp-old');
+  if (cpo) {
+    cpo.focus();
+    const submit = (e) => { if (e.key === 'Enter') { e.preventDefault(); doChangePass(); } };
+    cpo.addEventListener('keydown', submit);
+    ['cp-new1', 'cp-new2'].forEach((idn) => {
+      const el = document.getElementById(idn);
+      if (el) el.addEventListener('keydown', submit);
     });
   }
   const rh = document.getElementById('sidebar-resize-handle');
@@ -1057,6 +1162,30 @@ function wireInputs() {
 }
 let refocusNewTask = false;
 
+// Onboarding-Eingaben verdrahten (Phase 8, N11.13). Schritt 2: der
+// "Create vault"-Knopf ist erst aktiv, wenn beide Passphrasen gleich, >= 12
+// Zeichen lang sind UND die Verlust-Warnung aktiv bestaetigt ist.
+function wireOnboardingInputs() {
+  const o = state.onboarding;
+  if (!o) return;
+  if (o.step === 2) {
+    const p1 = document.getElementById('ob-pass1');
+    const p2 = document.getElementById('ob-pass2');
+    const chk = document.getElementById('ob-understand');
+    const btn = document.getElementById('ob-create-btn');
+    const refresh = () => {
+      const v1 = p1 ? p1.value : '';
+      const v2 = p2 ? p2.value : '';
+      const ok = v1.length >= 12 && v1 === v2 && chk && chk.checked;
+      if (btn) btn.disabled = !ok;
+    };
+    if (p1) { p1.addEventListener('input', refresh); p1.focus(); }
+    if (p2) p2.addEventListener('input', refresh);
+    if (chk) chk.addEventListener('change', refresh);
+    refresh();
+  }
+}
+
 // ===========================================================================
 // Aktionen (rufen das Backend, aktualisieren state, rendern)
 // ===========================================================================
@@ -1071,6 +1200,94 @@ async function submitNewTask(text) {
   // Aufgabe muss erneut auf das Plus gedrueckt werden.
   state.addingTask = false;
   render();
+}
+
+// ===========================================================================
+// Onboarding-Aktionen (Phase 8, N11.13)
+// ===========================================================================
+async function obChoose() {
+  const res = await api().choose_vault_dir();
+  if (res && res.error) {
+    // Abbruch (canceled) still ignorieren; ungueltiger Ort bleibt ohne Pfad.
+    if (res.error !== 'canceled') handleError(res);
+    return;
+  }
+  state.onboarding.path = res.path;
+  state.onboarding.hasVault = !!res.has_vault;
+  state.onboarding.warning = res.warning || null;
+  state.onboarding.error = null;
+  render();
+}
+
+async function obCreate() {
+  const o = state.onboarding;
+  const p1 = document.getElementById('ob-pass1');
+  const p2 = document.getElementById('ob-pass2');
+  const v1 = p1 ? p1.value : '';
+  const v2 = p2 ? p2.value : '';
+  if (v1.length < 12 || v1 !== v2) {
+    o.error = 'Passphrase must be at least 12 characters and match.';
+    render(); return;
+  }
+  o.step = 3; o.error = null; o.busy = true; render();
+  const res = await api().create_vault(o.path, v1);
+  if (res && res.error) {
+    o.busy = false;
+    o.error = res.error === 'memory'
+      ? 'Not enough memory to derive the keys. Close other apps and try again.'
+      : res.error === 'invalid'
+        ? 'That location cannot be used (a vault may already exist there, or it is not writable).'
+        : 'Could not create the vault.';
+    render(); return;
+  }
+  // Angelegt und entsperrt: ins normale App-UI wechseln.
+  state.onboarding = null;
+  await enterUnlockedApp();
+}
+
+async function obOpenExisting() {
+  // Ordner enthaelt schon einen Tresor (N11.15.6): nur oeffnen, nie
+  // ueberschreiben. Das Backend schreibt den Pfad in config.json und baut das
+  // WebView ab; das native Lock-Fenster uebernimmt (Passphrase-Eingabe).
+  const res = await api().open_existing_vault(state.onboarding.path);
+  if (res && res.error) { handleError(res); return; }
+}
+
+// Aus dem entsperrten Boot-/Onboarding-Ende ins normale App-UI: den vollen
+// Zustand laden und rendern (dieselbe Aufbereitung wie frueher in boot()).
+async function enterUnlockedApp() {
+  try {
+    const st = await api().get_state();
+    if (st && st.locked) { state.locked = true; render(); return; }
+    Object.assign(state, st);
+    normalizeSettings(state.settings);
+    const sw = parseInt(state.settings.sidebarWidth || '256', 10);
+    state.sidebarWidth = (sw >= 180 && sw <= 520) ? sw : 256;
+    // Immer als leere Arbeitsflaeche starten (unabhaengig von den Settings).
+    state.settings.sidebar = 'closed';
+    state.railPinned = false;
+    state.focus = false;
+    state.activeId = null;
+    state.locked = false;
+    state.onboarding = null;
+  } catch (err) {
+    root.innerHTML = '<pre style="padding:24px">boot error: ' + err + '</pre>';
+    return;
+  }
+  render();
+  if (state.online) startWifiPoll();
+}
+
+// Auto-Sperre-Aktivitaet (N11.4.2): gedrosselt melden (fuehrende Flanke, danach
+// hoechstens alle 30 s). Nur ein Stempel auf die Backend-Uhr; kann die Sperre
+// nur aufschieben, nie verhindern (der Backend-Timer ist die Autoritaet).
+let _lastPing = 0;
+function pingActivity() {
+  if (state.locked || state.onboarding) return;
+  const now = Date.now();
+  if (now - _lastPing < 30000) return;
+  _lastPing = now;
+  try { api().activity_ping(); } catch (e) { /* egal, der Backend-Timer sperrt fail-safe */ }
 }
 
 async function commitNewList(name) {
@@ -1249,11 +1466,50 @@ async function doMoveTask(taskId, targetListId) {
 }
 
 async function setOnline(flag) {
-  const res = await api().set_online(flag);
-  state.online = res && typeof res.online === 'boolean' ? res.online : flag;
+  // Kein Doppel-Schalten (N11.5/U15): laeuft schon eine Umschaltung, ignorieren.
+  if (netBusy) return;
+  netBusy = true; netNote = null; render();   // Pille in den Warte-Zustand
+  let res = null;
+  try { res = await api().set_online(flag); }
+  catch (e) { /* still: die Pille faellt gleich auf den Realzustand zurueck */ }
+  netBusy = false;
+  if (res && typeof res.online === 'boolean') {
+    // Immer der verifizierte Realzustand, nie die blosse Absicht (U15).
+    state.online = res.online;
+    if (res.access === 'denied' || res.access === 'unavailable') {
+      netNote = 'no radio access';
+    } else if (res.partial && res.refused) {
+      netNote = res.refused + ' could not be turned ' + (flag ? 'on' : 'off');
+    } else {
+      netNote = null;
+    }
+  } else if (res && (res.access === 'denied' || res.access === 'unavailable')) {
+    netNote = 'no radio access';   // Zustand unveraendert, nur ehrlich degradiert
+  }
   netAnim = true;              // naechster Render: Symbol fliegt herein und purzelt
   if (state.online) startWifiPoll();
   else stopWifiPoll();
+  render();
+}
+
+// Passphrase-Wechsel ausfuehren (N11.3, nur entsperrt). Neutrale Fehlertexte;
+// bei rate_limited die Restzeit anzeigen. Erfolg schliesst das Modal.
+async function doChangePass() {
+  const oldv = (document.getElementById('cp-old') || {}).value || '';
+  const n1 = (document.getElementById('cp-new1') || {}).value || '';
+  const n2 = (document.getElementById('cp-new2') || {}).value || '';
+  if (n1.length < 12) { changePassError = 'New passphrase must be at least 12 characters.'; render(); return; }
+  if (n1 !== n2) { changePassError = 'New passphrases do not match.'; render(); return; }
+  const res = await api().change_passphrase(oldv, n1);
+  if (res && res.error) {
+    changePassError = res.error === 'passphrase' ? 'Current passphrase is wrong.'
+      : res.error === 'rate_limited' ? ('Too many attempts. Try again in ' + (res.retry_in || 0) + 's.')
+      : res.error === 'memory' ? 'Not enough memory. Close other apps and try again.'
+      : 'Could not change the passphrase.';
+    render(); return;
+  }
+  changePassError = null;
+  state.modal = null;
   render();
 }
 
@@ -1262,10 +1518,21 @@ async function setOnline(flag) {
 // Symbol beim Pollen nicht erneut "hereinfliegt").
 let wifiTimer = null;
 async function refreshWifi() {
-  if (!state.online) return;
+  // Poll pausiert bei offline, verstecktem/minimiertem Fenster und im Lock-
+  // Screen (U15): nichts anzuzeigen bzw. Bridge eingefroren.
+  if (!state.online || document.hidden || state.locked) return;
   try {
     const r = await api().get_wifi_signal();
-    if (r && typeof r.level === 'number') {
+    if (!r) return;
+    // Rueckfalllinie zu den Radio-Ereignissen (N11.5): hat das Backend beim
+    // Abgleich einen abweichenden realen Funk-Zustand gefunden, uebernehmen.
+    if (typeof r.online === 'boolean' && r.online !== state.online) {
+      state.online = r.online;
+      if (!state.online) stopWifiPoll();
+      render();
+      return;
+    }
+    if (typeof r.level === 'number') {
       wifiLevel = r.level;
       const host = document.querySelector('.net-ico');
       if (host && state.online) host.innerHTML = wifiSvg(wifiLevel);
@@ -1275,7 +1542,7 @@ async function refreshWifi() {
 function startWifiPoll() {
   stopWifiPoll();
   refreshWifi();
-  wifiTimer = setInterval(refreshWifi, 15000);
+  wifiTimer = setInterval(refreshWifi, 10000);   // N11.5: alle 10 s
 }
 function stopWifiPoll() {
   if (wifiTimer) { clearInterval(wifiTimer); wifiTimer = null; }
@@ -1290,6 +1557,8 @@ const BOOL_SETTINGS = new Set(['dark', 'exportDone']);
 // kann bei alten DBs fehlen (kein Re-Seed nach dem seeded-Marker); Default an.
 function normalizeSettings(s) {
   s.exportDone = s.exportDone !== false;
+  // autoLock (Minuten, N11.4): Default 15, wenn nicht gesetzt (alte DBs).
+  if (s.autoLock == null || s.autoLock === '') s.autoLock = '15';
   return s;
 }
 
@@ -1429,8 +1698,10 @@ function onMouseMove(e) {
 
 // "Raum leeren" (Nachtrag N10): gemeinsame Bereinigung fuer Lock und Panik.
 // Verwirft den kompletten In-Memory-Zustand (Listen, Auswahl, Menues, Modals,
-// Eingaben) und stellt auf offline. Loescht NICHTS: das Backend bleibt die
-// Wahrheit und liefert nach dem Entsperren alles frisch per get_state().
+// Eingaben). Loescht NICHTS: das Backend bleibt die Wahrheit und liefert nach
+// dem Entsperren alles frisch per get_state(). N11.10: der Online-/Funkzustand
+// wird hier NICHT mehr angefasst (frueher schaltete das Sperren offline); das
+// Offline-Schalten passiert nur noch im Panik-Flow (siehe panic-confirm).
 function clearWorkspace() {
   state.lists = [];
   state.activeId = null;
@@ -1442,63 +1713,26 @@ function clearWorkspace() {
   state.focus = false;
   state.settings.sidebar = 'closed';   // nur in-memory, wie beim Boot
   state.railPinned = false;
-  state.online = false;
   clearToasts();   // kein Undo-Knopf/Toast darf den Lock-Screen ueberlagern
 }
 
 async function doLock() {
-  // Verstaerkte Sperre (N10): erst den Raum bereinigen wie bei Panik
-  // (Ansicht leeren, In-Memory-Zustand verwerfen, offline schalten), dann
-  // sperren. Es wird nichts geloescht.
+  // Sperren (N10 + N11.10): erst den Raum bereinigen (Ansicht leeren,
+  // In-Memory-Zustand verwerfen), das Cover zeigen, dann das Backend sperren.
+  // N11.10: der Online-/Funkzustand wird beim Sperren NICHT mehr angefasst.
+  // Das Backend laeuft die teardown-Sequenz und baut anschliessend dieses
+  // WebView ab; das echte Entsperren passiert danach im nativen Lock-Fenster
+  // (Spike N11.18). Es wird nichts geloescht.
   clearWorkspace();
-  api().set_online(false);
-  await api().lock();
-  state.locked = true; lockUnlocking = false;
+  state.locked = true;
   render();
-}
-
-async function lockSubmit(value) {
-  const res = await api().unlock(value || '');   // Phase 8: echte Passphrase
-  if (!(res && res.ok)) {
-    // Falsches Passwort: Feld leeren (input-Event zieht die Breite nach),
-    // gesperrt bleiben.
-    const lp = document.getElementById('lock-pass');
-    if (lp) { lp.value = ''; lp.dispatchEvent(new Event('input')); lp.focus(); }
-    return;
-  }
-  // Richtig: erst die Aufschliess-Animation zeigen (Ring wird gruen, der
-  // Schloss-Buegel geht auf), dann wirklich entsperren. Die Dauer muss zu den
-  // CSS-Animationen (unlockPop/unlockShackle/lockFadeOut) passen.
-  // Bewusst KEIN render(): der bestehende Lock-Screen wird in-place
-  // umgeschaltet, ein voller innerHTML-Neuaufbau wuerde sichtbar flackern.
-  lockUnlocking = true;
-  const ls = document.querySelector('.lock-screen');
-  if (ls) {
-    ls.classList.add('unlocking');
-    const ring = ls.querySelector('.lock-ring');
-    if (ring) ring.innerHTML = Icons.Unlock;
-    const h2 = ls.querySelector('h2');
-    if (h2) h2.textContent = 'NoaToDo unlocked';
-    const pill = ls.querySelector('.lock-input');
-    if (pill) pill.remove();
-    const off = ls.querySelector('.lock-off');
-    if (off) off.remove();
-  }
-  // Der Raum wurde beim Sperren geleert (N10): waehrend die Animation laeuft,
-  // den Zustand frisch vom Backend holen (danach leere Arbeitsflaeche wie beim
-  // Boot). Offline bleibt die App, bis der Nutzer es bewusst wieder einschaltet.
-  let st = null;
-  try { st = await api().get_state(); } catch (e) { /* Fallback: leerer Raum */ }
-  setTimeout(() => {
-    if (st && st.lists) {
-      state.lists = st.lists;
-      state.settings = normalizeSettings(Object.assign({}, st.settings, { sidebar: 'closed' }));
-      state.online = !!st.online;
-    }
-    lockUnlocking = false;
+  const res = await api().lock();
+  if (res && res.error) {
+    // Teardown/Write-back gescheitert (z.B. Platte voll, N6): NICHT gesperrt,
+    // kein falscher Lock-Cover. Ansicht frisch aus dem Backend wiederherstellen.
     state.locked = false;
-    render();
-  }, 1900);
+    await refreshState();
+  }
 }
 
 // Theme-Wechsel-Flackern vermeiden (ein Frame ohne Transitions).
@@ -1845,8 +2079,10 @@ async function onClick(e) {
       if (state.panic && state.panic.armed) {
         // Ab hier gibt es kein Zurueck in die App mehr (N10): sofort real
         // bereinigen (Raum leeren, offline, Backend-Panik), dann den
-        // Wipe-Fortschritt zeigen und in den Endschirm wechseln.
+        // Wipe-Fortschritt zeigen und in den Endschirm wechseln. Nur der
+        // Panik-Flow schaltet offline (N11.10), daher hier explizit.
         clearWorkspace();
+        state.online = false;
         api().panic();
         state.panic.stage = 'wiping'; render(); startPanicWipe();
       }
@@ -1869,8 +2105,19 @@ async function onClick(e) {
       if (state.panic && state.panic.stage === 'done' && state.panic.killArmed) startKillswitch();
       break;
     // Off-Knopf des Sperrschirms (N10): App sofort beenden, ohne Passphrase,
-    // ohne Datenverlust.
+    // ohne Datenverlust. (Nur noch der Vollstaendigkeit halber: der Off-Knopf
+    // sitzt jetzt im nativen Lock-Fenster; dieses Cover hat keinen mehr.)
     case 'lock-off': await api().quit_app(); break;
+    // Onboarding (N11.13): Ort waehlen, weiter/zurueck, anlegen, oder einen
+    // vorhandenen Tresor oeffnen (N11.15.6).
+    case 'ob-choose': await obChoose(); break;
+    case 'ob-next': if (state.onboarding && state.onboarding.path) { state.onboarding.step = 2; render(); } break;
+    case 'ob-back': if (state.onboarding) { state.onboarding.step = 1; state.onboarding.error = null; render(); } break;
+    case 'ob-back-2': if (state.onboarding) { state.onboarding.step = 2; state.onboarding.error = null; state.onboarding.busy = false; render(); } break;
+    case 'ob-create': await obCreate(); break;
+    case 'ob-open-existing': await obOpenExisting(); break;
+    case 'open-change-pass': changePassError = null; state.modal = 'change'; render(); break;
+    case 'do-change-pass': await doChangePass(); break;
     default: if (needRender) render();
   }
 }
@@ -1928,13 +2175,15 @@ function onKeyGlobal(e) {
   const typing = /^(INPUT|TEXTAREA)$/.test(e.target.tagName);
   const meta = e.metaKey || e.ctrlKey;
   if (state.locked) {
-    // Auf dem Sperrschirm landet Tippen IMMER direkt im Passwortfeld: hat das
-    // Feld den Fokus verloren (z.B. Klick daneben), holt der erste druckbare
-    // Buchstabe ihn zurueck; das Zeichen selbst wird danach regulaer eingefuegt.
-    const lp = document.getElementById('lock-pass');
-    if (lp && document.activeElement !== lp && !meta && !e.altKey && e.key.length === 1) lp.focus();
+    // Gesperrt sind alle App-Shortcuts tot. Das echte Entsperren laeuft im
+    // nativen Lock-Fenster (Spike N11.18), das WebView-Cover ist nur eine
+    // kurze Blende bis zum Fenster-Abbau: hier gibt es nichts zu tun.
     return;
   }
+  // Waehrend des Onboarding sind ebenfalls keine App-Shortcuts aktiv (es ist
+  // ein Boot-Zustand, kein Modal, N11.13): die Onboarding-Eingaben haben ihre
+  // eigenen Listener.
+  if (state.onboarding) return;
   if (e.key === 'Escape') {
     if (state.mini) { doMini(false); return; }
     state.modal = null;
@@ -2162,34 +2411,33 @@ function onDragEnd() {
 // Backend -> Frontend Events (Bauplan B.2)
 // ===========================================================================
 window.noa = {
-  onLocked() { state.locked = true; lockUnlocking = false; render(); },
+  // Backend -> Frontend (N11.11.5): die Auto-Sperre ist gefeuert (ggf. bei
+  // offenem Dialog). Raum leeren und das Cover zeigen; das Backend baut das
+  // WebView anschliessend ab und das native Lock-Fenster uebernimmt.
+  onLocked() { clearWorkspace(); state.locked = true; render(); },
+  // Backend -> Frontend (N11.5): der Funk-Zustand hat sich EXTERN geaendert
+  // (Nutzer schaltet in den Windows-Einstellungen). Nur die Anzeige spiegeln,
+  // der Nutzer hat hier nichts geschaltet, also kein Hinweistext.
+  onNetChange(online) {
+    if (netBusy) return;   // eine eigene Umschaltung setzt den Zustand selbst
+    state.online = !!online;
+    netNote = null;
+    netAnim = true;
+    if (state.online) startWifiPoll(); else stopWifiPoll();
+    render();
+  },
 };
 
 // ===========================================================================
-// Boot
+// Boot (N11.13): get_boot_state() ist der ERSTE und einzige Aufruf, bevor
+// irgendetwas gerendert wird. 'onboarding' -> Onboarding-Screens, sonst ->
+// entsperrtes App-UI. Die Zustaende 'locked'/'vault_error' erreichen dieses
+// WebView im Normalfall nicht (das native Lock-Fenster laeuft davor); trifft
+// es doch ein, zeigt das Cover die Sperre.
 // ===========================================================================
 async function boot() {
-  try {
-    const st = await api().get_state();
-    Object.assign(state, st);
-    normalizeSettings(state.settings);
-    // Pin-Zustand der Tool-Rail aus den Settings rekonstruieren (als String abgelegt).
-    // Sidebar-Breite wiederherstellen (als String gespeichert).
-    const sw = parseInt(state.settings.sidebarWidth || '256', 10);
-    state.sidebarWidth = (sw >= 180 && sw <= 520) ? sw : 256;
-    // Beim Start immer als leere Arbeitsflaeche: Sidebar eingeklappt, Tool-Rail
-    // nicht fixiert, keine Liste geoeffnet. Das ist bewusst unabhaengig von den
-    // zuletzt gespeicherten Settings (nur In-Memory erzwungen, die persistierten
-    // Werte wie sidebarWidth bleiben unangetastet). Werkzeuge holt man sich erst
-    // bei Bedarf auf die Flaeche.
-    state.settings.sidebar = 'closed';
-    state.railPinned = false;
-    state.focus = false;
-    state.activeId = null;
-  } catch (err) {
-    root.innerHTML = '<pre style="padding:24px">boot error: ' + err + '</pre>';
-    return;
-  }
+  // Globale Listener EINMAL anhaengen (Onboarding braucht Klicks fuer die
+  // Knoepfe; die App den Rest). Sie pruefen den Zustand selbst.
   document.addEventListener('pointerdown', () => _ac(), { once: true });
   document.addEventListener('click', onClick);
   document.addEventListener('contextmenu', onContextMenu);
@@ -2199,8 +2447,25 @@ async function boot() {
   document.addEventListener('dragover', onDragOver);
   document.addEventListener('drop', onDrop);
   document.addEventListener('dragend', onDragEnd);
-  render();
-  if (state.online) startWifiPoll();
+  // Auto-Sperre-Aktivitaet (N11.4.2): Eingabe-Ereignisse im DOM des App-
+  // Fensters gedrosselt melden. NICHT die globale System-Idle-Zeit.
+  ['mousemove', 'mousedown', 'keydown', 'wheel', 'scroll', 'touchstart']
+    .forEach((ev) => document.addEventListener(ev, pingActivity, { passive: true }));
+
+  let bs = null;
+  try {
+    bs = await api().get_boot_state();
+  } catch (err) {
+    root.innerHTML = '<pre style="padding:24px">boot error: ' + err + '</pre>';
+    return;
+  }
+  if (bs && bs.state === 'onboarding') {
+    state.onboarding = { step: 1, path: null, hasVault: false, warning: null, busy: false, error: null };
+    render();
+    return;
+  }
+  // 'unlocked' (oder defensiv anderes): den vollen Zustand laden und rendern.
+  await enterUnlockedApp();
 }
 
 if (window.pywebview) boot();

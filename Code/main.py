@@ -11,12 +11,15 @@ import ctypes
 import json
 import os
 import shutil
+import subprocess
 import tempfile
 import time
 
 import webview
 
-from backend import db as db_module
+from backend import config as config_module
+from backend import radio as radio_module
+from backend import security as security_module
 from backend.api import Api
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -281,17 +284,76 @@ def emit(window, event: str, payload=None) -> None:
         pass
 
 
+def _current_user_sid() -> str | None:
+    """SID des aktuellen Benutzers als String (fuer den G19-Mutex-Namen).
+
+    Ueber das Prozess-Token (OpenProcessToken -> GetTokenInformation(TokenUser)
+    -> ConvertSidToStringSidW). Scheitert das, gibt es None zurueck; der
+    Aufrufer faellt dann auf den alten ``Local\\``-Namen zurueck.
+    """
+    try:
+        advapi32 = ctypes.windll.advapi32
+        kernel32 = ctypes.windll.kernel32
+        # 64-bit-sichere Signaturen: Handles/Pointer sind c_void_p, nicht int.
+        kernel32.GetCurrentProcess.restype = ctypes.c_void_p
+        advapi32.OpenProcessToken.argtypes = (
+            ctypes.c_void_p, ctypes.c_uint32, ctypes.POINTER(ctypes.c_void_p))
+        advapi32.GetTokenInformation.argtypes = (
+            ctypes.c_void_p, ctypes.c_int, ctypes.c_void_p, ctypes.c_uint32,
+            ctypes.POINTER(ctypes.c_uint32))
+        advapi32.ConvertSidToStringSidW.argtypes = (
+            ctypes.c_void_p, ctypes.POINTER(ctypes.c_wchar_p))
+        kernel32.LocalFree.argtypes = (ctypes.c_void_p,)
+        kernel32.CloseHandle.argtypes = (ctypes.c_void_p,)
+        TOKEN_QUERY = 0x0008
+        TokenUser = 1
+        token = ctypes.c_void_p()
+        proc = kernel32.GetCurrentProcess()
+        if not advapi32.OpenProcessToken(proc, TOKEN_QUERY, ctypes.byref(token)):
+            return None
+        try:
+            length = ctypes.c_uint32(0)
+            advapi32.GetTokenInformation(token, TokenUser, None, 0, ctypes.byref(length))
+            buf = ctypes.create_string_buffer(length.value)
+            if not advapi32.GetTokenInformation(token, TokenUser, buf, length.value,
+                                                ctypes.byref(length)):
+                return None
+            # TOKEN_USER beginnt mit SID_AND_ATTRIBUTES: der erste Pointer ist die SID.
+            sid_ptr = ctypes.cast(buf, ctypes.POINTER(ctypes.c_void_p))[0]
+            str_ptr = ctypes.c_wchar_p()
+            if not advapi32.ConvertSidToStringSidW(sid_ptr, ctypes.byref(str_ptr)):
+                return None
+            try:
+                return str_ptr.value
+            finally:
+                kernel32.LocalFree(str_ptr)
+        finally:
+            kernel32.CloseHandle(token)
+    except Exception:
+        return None
+
+
 def _acquire_single_instance() -> bool:
-    """Belegt einen benannten Windows-Mutex (Gate G19, vorgezogen).
+    """Belegt einen benannten Windows-Mutex (Gate G19).
 
     Verhindert eine zweite Instanz: zwei Prozesse wuerden sich denselben festen
-    WebView2-Profilordner (und spaeter ``tasks.db.enc`` bzw. dessen Arbeitskopie)
+    WebView2-Profilordner und ``tasks.db.enc`` (bzw. dessen Arbeitskopie)
     gegenseitig sperren oder ueberschreiben (weisses Fenster, "reagiert nicht",
-    spaeter Datenkorruption). Gibt True zurueck, wenn diese Instanz die erste ist.
+    Datenkorruption). Gibt True zurueck, wenn diese Instanz die erste ist.
+
+    Namensraum ``Global\\NoaToDo-<User-SID>`` (V3, Rest-Pflicht aus Phase 8):
+    ein ``Local\\``-Mutex ist nur pro Logon-Session eindeutig, sodass derselbe
+    Benutzer per RDP oder Benutzerumschaltung eine zweite Instanz auf demselben
+    Tresor starten koennte (genau die Korruption, gegen die G19 existiert).
+    ``Global\\`` ist maschinenweit, das SID-Suffix macht ihn pro Benutzer
+    eindeutig (verschiedene Benutzer haben eigene Tresore und duerfen je eine
+    Instanz laufen lassen). Ohne ermittelbare SID Fallback auf den alten Namen.
     """
     global _single_instance_handle
     kernel32 = ctypes.windll.kernel32
-    _single_instance_handle = kernel32.CreateMutexW(None, False, "Local\\NoaToDoSingleton")
+    sid = _current_user_sid()
+    name = f"Global\\NoaToDo-{sid}" if sid else "Local\\NoaToDoSingleton"
+    _single_instance_handle = kernel32.CreateMutexW(None, False, name)
     _ERROR_ALREADY_EXISTS = 183
     return kernel32.GetLastError() != _ERROR_ALREADY_EXISTS
 
@@ -452,50 +514,153 @@ def _frontend_stamp() -> str:
     return "Frontend: " + ", ".join(parts)
 
 
-def main() -> None:
-    # Sichtbare Startmeldung: bestaetigt im Terminal, welcher Code laeuft. Hilft,
-    # einen veralteten Start zu erkennen (fehlt die Zeile, laeuft nicht dieser Stand).
-    # Zusaetzlich die Aenderungszeit der geladenen Frontend-Dateien ausgeben: das
-    # Frontend wird per file:// frisch von der Platte geladen (kein Hot-Reload im
-    # laufenden Fenster), daher zeigen diese Zeitstempel zweifelsfrei, welcher
-    # Stand gerade geladen wird. Stimmen sie nicht mit der letzten Bearbeitung
-    # ueberein, laeuft noch ein altes Fenster: erst ganz schliessen, dann neu starten.
-    print("[NoaToDo] Start. " + _frontend_stamp(), flush=True)
+def _current_dark(api: Api) -> bool:
+    """Aktuelles Dark-Setting (Titelleisten-Theme); Default dark, wenn keine
+    entsperrte DB da ist (Onboarding hat noch keinen Tresor)."""
+    try:
+        raw = api.db.get_setting("dark")
+        return str(raw).lower() != "false" if raw is not None else True
+    except Exception:
+        return True
 
-    # Single-Instance-Schutz (Gate G19): zweite Instanz sofort beenden, sonst
-    # Profil-/DB-Kollision auf dem gemeinsamen festen Profilordner.
-    if not _acquire_single_instance():
-        ctypes.windll.user32.MessageBoxW(
-            0,
-            "NoaToDo läuft bereits. Es kann nur eine Instanz geöffnet sein.",
-            "NoaToDo",
-            0x40,  # MB_ICONINFORMATION
-        )
-        print("[NoaToDo] Bereits aktiv, zweite Instanz beendet sich.", flush=True)
+
+def _kill_orphaned_webview2(profile_dir: str) -> None:
+    """Verwaiste ``msedgewebview2.exe`` beenden, die ``profile_dir`` sperren (G14 c).
+
+    Nur Prozesse, deren Kommandozeile auf genau diesen Profilordner zeigt
+    (nicht pauschal alle: andere Apps nutzen WebView2). Ueberleben sie einen
+    harten Kill, sperren sie den Ordner und der Wisch (bzw. der naechste Start)
+    scheitert an ``0x800700AA`` (ERROR_BUSY). Best effort.
+    """
+    if not profile_dir:
         return
+    esc = profile_dir.replace("\\", "\\\\")
+    ps = (
+        "Get-CimInstance Win32_Process -Filter \"name='msedgewebview2.exe'\" | "
+        f"Where-Object {{ $_.CommandLine -like '*{esc}*' }} | "
+        "ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }"
+    )
+    try:
+        subprocess.run(
+            ["powershell.exe", "-NoProfile", "-NonInteractive", "-Command", ps],
+            capture_output=True, timeout=15,
+            creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+        )
+    except Exception:
+        pass
 
-    # Altlasten frueherer Privatmodus-Starts einmalig wegraeumen (Gate G14).
-    _cleanup_stale_webview_profiles()
 
-    # WebView2-Cache bei jedem Start leeren, damit Frontend-Aenderungen sofort
-    # sichtbar sind (siehe _purge_webview_cache). Behebt den "alte Version laeuft
-    # trotz Neustart"-Bug, der mit dem festen Profilordner aufkam.
+def _wipe_profile_dir() -> None:
+    """``PROFILE_DIR`` sicher freigeben und wischen (Gate G14, teardown Schritt 9).
+
+    Wartet kurz, bis die WebView2-Kindprozesse selbst enden (Normalfall nach
+    ``window.destroy()``); beendet sonst gezielt die verwaisten
+    ``msedgewebview2.exe`` (Crash-/Kill-Fall) und loescht den Ordner. Operiert
+    auf dem effektiven (Store-Python-umgeleiteten) Pfad, weil ``os``-Zugriffe
+    die Umleitung automatisch sehen (V8). ``LOCK_PROFILE_DIR`` existiert im
+    nativen Fallback nicht (N11.8.3), es gibt also nichts weiteres zu wischen.
+    """
+    if not os.path.isdir(PROFILE_DIR):
+        return
+    # Kurzes Fenster, damit die Kinder nach dem Fenster-Abbau selbst schliessen.
+    for _ in range(20):
+        try:
+            shutil.rmtree(PROFILE_DIR)
+            return
+        except OSError:
+            time.sleep(0.1)
+    # Immer noch gesperrt: verwaiste Prozesse gezielt beenden, dann erneut.
+    _kill_orphaned_webview2(PROFILE_DIR)
+    try:
+        shutil.rmtree(PROFILE_DIR)
+    except OSError:
+        # Best effort (N11.11.2 Fehlerregel): der naechste Start purged ohnehin.
+        pass
+
+
+def _finish_native_teardown() -> None:
+    """teardown-Schritt 9 nach dem Fenster-Abbau: PROFILE_DIR wischen (G14),
+    danach Schritt 10 (Funk-Ausgangszustand wiederherstellen, N11.5/N11.10)."""
+    _wipe_profile_dir()
+    _restore_radio_if_needed()
+
+
+def _restore_radio_if_needed() -> None:
+    """teardown Schritt 10 (N11.5/N11.10): Funk-Ausgangszustand wiederherstellen.
+
+    Nur wenn die App den Flugmodus selbst eingeschaltet hatte
+    (``config.json.radio_baseline`` gesetzt): den beim ersten App-Offline
+    gemerkten Zustand real wieder herstellen (WLAN/Bluetooth/Mobilfunk) und den
+    Merker loeschen. Bei Sperre/Auto-Lock ist die Sequenz hier schon beendet, es
+    passiert also nie beim Sperren (N11.10). Best effort. Derselbe Aufruf raeumt
+    beim naechsten Start einen durch einen Absturz liegengebliebenen Merker auf
+    (Crash-Recovery, N11.10).
+    """
+    try:
+        cfg = config_module.load_config()
+    except config_module.ConfigDamaged:
+        return
+    if not cfg or not cfg.get("radio_baseline"):
+        return
+    baseline = cfg.get("radio_baseline")
+    try:
+        radio_module.get_controller().restore(baseline)
+    except Exception:
+        pass
+    cfg["radio_baseline"] = None
+    try:
+        config_module.save_config(cfg)
+    except Exception:
+        pass
+
+
+def _determine_boot_state(api: Api) -> None:
+    """Boot-Weiche nach N11.8.2/N11.13/N11.15: setzt api._boot_state u.a.
+
+    - config.json fehlt komplett -> Onboarding (Normalfall Erststart).
+    - config.json unbrauchbar -> vault_error/config_damaged (N6, Datei nach
+      .bad gedreht in load_config).
+    - config.json ok, aber tasks.db.enc am Pfad fehlt -> vault_error/
+      vault_unreachable (N11.15.3, kein stiller Erststart).
+    - config.json ok und Datei da -> locked (Lock-Screen, nur Passphrase).
+    """
+    try:
+        cfg = config_module.load_config()
+    except config_module.ConfigDamaged:
+        api._boot_state = "vault_error"
+        api._boot_reason = "config_damaged"
+        api._vault_path = None
+        api.locked = True
+        return
+    if cfg is None:
+        api._boot_state = "onboarding"
+        api._vault_path = None
+        api.locked = False
+        return
+    api._config_cache = cfg
+    vault_path = cfg.get("vault_path")
+    api._vault_path = vault_path
+    if not vault_path or not os.path.exists(vault_path):
+        api._boot_state = "vault_error"
+        api._boot_reason = "vault_unreachable"
+        api.locked = True
+        return
+    api._boot_state = "locked"
+    api.locked = True
+
+
+def run_webview(api: Api, icon: str) -> None:
+    """Das WebView-Hauptfenster (entsperrt oder im Onboarding) bauen und laufen.
+
+    Blockiert, bis das Fenster abgebaut ist (Lock, Quit, Killswitch, Reset,
+    Fenster-X). Danach kehrt ``webview.start`` zurueck und die Boot-Schleife
+    fuehrt die nativen teardown-Schritte 9 bis 11 aus (G35).
+    """
+    # Beim (Neu-)Aufbau der Ansicht ist keine Sperre im Gang (N11.8.3 Frage 4:
+    # das Fenster kommt immer maximiert zurueck, nie mini).
+    api._teardown_in_progress = False
+    api._mini = False
     _purge_webview_cache()
-
-    # Per-Monitor-V2-DPI-Kontext: muss vor dem ersten Fenster gesetzt sein.
-    # Python.exe hat kein DPI-Manifest und laeuft sonst als DPI-unaware,
-    # was bewirkt, dass Titelleiste und Rahmen bei erhoehter Monitor-Skalierung
-    # kleiner erscheinen als bei anderen Windows-Apps. Scheitert dieser Aufruf
-    # (z.B. weil PyWebView ihn schon gesetzt hat), ist das kein Fehler.
-    ctypes.windll.user32.SetProcessDpiAwarenessContext(ctypes.c_void_p(-4))
-
-    # Vor dem Fenster-Start: Taskbar soll das App-Icon statt python.exe zeigen.
-    _set_app_user_model_id()
-
-    # Schicht-1-Schlüssel: in der Entwicklung fester Dev-Key (Bauplan Phase 1).
-    # In Phase 8 wird er aus der Passphrase via Argon2id abgeleitet.
-    database = db_module.connect()
-    api = Api(database)
 
     window = webview.create_window(
         "NoaToDo",
@@ -503,55 +668,68 @@ def main() -> None:
         js_api=api,
         width=1200,
         height=800,
-        # Die App startet maximiert (Vollbild-Fenster), nicht im kleinen
-        # 1200x800-Fenster. Breite/Höhe bleiben als Größe nach dem Wieder-
-        # herstellen aus dem Maximierungszustand erhalten.
+        # Immer maximiert (N11.6/N11.8.3 Frage 4), nie Mini ueber die Sperrgrenze.
         maximized=True,
-        # Unter der normalen Layout-Mindestgröße, damit der Mini-Modus
-        # (Api.set_mini, ~360px breit, oben rechts angeheftet) wirklich
-        # schrumpfen kann und nicht von der OS-Mindestgröße geblockt wird.
         min_size=(340, 480),
-        # Gate G34 (b): Task-/Listentext ist NICHT selektierbar. PyWebView
-        # deaktiviert die Textselektion zwar per Default, aber das hier explizit
-        # zu setzen macht aus dem unbeabsichtigten Default eine bewusste,
-        # dokumentierte Entscheidung: markieren + natives Strg+C (an der
-        # Clipboard-Haertung G23 vorbei) bleibt so ausgeschlossen. Ein spaeteres
-        # text_select=True "fuer Komfort" muss diese Zeile bewusst aendern.
-        # Eingabefelder bleiben selektierbar (Phase 6.5 Punkt 3, akzeptiert).
+        # Gate G34 (b): Task-/Listentext ist NICHT selektierbar (bewusst gesetzt).
         text_select=False,
     )
-    api._window = window  # privat, sonst kollidiert es mit PyWebViews Methoden-Introspektion
+    api._window = window
+
+    # teardown-Request fuer die WebView-Phase (G35 Schritte 9-11 folgen nach dem
+    # Fenster-Abbau in der Boot-Schleife): das Fenster ueber den UI-Thread
+    # schliessen, damit webview.start() zurueckkehrt.
+    def request_teardown():
+        form = getattr(window, "native", None)
+        if form is not None:
+            try:
+                from System import Action
+                form.BeginInvoke(Action(form.Close))
+                return
+            except Exception:
+                pass
+        try:
+            window.destroy()
+        except Exception:
+            pass
+
+    api._request_teardown = request_teardown
 
     def on_start():
-        # Gate G12: externe Navigation abriegeln (window.location/window.open
-        # zu http/https werden verweigert, die App bleibt auf index.html).
+        # Gate G12: externe Navigation abriegeln.
         _wire_navigation_guard(window)
 
-        # Windows-Sitzungssperre-Hook entfaellt bewusst (N11.8.4: Win+L loest keine
-        # App-Sperre aus; die Auto-Sperre laeuft stattdessen als Hintergrund-Timer).
-        # Alle nativen Fenster-Operationen laufen ueber den UI-Thread (BeginInvoke),
-        # NICHT direkt aus diesem Worker-Thread: sonst Deadlock mit der WebView2-
-        # Initialisierung, siehe _run_on_ui_thread. Im UI-Thread existiert das
-        # Handle bereits, daher _get_hwnd ohne wait.
         def _startup_window_setup():
             hwnd = _get_hwnd(window)
             icon_path = os.path.join(HERE, "frontend", "icon.ico")
             _apply_window_icon(window, icon_path)
-            # Titelleiste kommt aus Form.Icon (oben), die Taskbar braucht wegen der
-            # expliziten AppUserModelID ein eigens registriertes Icon, sonst bleibt
-            # der Taskbar-Button generisch. Siehe _apply_taskbar_identity.
             _apply_taskbar_identity(hwnd, _APP_USER_MODEL_ID, icon_path)
-            raw = database.get_setting("dark")
-            initial_dark = str(raw).lower() != "false" if raw is not None else True
-            _apply_titlebar_theme(hwnd, initial_dark)
-            # DWM-Frame-Neuberechnung: DWM-Attribute gelten visuell erst nach
-            # SWP_FRAMECHANGED vollstaendig. Stellt sicher, dass die Titelleiste
-            # sofort in der richtigen Hoehe und Farbe gerendert wird.
+            _apply_titlebar_theme(hwnd, _current_dark(api))
             if hwnd:
                 ctypes.windll.user32.SetWindowPos(
                     hwnd, 0, 0, 0, 0, 0,
                     _SWP_NOSIZE | _SWP_NOMOVE | _SWP_NOZORDER | _SWP_NOOWNERZORDER | _SWP_FRAMECHANGED,
                 )
+            # Fenster-X (FormClosing) nimmt denselben sicheren Beenden-Pfad wie
+            # der Off-Knopf (B.8 Punkt 2 / G14 / G35): teardown('quit'). Nur,
+            # wenn nicht ohnehin schon eine teardown-Sequenz laeuft (Lock/Quit/
+            # Killswitch/Reset schliessen das Fenster selbst, dann wuerde ein
+            # zweiter quit_app next_state verfaelschen).
+            try:
+                native = getattr(window, "native", None)
+                if native is not None:
+                    from System.Windows.Forms import FormClosingEventHandler
+
+                    def on_form_closing(_sender, _args):
+                        if not api._teardown_in_progress:
+                            api._teardown_in_progress = True
+                            try:
+                                security_module.run_teardown("quit", api._session)
+                            except Exception:
+                                pass
+                    native.FormClosing += FormClosingEventHandler(on_form_closing)
+            except Exception:
+                pass
 
         _run_on_ui_thread(window, _startup_window_setup)
 
@@ -563,18 +741,10 @@ def main() -> None:
         api._on_setting_change = _on_setting_change
 
         def _on_frame_changed(mini: bool) -> None:
-            # Der Mini-Modus wechselt FormBorderStyle und erzeugt damit das
-            # native Fensterhandle neu (die HWND-Zahl aendert sich). Nach dem
-            # Verlassen muss die Titelleisten-Farbe neu ans Theme angeglichen
-            # werden. Ueber den UI-Thread, sonst Cross-Thread-Deadlock wie in
-            # on_start.
             def _frame_setup():
                 h = _get_hwnd(window)
                 if not mini:
-                    # Rahmen ist zurueck: Titelleisten-Farbe wieder ans Theme angleichen.
-                    raw2 = database.get_setting("dark")
-                    dark = str(raw2).lower() != "false" if raw2 is not None else True
-                    _apply_titlebar_theme(h, dark)
+                    _apply_titlebar_theme(h, _current_dark(api))
                     if h:
                         ctypes.windll.user32.SetWindowPos(
                             h, 0, 0, 0, 0, 0,
@@ -585,21 +755,7 @@ def main() -> None:
 
         api._on_frame_changed = _on_frame_changed
 
-    icon = os.path.join(HERE, "frontend", "icon.ico")
-    # Fester WebView2-Profilordner statt Privatmodus (Gate G14, Stand 2026-06-20).
-    # Frueher lief die App mit private_mode=True und legte pro Start ein neues
-    # Temp-Profil an, das sich anhaeufte und den Start ausbremste. Der feste Ordner
-    # (private_mode=False, storage_path=PROFILE_DIR) ist erst zusammen mit dem
-    # Single-Instance-Schutz oben (Gate G19) tragfaehig: er verhindert, dass eine
-    # zweite/verwaiste Instanz das geteilte Profil sperrt (sonst weisses Fenster,
-    # "reagiert nicht"). Was im Profil liegt, ist nur nicht-sensibler UI-Cache, nie
-    # Aufgabeninhalte (siehe Kommentar an PROFILE_DIR). Das sichere Wischen dieses
-    # Ordners bei lock()/panic()/sauberem Quit folgt in Phase 8 (Bauplan G14).
     os.makedirs(PROFILE_DIR, exist_ok=True)
-    # Gate G12: window.open/target=_blank NIE im System-Browser oeffnen. Mit
-    # False laedt pywebviews NewWindowRequested-Handler das Ziel stattdessen
-    # per load_url im selben Fenster, wo der NavigationStarting-Waechter
-    # (_wire_navigation_guard) jede externe Adresse verwirft.
     webview.settings["OPEN_EXTERNAL_LINKS_IN_BROWSER"] = False
     webview.start(
         on_start,
@@ -608,6 +764,108 @@ def main() -> None:
         private_mode=False,
         storage_path=PROFILE_DIR,
     )
+    api._window = None
+
+
+def main() -> None:
+    print("[NoaToDo] Start. " + _frontend_stamp(), flush=True)
+
+    # Single-Instance-Schutz (Gate G19): zweite Instanz sofort beenden.
+    if not _acquire_single_instance():
+        ctypes.windll.user32.MessageBoxW(
+            0,
+            "NoaToDo läuft bereits. Es kann nur eine Instanz geöffnet sein.",
+            "NoaToDo",
+            0x40,  # MB_ICONINFORMATION
+        )
+        print("[NoaToDo] Bereits aktiv, zweite Instanz beendet sich.", flush=True)
+        return
+
+    _cleanup_stale_webview_profiles()
+    ctypes.windll.user32.SetProcessDpiAwarenessContext(ctypes.c_void_p(-4))
+    _set_app_user_model_id()
+    # Verwaiste (verschluesselte) Arbeitsdateien eines Absturzes verwerfen
+    # (N11.9: keine Crash-Recovery aus der Arbeitsdatei).
+    security_module.cleanup_work_dir()
+    # N11.10 Crash-Recovery: hat ein frueherer Lauf den Flugmodus eingeschaltet
+    # und ist abgestuerzt, ohne Schritt 10 zu erreichen, liegt der Ausgangs-Merker
+    # noch in config.json. Ihn hier einmalig wiederherstellen und wegraeumen, damit
+    # der Funk nicht dauerhaft aus bleibt.
+    _restore_radio_if_needed()
+    # Spike-Betriebsbedingung (N11.18): setup_app() (SetCompatibleTextRendering-
+    # Default) MUSS vor dem ersten nativen Fenster laufen; es ist idempotent, der
+    # spaetere webview.start() ueberspringt es dann. Ohne diesen Aufruf wirft der
+    # erste WebView-Start nach dem nativen Lock-Fenster InvalidOperationException.
+    try:
+        from webview.platforms.winforms import setup_app
+        setup_app()
+    except Exception:
+        pass
+
+    session = security_module.Session()
+    api = Api(session)
+    icon = os.path.join(HERE, "frontend", "icon.ico")
+
+    _determine_boot_state(api)
+
+    # Boot-Schleife: natives Lock-Fenster (gesperrt/Fehler) <-> WebView-Fenster
+    # (Onboarding/entsperrt). Genau EIN Fenster zur Zeit (Spike-Frage 3), die
+    # nativen teardown-Schritte 9-11 laufen nach jedem Fenster-Abbau (G35).
+    try:
+        while True:
+            state = api._boot_state
+            if state in ("locked", "vault_error"):
+                import lockwindow
+                res = lockwindow.run_lock_window(api, state, api._boot_reason, icon)
+                if res == "quit":
+                    _finish_native_teardown()
+                    break
+                if res == "onboarding":
+                    # Reset gelaufen (teardown('reset') hat Schritt 9 noch nicht
+                    # gemacht, es gab kein WebView): defensiv wischen, dann ins
+                    # Onboarding-WebView.
+                    _finish_native_teardown()
+                    api._boot_state = "onboarding"
+                    api.locked = False
+                    continue
+                # res == "unlocked": Tresor offen, weiter zum WebView-Fenster.
+                api.locked = False
+
+            # Onboarding oder entsperrt -> WebView-Hauptfenster.
+            run_webview(api, icon)
+
+            # Fenster ist abgebaut: die nativen teardown-Schritte 9-11.
+            _finish_native_teardown()
+            ns = session.next_state
+            if ns == "exit":
+                break
+            if ns == "locked":
+                api.locked = True
+                api._boot_state = "locked"
+                api._boot_reason = None
+                session.next_state = "exit"   # bis zum naechsten teardown
+                continue
+            if ns == "onboarding":
+                api.locked = False
+                api._boot_state = "onboarding"
+                session.next_state = "exit"
+                continue
+            # Kein teardown gelaufen (unerwartet): sicherheitshalber beenden.
+            break
+    finally:
+        _release_single_instance()
+    print("[NoaToDo] Beendet.", flush=True)
+
+
+def _release_single_instance() -> None:
+    """Single-Instance-Mutex freigeben (teardown Schritt 11)."""
+    global _single_instance_handle
+    if _single_instance_handle:
+        try:
+            ctypes.windll.kernel32.CloseHandle(_single_instance_handle)
+        except Exception:
+            pass
+        _single_instance_handle = None
 
 
 def _debug_enabled() -> bool:

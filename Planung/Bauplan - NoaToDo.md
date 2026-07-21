@@ -2644,10 +2644,13 @@ Widerspruch. Das Ueberschreiben beim regulaeren Write-back eines bereits geoeffn
     WinRT-Projektionspaket; heute fehlt das in Phase 0 / `requirements` / G11. Gewaehlt
     werden die **modularen PyWinRT-Pakete** (kleinere Abhaengigkeitsflaeche als das
     Sammelpaket `winsdk`, im Zweifel pro Sicherheit die schmalere Wahl):
-    `winrt-runtime`, `winrt-Windows.Devices.Radios`, `winrt-Windows.Devices.Enumeration`
-    sowie `winrt-Windows.Foundation` (fuer die `IAsyncOperation`-Awaits). Alle werden in
-    `requirements.txt` **und** exakt versionsgepinnt in `requirements.lock.txt`
-    aufgenommen und fallen unter die Pinning-/Supply-Chain-Pruefung aus **G11**.
+    `winrt-runtime`, `winrt-Windows.Devices.Radios`, `winrt-Windows.Devices.Enumeration`,
+    `winrt-Windows.Foundation` (fuer die `IAsyncOperation`-Awaits) sowie
+    `winrt-Windows.Foundation.Collections` (beim Bau 2026-07-21 ergaenzt: die
+    `IVectorView` aus `GetRadiosAsync` ist ohne ihre Projektion nicht iterierbar). Alle
+    werden in `requirements.txt` **und** exakt versionsgepinnt in `requirements.lock.txt`
+    (Stand 2026-07-21: `winrt-*==3.2.1`) aufgenommen und fallen unter die
+    Pinning-/Supply-Chain-Pruefung aus **G11**.
     `winsdk` bleibt nur die dokumentierte Rueckfalloption, falls die modularen Pakete auf
     der Zielplattform nicht sauber installieren.
 
@@ -3063,6 +3066,28 @@ u.a. wurde der G12-DevTools-Prüfweg mit dieser Abnahme verifiziert.)*
 
 ### Phase 8: Sicherheits-Tiefe (`backend/security.py`)
 
+> **✅ PHASE 8 IST FERTIG (2026-07-21).** Der Sicherheitskern ist gebaut und real
+> verifiziert: `backend/security.py` (Argon2id + Doppel-Kaskade ChaCha20/SQLCipher,
+> `.enc`-Format G16, DPAPI-Pepper, Rate-Limit-Leiter, Write-back, Auto-Sperre, die eine
+> `teardown(reason)`-Sequenz), `backend/config.py` (`config.json`, B.11), das native
+> Lock-Fenster `Code/lockwindow.py` (Spike-Ergebnis N11.18), die Boot-Schleife in
+> `main.py` (natives Lock-Fenster <-> WebView, PROFILE_DIR-Wisch) und der Onboarding-Flow
+> im Frontend. `backend/security.py` ist **kein Stub mehr**. Erledigte Gates: G6, G7, G8,
+> G9, G13, G14, G15, G16, G17, G18, G19-Rest (V3), G25, G28, G31, G32, G33, G35 (Details
+> in der B.9-Gate-Tabelle). Der Zweitprofil-Spike (U3/N11.8.3) ist ausgeführt, sein
+> Ergebnis unten und in Register N11.18. **Bewusst NICHT Teil des Phase-8-Kerns (eigene
+> N11-Features):** N11.5 echter Windows-Flugmodus ist inzwischen gebaut (erledigt
+> 2026-07-21, `backend/radio.py`: `set_online` schaltet ueber die WinRT-Radio-APIs die
+> echten Funkgeraete, `teardown` Schritt 10 stellt den Ausgangszustand real wieder her);
+> offen bleibt N11.6 Theme-folgt-Windows + Ton-UI (heute noch das
+> `dark`-Setting; `sound`/`autoLock` sind in der Whitelist, `autoLock` hat schon UI).
+> Kleine offene UX-Ergänzungen: BitLocker-Empfehlung und der SSD-Restgrenzen-Einmalhinweis
+> in der Setup-UI (die realen Werte/Löschungen dahinter existieren). Real verifiziert
+> (echte GUI + CDP/UIA + `tools/verify_crypto.py`): Onboarding -> `create_vault` ->
+> entsperrte App, Mutationen verschlüsselt persistiert (G28 auf der echten `tasks.db.enc`),
+> Lock -> WebView abgebaut + natives Fenster + `PROFILE_DIR` gewischt, Boot mit Tresor ->
+> natives Lock-Fenster, nativer Unlock-Klick -> `unlocked`.
+
 **Ziel:** Lock-Screen, Emergency/Panic und die **immer aktive** doppelte Datenbank-
 Verschlüsselung real machen, das Kernversprechen des lokalen, verschlüsselten Tresors.
 Verschlüsselung ist **kein Modus und keine Einstellung**: es gibt keinen Weg, sie
@@ -3177,6 +3202,60 @@ liegt (G6).
    gewischt werden.** Abnahme (G35-nah): vor Anzeige des Lock-Screens ist `PROFILE_DIR`
    nachweislich freigegeben und gewischt; andernfalls ist der Build nicht
    abnahmefaehig.
+
+**Spike-Ergebnis (2026-07-21, ausgefuehrt als `Code/tools/spike_u3_lockwindow.py`, Register N11.18):**
+
+Der Spike wurde als erster Handgriff der Phase 8 real ausgefuehrt; alle Pruefpunkte
+liefen auf der Zielmaschine durch. Ergebnisse entlang der neun Fragen:
+
+1. **Kein Zwei-Profil-Beweis moeglich, der native Fallback ist damit verbindlich.**
+   `storage_path`/`private_mode` sind in PyWebView 5.x ausschliesslich Parameter von
+   `webview.start()` (global pro Prozess); `create_window()` kennt sie nicht. Zwei
+   Fenster mit getrennten Profilen bietet die API schlicht nicht an, der Beweis kann
+   also nicht erbracht werden. Gemaess der Spike-Grundhaltung (nicht annehmen,
+   sondern beweisen) gilt der native Fallback: **das Lock-Fenster ist ein schlankes
+   natives WinForms-Fenster ohne WebView, es gibt kein `LOCK_PROFILE_DIR`.**
+   Zusaetzlich empirisch bewiesen (Tragfaehigkeit des Fallbacks): (a) nach
+   `window.destroy()` kehrt `webview.start()` zurueck, (b) die
+   `msedgewebview2.exe`-Kindprozesse enden von selbst und `PROFILE_DIR` laesst sich
+   danach restlos loeschen (G14-Wisch bewiesen), (c) ein **zweiter**
+   `create_window()`+`start()`-Zyklus im selben Prozess funktioniert (Sperren =
+   Hauptfenster komplett abbauen, Entsperren = neu aufbauen), (d) reine
+   WinForms-Fenster (`Application.Run`) laufen vor, zwischen und nach den
+   WebView-Zyklen. **Betriebsbedingung (im Code zu dokumentieren):** PyWebViews
+   `setup_app()` (ruft `SetCompatibleTextRenderingDefault`) muss VOR dem ersten
+   nativen Fenster einmal aufgerufen werden; es ist idempotent geschuetzt, der
+   spaetere `webview.start()` ueberspringt es dann. Ohne diesen Aufruf wirft der
+   erste WebView-Start nach einem nativen Fenster `InvalidOperationException`.
+2. **js_api-Umfang:** entfaellt im nativen Fallback; das Lock-Fenster hat gar keine
+   Bridge, `unlock`/`quit_app`/`reset_vault` laufen als direkte Backend-Aufrufe.
+   Die G13-Allowlist gilt unveraendert fuer die (einzige) Bridge des Hauptfensters.
+3. **Taskbar:** baulich immer nur ein Fenster zur Zeit (das Hauptfenster ist beim
+   Anzeigen des Lock-Fensters bereits abgebaut), also ein Eintrag; Sichtpruefung in
+   der Phase-8-Abnahme.
+4. **Fensterzustand nach Unlock:** durch Neuaufbau mit `maximized=True` baulich
+   immer maximiert, nie Mini (U24 bestaetigt).
+5. **X-Knopf des Lock-Fensters:** FormClosing-Handler ruft `teardown("quit")`
+   (Umsetzungspflicht, kein Spike-Risiko).
+6. **Boot-Reihenfolge:** bei vorhandenem Tresor startet das native Lock-Fenster vor
+   jedem WebView; das Hauptfenster entsteht erst nach erfolgreichem Unlock (durch
+   Punkt 1 (d) bewiesen moeglich).
+7. **WebView2-Prozesse vor dem Wischen beendet:** bewiesen (Punkt 1 (b)); der
+   Teardown wartet auf das Prozess-Ende, bevor gewischt wird.
+8. **DevTools am Lock-Fenster:** baulich ausgeschlossen (kein WebView, keine Engine).
+9. **Tastatur im gesperrten Zustand:** das native Fenster fokussiert per
+   KeyDown-Handler jede druckbare Taste ins Passwortfeld; App-Shortcuts existieren
+   dort baulich nicht (Umsetzungspflicht im Lock-Fenster-Code).
+
+**G6-Nebenbefund desselben Spikes:** `sqlcipher3` 2.6.0 (SQLite 3.51.1) exponiert
+**kein** `Connection.serialize`/`deserialize`; das verlaessliche Serialisieren des
+verschluesselten Images aus `:memory:` gibt die Build-Variante damit nicht her.
+Gemaess B.7/N11.9 ist der Fallback **verbindlich**: die Arbeitskopie ist eine
+**SQLCipher-verschluesselte Arbeitsdatei** in einem benutzerprivaten Pfad (nie
+Klartext auf der Platte); Persistenzziel bleibt in jedem Fall `tasks.db.enc` (G17,
+U19/U20). Schnappschuesse fuer den Write-back entstehen ueber `VACUUM INTO` (liefert
+eine mit demselben Schluessel verschluesselte, konsistente Kopie, ohne die
+Verbindung zu schliessen).
 
 **Tun:**
 1. **App-Sperre nach der Sperr-Politik aus B.8:** `lock()` setzt `locked=True`, verwirft
@@ -3775,6 +3854,7 @@ liegen durchgestrichen in Anhang 3, Umbau-Etappe 5.)
 | N11.15 (.1-.6) / U2, V8 | 2026-07-13, .5/.6: 2026-07-15 | `config.json`: Schema, Fehlerfaelle, unerreichbarer Tresor, Redirect, Ueberschreib-Schutz | B.11 |
 | N11.16 | 2026-07-17 | Alle Toasts bis auf den Undo-Toast (N11.2.1) ersatzlos entfernt (Nutzerwunsch: keine Benachrichtigungen): erst die Erfolgs-Bestaetigungen, dann auch die Fehler-/Validierungs-Toasts; Fehler laufen still bzw. bleiben ueber das Status-Modal (G29-Ringpuffer) einsehbar | B.4 + B.2 (Toast-Politik + Fehlercode-Katalog) |
 | N11.17 | 2026-07-21 | Panik-Endschirm bleibt dauerhaft ehrlich („Workspace cleared"); der fuer Phase 8 vorgesehene, bewusst falsche Aussenschirm („All data securely wiped") wird nicht gebaut, damit gilt G22 ausnahmslos (kehrt die frueher einzige G22-Ausnahme aus N10.3/B.10.5 um) | B.10.5 (+ B.4 N10.3, B.9 G22) |
+| N11.18 / U3-Ergebnis | 2026-07-21 | Zweitprofil-Spike ausgefuehrt (`Code/tools/spike_u3_lockwindow.py`): kein Zwei-Profil-Beweis moeglich, **nativer Lock-Fenster-Fallback verbindlich** (kein `LOCK_PROFILE_DIR`); WebView-Abbau/Neuaufbau im selben Prozess samt G14-Wischbarkeit bewiesen; `setup_app()`-Vorbedingung dokumentiert; G6-Nebenbefund: `sqlcipher3` ohne `serialize` -> N11.9-Arbeitsdatei-Fallback (Schnappschuss via `VACUUM INTO`) verbindlich | Phase 8 (Spike-Ergebnis) |
 
 
 
@@ -4173,10 +4253,13 @@ Icon verwenden.
 
 ## Schnell-Checkliste (für die ausführende KI)
 
-*(Stand 2026-07-17: Phasen 0 bis 7 sind abgeschlossen, die App laeuft lokal. Die Haken
-fuer 0 bis 5 wurden am 2026-07-13 nachgetragen. Pflege-Regel: Diese Liste wird bei
-**jedem** Phasenabschluss sofort mit Datum abgehakt. Ein offener Haken bei einer laengst
-fertigen Phase ist eine Einladung, von vorne zu bauen.)*
+*(Stand 2026-07-21: Phasen 0 bis 8 sind abgeschlossen, die App laeuft lokal mit echter
+Doppel-Verschluesselung, Onboarding, Sperre/Entsperre, Auto-Sperre, Killswitch/Reset. Der
+echte Flugmodus (N11.5) ist ebenfalls gebaut. Es fehlt nur noch Phase 9 (Build/Packaging)
+sowie das eigenstaendige N11-Feature N11.6 (Theme-folgt-Windows + Ton-UI). Die Haken fuer 0 bis 5
+wurden am 2026-07-13 nachgetragen. Pflege-Regel: Diese Liste wird bei **jedem**
+Phasenabschluss sofort mit Datum abgehakt. Ein offener Haken bei einer laengst fertigen
+Phase ist eine Einladung, von vorne zu bauen.)*
 
 - [x] Phase 0, Struktur + Abhängigkeiten, leeres Fenster (erledigt; `requirements.lock.txt` liegt vor, 🔒 G11 damit umgesetzt)
 - [x] Phase 1, `db.py` Schema + CRUD (erledigt; kein Demo-Seed mehr, N11.1.4)
@@ -4187,8 +4270,8 @@ fertigen Phase ist eine Einladung, von vorne zu bauen.)*
 - [x] Phase 6, `app.js` komplette UI + Interaktionen  ← **Meilenstein: lokal voll nutzbar**
 - [x] Phase 6.5, UX-Nacharbeiten (Inline-Edit, Task-Löschen, Task-Auswahl, gehärtete Einzel-Task-Kopie ✅G23, Strg+C entfernt, Mini-on-top, Screenshot-Schutz ❌G26 verworfen); Rest-Pflichten in 7 verplant
 - [x] Phase 7, zweistufiger Export (nur md/txt, N11.2) + Undo (nur Listen-Löschen) + `move_task`/`reorder_lists` **+ 🔒 G20 (lokale Eingabe-Validierung), G21 (Export-Härtung + Save-Dialog), G22 (ehrlicher Status), G29 (Fehler-Hygiene + Fehlercode-Katalog B.2 + Logging-Politik, N11.12), G12 vorgezogen: alle ✅** (erledigt 2026-07-17; G23 schon 2026-06-10)
-- [ ] 🔒 G30 (Doku, **vor** Phase 8): Bedrohungsmodell **B.10** gelesen und beim Bauen zugrunde gelegt (Angreiferklassen K1-K6, Nicht-Ziele, Voraussetzungen; Abschnitt ergänzt 2026-07-13 aus Plananalyse S4). Jedes neue Gate trägt seine Klasse in B.10.6 nach
-- [ ] Phase 8, Lock / Emergency / Doppel-Kaskade AES-256 + ChaCha20 (B.7) **+ 🔒 G6 (In-Memory-DB), G7 (Hex-Raw-Key), G8 (Argon2id-Kosten; Passphrase nur Mindestlänge 12, kein Stärkemesser, N11.3), 🔴 G9 (`DEV_AES_KEY` entfernen), 🔴 G13 (Lock serverseitig), G14-Rest (PROFILE_DIR sicher wischen bei lock/panic/quit, **Fenster-X = gleicher sicherer Beenden-Pfad wie `quit_app()`**; fester Ordner + Altlasten-Wisch ✅ 2026-06-20), G15 (HKDF/kein Hash), G16 (.enc-Format), G17 (Write-back), G18 (DPAPI-Pepper), G25 (RAM-Hygiene), G28 (Verschlüsselungs-Beweis, N11.9), G31 (RAM-auf-Platte-Lecks: BitLocker-Anzeige, `VirtualLock`, keine Dump-Dateien; A1, 2026-07-15), G32 (Tresor-Ort-Default + Cloud-Warnung; A2, 2026-07-15), G33 (Dev-Altdaten sicher entsorgen; A3, 2026-07-15), 🔴 G35 (eine gemeinsame `teardown(reason)`-Sequenz für alle Ausgänge, N11.11)** (G19 Single-Instance ✅ 2026-06-20 vorgezogen)
+- [x] 🔒 G30 (Doku, **vor** Phase 8): Bedrohungsmodell **B.10** gelesen und beim Bauen zugrunde gelegt (Angreiferklassen K1-K6, Nicht-Ziele, Voraussetzungen; Abschnitt ergänzt 2026-07-13 aus Plananalyse S4). Jedes neue Gate trägt seine Klasse in B.10.6 nach (gelesen 2026-07-21 als erster Handgriff der Phase 8)
+- [x] Phase 8, Lock / Emergency / Doppel-Kaskade AES-256 + ChaCha20 (B.7) **+ 🔒 G6 (In-Memory-DB, N11.18-Ausnahme: verschlüsselte Arbeitsdatei per Fallback, da `sqlcipher3` kein `serialize` bietet), G7 (Hex-Raw-Key), G8 (Argon2id-Kosten; Passphrase nur Mindestlänge 12, kein Stärkemesser, N11.3), 🔴 G9 (`DEV_AES_KEY` entfernt), 🔴 G13 (Lock serverseitig als Allowlist), G14 (PROFILE_DIR sicher gewischt bei lock/autolock/panic/quit inkl. Fenster-X, verwaiste `msedgewebview2.exe` beendet), G15 (HKDF/kein Hash), G16 (.enc-Format), G17 (Write-back), G18 (DPAPI-Pepper), G19-Rest (V3: Mutex auf `Global\NoaToDo-<SID>`), G25 (RAM-Hygiene), G28 (Verschlüsselungs-Beweis, `tools/verify_crypto.py`), G31 (BitLocker-Status, `VirtualLock`), G32 (Tresor-Ort + Cloud-Warnung), G33 (Dev-Altdaten entsorgt), 🔴 G35 (eine `teardown(reason)`-Sequenz): alle ✅** (erledigt 2026-07-21). **Eigene N11-Features:** N11.5 echter Windows-Flugmodus ist gebaut (erledigt 2026-07-21, `backend/radio.py` ueber die WinRT-Radio-APIs; `teardown` Schritt 10 stellt real wieder her). **Offen:** N11.6 Theme-folgt-Windows + Ton-UI (heute noch `dark`-Setting; `sound`/`autoLock` sind schon in der Whitelist, `autoLock` hat UI). **Native Lock-Fenster-Entscheidung (Spike N11.18):** kein Zwei-Profil-WebView, natives WinForms-Lock-Fenster ohne `LOCK_PROFILE_DIR`
 - [ ] Phase 9, Auslieferung + Tests + Build (portable `NoaToDo.exe`, PyInstaller/Nuitka, WebView2-Runtime, Erststart auf fremdem Rechner) **+ 🔒 G27 (Binary-Härtung + Frontend-Integritäts-Manifest, A5 2026-07-15), G34 (Release-Härtung: `NOATODO_DEBUG` wirkungslos, DevTools/Accelerator-Keys/Kontextmenü aus; Sofort-Teil `text_select=False` mit Termin 2026-07-20; A4/A6, 2026-07-15), G11 (Hash-gepinnter Build), G29-Buildprüfung (kein Debug-Modus, kein Logfile, N11.12.2)**
 - [ ] UX-Nachtrag 2026-06-13 (Normen in den Verträgen; Protokoll: Anhang 1, Historie: Anhang 3): N2 Offline-Statuspille, N4 Lock-Screen-Passphrase-UX (8), N5 Panik nur per Maus, kein Hotkey (Entscheid 2026-07-13), N6 Entsperr-Fehlerbildschirm (8), N7 move_task/reorder_lists (Phase 7; clear_completed gestrichen), N8 Roadmap (D.3), N9 Fenster startet maximiert (N11.6), N10 verstärkter Lock + Off-Knopf + Killswitch (UI ✅ 2026-07-08, Sicherheits-Rest Phase 8), N11 Lücken-Klärung 2026-07-09 (verbindlich), N11.10 Sperre schaltet nicht mehr offline (2026-07-13, W1-Entscheid), N11.11 gemeinsame Sperr-/Beenden-Sequenz + Gate G35 (2026-07-13, S5-Entscheid), N11.12 Fehler-Hygiene + Fehlercode-Katalog + Logging-Politik + Gate G29 (2026-07-13, S6-Entscheid), N11.14 Triage des UX/UI-Audits (2026-07-13, S7-Entscheid; **die Triage-Tabelle ist der Status des Audits, nicht das Audit-Dokument**), N11.13 Onboarding-/Tresor-Bridge + dreiwertiger Boot-Zustand + Onboarding-Screens (2026-07-13, U1-Entscheid)
 
@@ -4198,34 +4281,34 @@ fertigen Phase ist eine Einladung, von vorne zu bauen.)*
 |---|---|---|
 | ✅ CSP gesetzt | erledigt | `index.html`, strenger als Minimum |
 | ✅ `esc()` gehärtet | erledigt | maskiert jetzt auch `'` |
-| 🔒 G6 | 8 | In-Memory-DB statt Temp-Arbeitskopie |
-| 🔒 G7 | 8 | Hex-Raw-Key für `PRAGMA key` |
-| 🔒 G8 | 8 | Argon2id feste Soll-Kosten (256 MiB, t=3, p=4, hash_len 32; N11.4.3) + Passphrase-Politik nach N11.3: **nur** Mindestlänge 12, kein Stärkemesser; `MemoryError` -> Code `memory`, nie Absturz/Falsch-Passwort |
-| 🔴 G9 | 8 | **`DEV_AES_KEY` & jeden statischen Schlüssel-Fallback entfernen** (sonst null Verschlüsselung) |
+| ✅ G6 | erledigt (2026-07-21) | Nie eine entschlüsselte DB-Datei auf der Platte. **N11.18-Ausnahme:** `sqlcipher3` bietet kein `:memory:`-`serialize`, daher der verbindliche N11.9-Fallback: SQLCipher-**verschlüsselte** Arbeitsdatei unter `%LOCALAPPDATA%\NoaToDo\work` (nie Klartext), Schnappschuss via `VACUUM INTO`, beim teardown sicher gelöscht |
+| ✅ G7 | erledigt (2026-07-21) | Hex-Raw-Key für `PRAGMA key = "x'<64 Hex>'"` (`db.py`), kein doppeltes KDF, kein Quote-Escaping |
+| ✅ G8 | erledigt (2026-07-21) | Argon2id feste Soll-Kosten (256 MiB, t=3, p=4, hash_len 32; N11.4.3) + Passphrase-Politik nach N11.3: **nur** Mindestlänge 12, kein Stärkemesser; `MemoryError` -> Code `memory`, nie Absturz/Falsch-Passwort |
+| ✅ G9 | erledigt (2026-07-21) | **`DEV_AES_KEY` und `db.connect()`-Default ersatzlos entfernt**; `Database.__init__` verlangt 32 rohe Bytes, es gibt keinen Schlüssel-Fallback-Pfad mehr |
 | 🔒 G11 | 0 / laufend | Abhängigkeiten versions-pinnen (+ Hash-Checking, + Python 3.11.x, U25) |
 | ✅ G12 | erledigt (2026-07-17, vorgezogen) | Externe WebView-Navigation verweigern (`NavigationStarting`-Waechter + `OPEN_EXTERNAL_LINKS_IN_BROWSER=False` in `main.py`) |
-| 🔴 G13 | 8 | **Lock serverseitig durchsetzen, als Allowlist** (gesperrt erlaubt: `unlock`, `quit_app`, `killswitch`, `get_state` sowie die Onboarding-/Reset-Methoden `get_boot_state`, `choose_vault_dir`, `create_vault`, `reset_vault` (N11.13); alles andere liefert `locked`-Fehler, `get_state` nur `{"locked": true}`) |
-| 🔒 G14 | teils erledigt (2026-06-20), Rest 8 | WebView2 ohne Datenspuren: fester Profilordner statt Privatmodus ✅, Altlasten-Wisch beim Start ✅; sicheres Wischen bei lock/panic/quit offen (Phase 8), **inkl. Fenster-X = gleicher Beenden-Pfad wie `quit_app()`**; Wisch immer in-process auf dem effektiven Pfad (Store-Python-Redirect, V8/N11.15.5), Phase-9-Erststart räumt alte Redirect-Pfade einmalig weg |
-| 🔒 G15 | 8 | Argon2id-Master-Secret + HKDF-Domain-Separation; kein Verifikations-Hash, Prüfung via Poly1305-Tag |
-| 🔒 G16 | 8 | `tasks.db.enc`-Header (Magic/Version/Params/Salt/Nonce; Params konkret N11.4.3), Header als AEAD-`associated_data` (V1), Param-Akzeptanzbereich vor Ableitung, frische Nonce, atomares Schreiben + `.bak`, `.tmp` vor der `.bak`-Rotation probeentschlüsselt + Plattenplatz-Prüfung vor dem Wrap (V1) |
-| 🔒 G17 | 8 | Debounced Write-back der In-Memory-DB (ca. 3 s, Kappe spätestens alle 30 s bei Dauereingabe, U20; Crash kostet höchstens Sekunden) |
-| 🔒 G18 | 8 | DPAPI-Pepper im Credential Manager als Zweitfaktor gegen Offline-Brute-Force (kein Recovery-Export, Tresor an den PC gebunden, N11.3). **Zusage nur konditioniert (B.10.4):** wirkt gegen den, der **nur die Tresordatei** hat; bei gestohlener, **unverschlüsselter Platte** hängt der Pepper an der Stärke des Windows-Passworts. Nie "gar nicht raten" ohne diese Bedingung schreiben |
-| ✅ G19 | erledigt (2026-06-20, vorgezogen); Rest V3 offen | Single-Instance-Mutex, heute `Local\NoaToDoSingleton` (zweite Instanz zeigt Hinweis und beendet sich); Rest-Pflicht V3 (2026-07-15): Namensraum auf `Global\NoaToDo-<User-SID>` umstellen, sonst startet derselbe Benutzer per RDP/Benutzerumschaltung eine zweite Instanz |
+| ✅ G13 | erledigt (2026-07-21) | **Lock serverseitig als Allowlist im `@bridge`-Decorator** (gesperrt erlaubt: `unlock`, `quit_app`, `killswitch`, `get_state`, `get_boot_state`, `choose_vault_dir`, `create_vault`, `reset_vault`; alles andere liefert `locked`, `get_state` nur `{"locked": true}`). Real verifiziert: `add_task`/`set_setting`/`activity_ping` gesperrt -> `locked` |
+| ✅ G14 | erledigt (2026-07-21) | WebView2 ohne Datenspuren: fester Profilordner ✅; sicheres Wischen von `PROFILE_DIR` bei lock/autolock/panic/quit **inkl. Fenster-X** (gleicher `teardown`-Pfad), verwaiste `msedgewebview2.exe` mit dem Profil als Kommandozeile werden vor dem Wisch beendet; Wisch in-process auf dem effektiven Pfad (Store-Redirect, V8). Real verifiziert: nach Lock existiert `PROFILE_DIR` nicht mehr. **N11.18: kein `LOCK_PROFILE_DIR`** (natives Lock-Fenster ohne WebView). Phase-9-Erststart-Wisch der alten Redirect-Pfade bleibt Phase 9 |
+| ✅ G15 | erledigt (2026-07-21) | Argon2id-Master-Secret + HKDF-SHA256-Domain-Separation (Labels `noatodo/aes-key/v1`, `noatodo/chacha-key/v1`); kein Verifikations-Hash, Prüfung via Poly1305-Tag |
+| ✅ G16 | erledigt (2026-07-21) | `tasks.db.enc`-Header (Magic `NOA1`/Version/Params/Salt/Nonce), Header als AEAD-`associated_data` (V1), Param-Akzeptanzbereich vor Ableitung, frische Nonce, atomares Schreiben + `.bak`, `.tmp` vor der `.bak`-Rotation probeentschlüsselt + Plattenplatz-Prüfung (V1) |
+| ✅ G17 | erledigt (2026-07-21) | Debounced Write-back (ca. 3 s, Kappe spätestens alle 30 s bei Dauereingabe, U20); sofort synchron im `teardown` (Schritt 4). Real verifiziert: Aufgabe überlebt Lock/Unlock |
+| ✅ G18 | erledigt (2026-07-21) | DPAPI-Pepper im Credential Manager (`keyring`), vor Argon2id per `HKDF-Extract(salt=pepper, ikm=passphrase)` gebunden (V2a); kein Recovery-Export (N11.3). **Zusage nur konditioniert (B.10.4).** Bei Killswitch/Reset entfernt |
+| ✅ G19 | erledigt (2026-07-21; fester Ordner 2026-06-20) | Single-Instance-Mutex jetzt `Global\NoaToDo-<User-SID>` (V3): maschinenweit + pro Benutzer eindeutig, kein zweiter Start per RDP/Benutzerumschaltung mehr; SID über das Prozess-Token, Fallback `Local\` ohne SID |
 | ✅ G20 | erledigt (2026-07-17) | Regel-4-Validierung auch lokal + `reorder`-Typprüfung + `set_setting`-Key-Whitelist + Wert-/Typ-Prüfung je Key (Enums, Akzent-Hex-Whitelist, `sidebarWidth` beim Schreiben geklemmt, `autoLock`-Stufen, `edit_task.fields` typgeprüft; deklaratives Schema am Decorator, V5) |
 | ✅ G21 | erledigt (2026-07-17) | Export-Härtung: reservierte Windows-Namen, verbotene Windows-Zeichen + `..` durch `_`, Kappung auf ca. 120 Zeichen (V6), Newline-Ersetzung, echter Save-Dialog; gilt für `export_list` und `export_all` |
 | ✅ G22 | erledigt (2026-07-17) | Ehrliche Sicherheits-Behauptungen in der ganzen UI: `get_status()`/Status-Modal (2026-07-16) + Panik-Endschirm/Wipe-Fortschritt (2026-07-17, "Workspace cleared"); der Endschirm bleibt dauerhaft ehrlich, kein „Wipe"-Aussenschirm ab Phase 8 (N11.17, B.10.5) |
 | ✅ G23 | erledigt (2026-06-10) | Einzel-Task-Kopie im Backend: keine Win+V-History, kein Cloud-Clipboard, Auto-Clear 60 s, `Strg+C` entfernt |
-| 🔒 G25 | 8 | RAM-Schlüssel-Hygiene: `bytearray` + Nullen, Passphrase sofort verwerfen, nie loggen |
+| ✅ G25 | erledigt (2026-07-21) | RAM-Schlüssel-Hygiene: alle Schlüssel/Master-Secret/Pepper als `bytearray`, vor dem Verwerfen genullt (`zeroize`), Passphrase nur transient; nie geloggt; im `teardown` Schritt 7 genullt (auch der Undo-Puffer) |
 | ❌ G26 | verworfen + entfernt (2026-06-20) | Screenshot-Schutz `WDA_EXCLUDEFROMCAPTURE` blendete Aufnahmen schwarz aus, verhindert aber auf manchen GPUs das Rendern (Fenster weiss / reagiert nicht). Mehrfach ein-/ausgebaut, endgueltig entfernt. Nicht wieder einbauen ohne Render-Verifikation + Affinity-Rollback |
 | 🔒 G27 | 9 | Binary-Härtung: `.exe` signieren, kein Quelltext mitliefern (Nuitka), optional Obfuskation. Sicherheit beruht nie auf Code-Geheimhaltung (Kerckhoffs), nur auf Passphrase + Pepper + Verschlüsselung. **Ergänzung Frontend-Integrität (A5, 2026-07-15):** Assets ins signierte Binary einbetten oder Start-Hash-Prüfung gegen ein eingebettetes Manifest; Abweichung = Startabbruch mit klarer Meldung |
-| 🔒 G28 | 8 | Verschlüsselungs-Beweis (N11.9): Öffnen des inneren Images ohne `aes_key` muss nachweislich fehlschlagen (kein SQLite-Klartext-Header, kein Task-Text im Roh-Byte-Dump); scheitert das für den `:memory:`-Weg, gilt verbindlich der Fallback mit SQLCipher-verschlüsselter Arbeitsdatei; kein Auslieferungsbuild ohne bestandenen Beweis; Beweis automatisiert als pytest-Test (V12) |
+| ✅ G28 | erledigt (2026-07-21); pytest-Fassung Rest 9 | Verschlüsselungs-Beweis (N11.9): erbracht in `Code/tools/verify_crypto.py` (standalone, ohne pytest) und real gegen die echte `tasks.db.enc` verifiziert: kein SQLite-Klartext-Header (`SQLite format 3`), kein Task-Text im Roh-Byte-Dump, Magic `NOA1`; auch die Arbeitsdatei ist AES-Chiffretext. Die Verankerung als pytest (V12) kommt mit der Phase-9-Testliste |
 | ✅ G29 | erledigt (2026-07-17); Buildprüfung Rest 9 | Fehler-Hygiene (N11.12, Plananalyse S6): generische Fehler ans Frontend (Code + statischer Text aus dem **Fehlercode-Katalog in B.2**, nie `str(exc)`, nie Pfade/Benutzername/Tracebacks/Aufgabentext), Details nur im redigierten In-Memory-Ringpuffer (Status-Modal, Leerung im `teardown`), im Release **kein** persistentes Logfile |
-| 🔒 G31 | 8 | RAM-auf-Platte-Lecks (A1, 2026-07-15): BitLocker-Empfehlung + realer BitLocker-Status im Status-Modal (sonst ehrlich "unbekannt"), `VirtualLock` für alle Schlüssel-Puffer (Best-Effort; hilft nicht gegen `hiberfil.sys`, nur BitLocker deckt das), keine Traceback-/Dump-Dateien (deckt sich mit G29) |
-| 🔒 G32 | 8 | Tresor-Ort (A2, 2026-07-15): Onboarding-Default `%LOCALAPPDATA%\NoaToDo`; deutliche Warnung bei erkannten Cloud-Sync-Pfaden (OneDrive-Env-Vars, Dropbox-`info.json`, Pfad-Heuristik) inkl. "Killswitch/Reset löschen Cloud-Versionen nicht"; Warnung, keine Sperre |
-| 🔒 G33 | 8 | Dev-Altdaten (A3, 2026-07-15): beim ersten `create_vault()` alte `tasks.db` samt `-journal`/`-wal`/`-shm` über den Secure-Delete-Pfad entsorgen (nie blankes `os.remove`); Einmal-Hinweis mit der ehrlichen SSD-Restgrenze (Wear-Leveling) |
+| ✅ G31 | erledigt (2026-07-21) | RAM-auf-Platte-Lecks (A1): realer BitLocker-Status im Status-Modal per WMI (sonst ehrlich "unknown", nie falsches "protected"), `VirtualLock` für alle Schlüssel-Puffer (Best-Effort; hilft nicht gegen `hiberfil.sys`), keine Traceback-/Dump-Dateien (deckt sich mit G29). BitLocker-Empfehlung in der Setup-UI bleibt eine kleine offene UX-Ergänzung |
+| ✅ G32 | erledigt (2026-07-21) | Tresor-Ort (A2): Onboarding-Default `%LOCALAPPDATA%\NoaToDo`; Warnung bei erkannten Cloud-Pfaden (OneDrive-Env-Vars, Pfad-Heuristik) inkl. "Killswitch/Reset löschen keine Cloud-Versionen" **und** bei Wechsel-/Netzlaufwerken (N11.15.4); Warnung, keine Sperre |
+| ✅ G33 | erledigt (2026-07-21) | Dev-Altdaten (A3): beim ersten `create_vault()` alte `data/tasks.db` samt `-journal`/`-wal`/`-shm` über den Secure-Delete-Pfad entsorgt (nie blankes `os.remove`). Ehrlicher SSD-Restgrenzen-Hinweis in der Onboarding-UI bleibt eine kleine offene UX-Ergänzung |
 | 🔒 G34 | 9; Teil SOFORT | Release-Härtung (A4/A6, 2026-07-15): `NOATODO_DEBUG` im Release wirkungslos (Build-Konstante), DevTools aus (`AreDevToolsEnabled=false`), `AreBrowserAcceleratorKeysEnabled=false` (kein `Strg+P`-Klartext-PDF an G21 vorbei), Standard-Kontextmenü aus; **`text_select=False` explizit setzen + Regressionstest: SOFORT, Termin 2026-07-20**; Eingabefeld-Copy bleibt offener Kanal (B.10.3 Punkt 8) |
-| 🔴 G35 | 8 | **Eine gemeinsame, nummerierte Sperr-/Beenden-Sequenz `teardown(reason)` für alle neun Ausgänge** (Lock, `Ctrl+L`, Auto-Sperre, Off-Knopf, Panik-Finish, Killswitch, Reset, Fenster-X, `atexit`), Reihenfolge nach N11.11.2: Idempotenz, native Dialoge auflösen, einfrieren, G17-Debounce synchron flushen, Clipboard leeren, DB schließen, Schlüssel nullen, erst dann löschen (Killswitch/Reset), `PROFILE_DIR` wischen, Funk-Restore ganz zuletzt, Mutex freigeben. Kein zweiter, handgeschriebener Beenden-Pfad |
-| 🔒 G30 | Doku, vor 8 | **Bedrohungsmodell B.10** (2026-07-13, Plananalyse S4): Angreiferklassen K1 bis K6, ausdrückliche Nicht-Ziele (**Malware-als-Nutzer K4 ist unverteidigbar**, keine Schein-Gegenmassnahmen, G26-Lektion), Voraussetzungen (BitLocker/Geräteverschlüsselung empfohlen, starkes Windows-Passwort), G18-Zusage konditioniert, Panik-Endschirm-Falschaussage als bewusste Abwägung dokumentiert. Neue Gates ohne Angreiferklasse (B.10.6) werden nicht gebaut |
+| ✅ G35 | erledigt (2026-07-21) | **Eine `teardown(reason)`-Sequenz in `security.py`** für alle Ausgänge (Lock, `Ctrl+L`, Auto-Sperre, Off-Knopf, Panik-Finish, Killswitch, Reset, Fenster-X, `atexit`), Reihenfolge nach N11.11.2 (Idempotenz, Dialoge auflösen, einfrieren, G17-Flush, Clipboard, DB zu, Schlüssel nullen, dann löschen bei Killswitch/Reset, `PROFILE_DIR` wischen, Funk-Restore zuletzt, Mutex frei); die nativen Schritte 9-11 führt `main.py` nach `session.next_state` aus, ohne zweiten Ablauf. Fenster-X nimmt via `FormClosing`-Handler denselben Pfad. Auto-Sperre bei offenem Dialog: Schritte 1-7 sofort, 9-11 geparkt (N11.11.5) |
+| ✅ G30 | erledigt (gelesen 2026-07-21, vor Phase 8) | **Bedrohungsmodell B.10** (Plananalyse S4): Angreiferklassen K1 bis K6, Nicht-Ziele (**Malware-als-Nutzer K4 unverteidigbar**), Voraussetzungen (BitLocker, starkes Windows-Passwort), G18-Zusage konditioniert. Neue Gates ohne Angreiferklasse (B.10.6) werden nicht gebaut |
 
 **Hinweise (kein Gate):** Export schreibt unverschlüsselte Dateien (by design, der
 Nutzer exportiert bewusst Klartext); `main.py` `emit()` muss
