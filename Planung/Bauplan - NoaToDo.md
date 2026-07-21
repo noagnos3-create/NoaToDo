@@ -3178,6 +3178,60 @@ liegt (G6).
    nachweislich freigegeben und gewischt; andernfalls ist der Build nicht
    abnahmefaehig.
 
+**Spike-Ergebnis (2026-07-21, ausgefuehrt als `Code/tools/spike_u3_lockwindow.py`, Register N11.18):**
+
+Der Spike wurde als erster Handgriff der Phase 8 real ausgefuehrt; alle Pruefpunkte
+liefen auf der Zielmaschine durch. Ergebnisse entlang der neun Fragen:
+
+1. **Kein Zwei-Profil-Beweis moeglich, der native Fallback ist damit verbindlich.**
+   `storage_path`/`private_mode` sind in PyWebView 5.x ausschliesslich Parameter von
+   `webview.start()` (global pro Prozess); `create_window()` kennt sie nicht. Zwei
+   Fenster mit getrennten Profilen bietet die API schlicht nicht an, der Beweis kann
+   also nicht erbracht werden. Gemaess der Spike-Grundhaltung (nicht annehmen,
+   sondern beweisen) gilt der native Fallback: **das Lock-Fenster ist ein schlankes
+   natives WinForms-Fenster ohne WebView, es gibt kein `LOCK_PROFILE_DIR`.**
+   Zusaetzlich empirisch bewiesen (Tragfaehigkeit des Fallbacks): (a) nach
+   `window.destroy()` kehrt `webview.start()` zurueck, (b) die
+   `msedgewebview2.exe`-Kindprozesse enden von selbst und `PROFILE_DIR` laesst sich
+   danach restlos loeschen (G14-Wisch bewiesen), (c) ein **zweiter**
+   `create_window()`+`start()`-Zyklus im selben Prozess funktioniert (Sperren =
+   Hauptfenster komplett abbauen, Entsperren = neu aufbauen), (d) reine
+   WinForms-Fenster (`Application.Run`) laufen vor, zwischen und nach den
+   WebView-Zyklen. **Betriebsbedingung (im Code zu dokumentieren):** PyWebViews
+   `setup_app()` (ruft `SetCompatibleTextRenderingDefault`) muss VOR dem ersten
+   nativen Fenster einmal aufgerufen werden; es ist idempotent geschuetzt, der
+   spaetere `webview.start()` ueberspringt es dann. Ohne diesen Aufruf wirft der
+   erste WebView-Start nach einem nativen Fenster `InvalidOperationException`.
+2. **js_api-Umfang:** entfaellt im nativen Fallback; das Lock-Fenster hat gar keine
+   Bridge, `unlock`/`quit_app`/`reset_vault` laufen als direkte Backend-Aufrufe.
+   Die G13-Allowlist gilt unveraendert fuer die (einzige) Bridge des Hauptfensters.
+3. **Taskbar:** baulich immer nur ein Fenster zur Zeit (das Hauptfenster ist beim
+   Anzeigen des Lock-Fensters bereits abgebaut), also ein Eintrag; Sichtpruefung in
+   der Phase-8-Abnahme.
+4. **Fensterzustand nach Unlock:** durch Neuaufbau mit `maximized=True` baulich
+   immer maximiert, nie Mini (U24 bestaetigt).
+5. **X-Knopf des Lock-Fensters:** FormClosing-Handler ruft `teardown("quit")`
+   (Umsetzungspflicht, kein Spike-Risiko).
+6. **Boot-Reihenfolge:** bei vorhandenem Tresor startet das native Lock-Fenster vor
+   jedem WebView; das Hauptfenster entsteht erst nach erfolgreichem Unlock (durch
+   Punkt 1 (d) bewiesen moeglich).
+7. **WebView2-Prozesse vor dem Wischen beendet:** bewiesen (Punkt 1 (b)); der
+   Teardown wartet auf das Prozess-Ende, bevor gewischt wird.
+8. **DevTools am Lock-Fenster:** baulich ausgeschlossen (kein WebView, keine Engine).
+9. **Tastatur im gesperrten Zustand:** das native Fenster fokussiert per
+   KeyDown-Handler jede druckbare Taste ins Passwortfeld; App-Shortcuts existieren
+   dort baulich nicht (Umsetzungspflicht im Lock-Fenster-Code).
+
+**G6-Nebenbefund desselben Spikes:** `sqlcipher3` 2.6.0 (SQLite 3.51.1) exponiert
+**kein** `Connection.serialize`/`deserialize`; das verlaessliche Serialisieren des
+verschluesselten Images aus `:memory:` gibt die Build-Variante damit nicht her.
+Gemaess B.7/N11.9 ist der Fallback **verbindlich**: die Arbeitskopie ist eine
+**SQLCipher-verschluesselte Arbeitsdatei** in einem benutzerprivaten Pfad (nie
+Klartext auf der Platte); Persistenzziel bleibt in jedem Fall `tasks.db.enc` (G17,
+U19/U20). Schnappschuesse fuer den Write-back entstehen ueber `VACUUM INTO` (liefert
+eine mit demselben Schluessel verschluesselte, konsistente Kopie, ohne die
+Verbindung zu schliessen).
+
 **Tun:**
 1. **App-Sperre nach der Sperr-Politik aus B.8:** `lock()` setzt `locked=True`, verwirft
    die Schlüssel, packt die DB wieder zu (Schicht 2) und zeigt den LockScreen über allem.
@@ -3775,6 +3829,7 @@ liegen durchgestrichen in Anhang 3, Umbau-Etappe 5.)
 | N11.15 (.1-.6) / U2, V8 | 2026-07-13, .5/.6: 2026-07-15 | `config.json`: Schema, Fehlerfaelle, unerreichbarer Tresor, Redirect, Ueberschreib-Schutz | B.11 |
 | N11.16 | 2026-07-17 | Alle Toasts bis auf den Undo-Toast (N11.2.1) ersatzlos entfernt (Nutzerwunsch: keine Benachrichtigungen): erst die Erfolgs-Bestaetigungen, dann auch die Fehler-/Validierungs-Toasts; Fehler laufen still bzw. bleiben ueber das Status-Modal (G29-Ringpuffer) einsehbar | B.4 + B.2 (Toast-Politik + Fehlercode-Katalog) |
 | N11.17 | 2026-07-21 | Panik-Endschirm bleibt dauerhaft ehrlich („Workspace cleared"); der fuer Phase 8 vorgesehene, bewusst falsche Aussenschirm („All data securely wiped") wird nicht gebaut, damit gilt G22 ausnahmslos (kehrt die frueher einzige G22-Ausnahme aus N10.3/B.10.5 um) | B.10.5 (+ B.4 N10.3, B.9 G22) |
+| N11.18 / U3-Ergebnis | 2026-07-21 | Zweitprofil-Spike ausgefuehrt (`Code/tools/spike_u3_lockwindow.py`): kein Zwei-Profil-Beweis moeglich, **nativer Lock-Fenster-Fallback verbindlich** (kein `LOCK_PROFILE_DIR`); WebView-Abbau/Neuaufbau im selben Prozess samt G14-Wischbarkeit bewiesen; `setup_app()`-Vorbedingung dokumentiert; G6-Nebenbefund: `sqlcipher3` ohne `serialize` -> N11.9-Arbeitsdatei-Fallback (Schnappschuss via `VACUUM INTO`) verbindlich | Phase 8 (Spike-Ergebnis) |
 
 
 
