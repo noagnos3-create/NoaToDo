@@ -1080,11 +1080,11 @@ Bestätigen ist man gegen Versehen sicher unterwegs. Nach dem Bestätigen wird s
 real bereinigt (Raum leeren und Zustand verwerfen wie beim Lock, **zusätzlich**
 offline schalten; das Offline-Schalten gibt es seit N11.10 nur noch hier im
 Panik-Flow, nicht mehr beim Sperren) und der
-„Wipe"-Fortschrittsschirm gezeigt; danach der Endschirm mit der Aussage, die
-Maschine sei sicher gewiped (bewusste Außendarstellung; **erst ab Phase 8**, wenn
-der reale Wipe-Pfad G14/G25 existiert. Bis dahin zeigen Wipe-Schirm und Endschirm
-nach G22 ehrliche Texte: „Clearing workspace" / „Workspace cleared", umgestellt
-2026-07-17). Zurück in die App führt
+„Wipe"-Fortschrittsschirm gezeigt; danach der Endschirm. Wipe-Schirm und Endschirm
+tragen **dauerhaft** ehrliche Texte („Clearing workspace" / „Workspace cleared",
+umgestellt 2026-07-17): der früher für Phase 8 vorgesehene, bewusst falsche
+Aussenschirm („All data securely wiped") kommt **nicht** zurück (Entscheidung N11.17,
+2026-07-21; Abwägung und Begründung in B.10.5). Zurück in die App führt
 von dort **kein Weg mehr**. Unten zwei Knöpfe:
 - **Links, Akzentfarbe: „Finish".** Beendet nur die App (`quit_app()`). Alle Daten
   bleiben vollständig erhalten; der nächste Start ist ein normaler Start.
@@ -2137,7 +2137,7 @@ auch forensisch belastbar.
 > | **G19** | **8, vorgezogen** | ✅ umgesetzt; Nachbesserung offen (V3: Mutex-Namensraum) | 2026-06-20, V3 ergänzt 2026-07-15 | Zweite Instanz starten: Hinweisbox erscheint, der zweite Prozess beendet sich, die erste Instanz läuft ungestört weiter. Zusätzlich (V3): dieselbe Prüfung aus einer zweiten Logon-Session desselben Benutzers (RDP/schnelle Benutzerumschaltung); auch dort darf keine zweite Instanz auf dieselbe DB starten. | **Single-Instance-Schutz.** Beim Start einen benannten Windows-Mutex belegen (`ctypes.windll.kernel32.CreateMutexW(None, False, "Local\\NoaToDoSingleton")`, danach `GetLastError() == ERROR_ALREADY_EXISTS (183)` prüfen). Läuft schon eine Instanz: Hinweis zeigen und den zweiten Prozess sofort beenden. Zwei Instanzen würden sich `tasks.db.enc` bzw. die Arbeitskopie gegenseitig überschreiben (Korruption/Datenverlust). **Nachbesserung V3 (2026-07-15): Mutex-Namensraum.** `Local\NoaToDoSingleton` ist nur **pro Logon-Session** eindeutig: derselbe Benutzer über RDP oder schnelle Benutzerumschaltung startet damit eine zweite Instanz auf demselben Profil und derselben DB, exakt die Korruption, die dieses Gate verhindern soll. Zielname: **`Global\NoaToDo-<User-SID>`** (`Global\` gilt über alle Sessions hinweg, die User-SID hält verschiedene Windows-Konten weiterhin getrennt). Der Code nutzt heute noch `Local\...`; die Umstellung ist Rest-Pflicht dieses Gates, spätestens in Phase 8. |
 > | **G20** | **7** | ✅ umgesetzt 2026-07-17 (deklaratives Schema am `@bridge`-Decorator, introspektierbar via `_schema`; Text-/Namens-Kappung + Steuerzeichen-Strip, ID-/Listen-Typpruefung, `reorder` mit exakter Mengenpruefung nach N11.2.2, `set_setting`-Whitelist mit Wert-Pruefung je Key nach V5. Hinweis: der Key `dark` bleibt uebergangsweise in der Whitelist, bis N11.6 ihn durch `theme` ersetzt; `theme`/`sound`/`autoLock` sind bereits validiert) | seit 2026-06-10 | Ein 1-MB-Text wird auf 4096 Zeichen gekürzt; `reorder(list_id, "string")` liefert einen Fehler; `set_setting("foo", 1)` liefert `{"error": "invalid"}`. Zusätzlich (V5): `set_setting("accent", "red;} body{...")` liefert `invalid`; `set_setting("sidebarWidth", 9999)` speichert höchstens 520; `set_setting("autoLock", 7)` liefert `invalid`. | **Regel-4-Validierung auch für LOKALE Eingaben + Typ-/Key-Prüfung an der Bridge.** Volltext in B.2 (Etikett G20). |
 > | **G21** | **7** | erledigt (2026-07-17): Sanitisierung (a)/(a2), Einzeiligkeit (b) und echter Save-Dialog mit realem Schreiben (c) in `api.py` umgesetzt, gilt für `export_list` und `export_all` | seit 2026-06-10 | Eine Liste namens `CON` exportiert als `_CON.md`; ein Task mit Zeilenumbruch bleibt im Export einzeilig; die Datei liegt real am im Save-Dialog gewählten Ort. Zusätzlich (V6): eine Liste namens `a<b>:c?*` bzw. `..\..\evil` ergibt einen Dateinamens-Vorschlag ohne diese Zeichen und ohne `..`; ein 300-Zeichen-Listenname wird auf ca. 120 Zeichen gekappt; dasselbe gilt für `export_all`. | **Export-Härtung.** Volltext in Phase 7 (Etikett G21). |
-> | **G22** | **SOFORT, spätestens mit 7** | erledigt (2026-07-17): `get_status()` + Status-Modal ehrlich seit 2026-07-16 (`active:false`, Warnfarbe, `dev_key`-Flag); Header-Pill/Lock-Untertitel existieren im Code nicht; Panik-Endschirm ("Workspace cleared" statt "All data securely wiped") und Wipe-Fortschritt (nur reale Schritte: Workspace/Cache verwerfen, offline) seit 2026-07-17 ehrlich. Die bewusste Aussendarstellung des Endschirms (B.10.5) kehrt erst mit dem realen Phase-8-Wipe-Pfad (G14/G25) zurück; ab Phase 8 zeigt der Status echte Werte | seit 2026-06-10 | Solange `DEV_AES_KEY` in `db.py` existiert, darf nirgends in der App "active", "ENCRYPTED" oder "securely wiped" stehen: Status-Modal öffnen sowie Header-Pill, Lock-Screen-Untertitel und Panik-Endschirm prüfen. | **Ehrliche Sicherheits-Behauptungen in der gesamten UI (ausgeweitet 2026-07-13, Plananalyse S2; vorher nur `get_status()`).** Bis Phase 8 fertig ist, darf **keine** Stelle der App eine Verschlüsselung oder einen sicheren Wipe behaupten, die es nicht gibt. (a) `get_status()` meldet den realen Zustand: Schicht 1 "SQLCipher mit Entwicklungs-Schlüssel (UNSICHER)", Schicht 2 "nicht implementiert", `active: false`; das Status-Modal zeigt das in Warnfarben statt grün (aktuell meldet der Status "AES-256 + ChaCha20 · active", während der AES-Key öffentlich im Repo steht; im Audit nachgewiesen). (b) Dieselbe Ehrlichkeit gilt für **alle** weiteren Verschlüsselungs-/Wipe-Behauptungen der UI: die Header-Pill ("LOCAL · ENCRYPTED"), den Lock-Screen-Untertitel ("LOCAL VAULT · ENCRYPTED") und den Panik-Endschirm ("All data securely wiped") bis Phase 8 auf ehrliche Texte umstellen (z.B. "LOCAL · DEV BUILD"). Die "bewusste Aussendarstellung" des Endschirms aus N10.3 ist erst ab Phase 8 zulässig, wenn der reale Wipe-Pfad (G14/G25, Killswitch) existiert; die Abwägung dazu steht in B.10.5. Ab Phase 8 zeigt der Status echte Werte (Argon2-Parameter, Pepper vorhanden ja/nein, Zeitpunkt des letzten Wraps). |
+> | **G22** | **SOFORT, spätestens mit 7** | erledigt (2026-07-17): `get_status()` + Status-Modal ehrlich seit 2026-07-16 (`active:false`, Warnfarbe, `dev_key`-Flag); Header-Pill/Lock-Untertitel existieren im Code nicht; Panik-Endschirm ("Workspace cleared" statt "All data securely wiped") und Wipe-Fortschritt (nur reale Schritte: Workspace/Cache verwerfen, offline) seit 2026-07-17 ehrlich und bleiben es dauerhaft (N11.17): der bewusst falsche Aussenschirm des Endschirms wird nicht gebaut (B.10.5); ab Phase 8 zeigt der Status echte Werte | seit 2026-06-10 | Solange `DEV_AES_KEY` in `db.py` existiert, darf nirgends in der App "active", "ENCRYPTED" oder "securely wiped" stehen: Status-Modal öffnen sowie Header-Pill, Lock-Screen-Untertitel und Panik-Endschirm prüfen. | **Ehrliche Sicherheits-Behauptungen in der gesamten UI (ausgeweitet 2026-07-13, Plananalyse S2; vorher nur `get_status()`).** Bis Phase 8 fertig ist, darf **keine** Stelle der App eine Verschlüsselung oder einen sicheren Wipe behaupten, die es nicht gibt. (a) `get_status()` meldet den realen Zustand: Schicht 1 "SQLCipher mit Entwicklungs-Schlüssel (UNSICHER)", Schicht 2 "nicht implementiert", `active: false`; das Status-Modal zeigt das in Warnfarben statt grün (aktuell meldet der Status "AES-256 + ChaCha20 · active", während der AES-Key öffentlich im Repo steht; im Audit nachgewiesen). (b) Dieselbe Ehrlichkeit gilt für **alle** weiteren Verschlüsselungs-/Wipe-Behauptungen der UI: die Header-Pill ("LOCAL · ENCRYPTED"), den Lock-Screen-Untertitel ("LOCAL VAULT · ENCRYPTED") und den Panik-Endschirm ("All data securely wiped") bis Phase 8 auf ehrliche Texte umstellen (z.B. "LOCAL · DEV BUILD"). Der Panik-Endschirm bleibt auch nach Phase 8 dauerhaft ehrlich (Entscheidung N11.17): die früher für Phase 8 vorgesehene "bewusste Aussendarstellung" aus N10.3 wird nicht gebaut, die Abwägung dazu steht in B.10.5. Ab Phase 8 zeigt der Status echte Werte (Argon2-Parameter, Pepper vorhanden ja/nein, Zeitpunkt des letzten Wraps). |
 > | **G23** | **6.5** | ✅ umgesetzt | 2026-06-10 | Der kopierte Task erscheint nicht in der Win+V-History; das Clipboard ist 60 s nach dem Kopieren leer. | **Clipboard-Hygiene + Einzel-Task-Kopie.** Windows speichert das Clipboard in der Zwischenablage-History (Win+V) und synchronisiert es ggf. ins Microsoft-Cloud-Clipboard, App-Inhalte würden so den Rechner verlassen. Umgesetzt: (a) Kopiert wird nur noch **eine ausgewählte Aufgabe** (`copy_task`), nie eine ganze Liste; für Listen gibt es den Export. (b) Das Kopieren passiert komplett im **Backend** (`api.py`, Win32 per ctypes, nicht `navigator.clipboard`) und setzt zusätzlich zu `CF_UNICODETEXT` die Formate `ExcludeClipboardContentFromMonitorProcessing`, `CanIncludeInClipboardHistory` (=0) und `CanUploadToCloudClipboard` (=0). (c) Auto-Clear: 60 s nach dem Kopieren wird das Clipboard geleert, sofern es noch unseren Inhalt trägt. (d) Der `Strg+C`-App-Shortcut wurde ersatzlos entfernt. Bei künftigen Copy-Funktionen MUSS derselbe Backend-Pfad verwendet werden. |
 > | **G25** | **8** | offen | seit 2026-06-10 | Code-Review: Schlüssel/Master-Secret/Pepper als `bytearray` mit Nullung an allen Ausgängen (Lock, Panic, Quit, Fenster-X, `atexit`); kein Geheimnis in Logs, Exceptions oder `get_status()`. | **RAM-Schlüssel-Hygiene.** `aes_key`, `chacha_key`, Master-Secret und Pepper als `bytearray` (nicht `bytes`/`str`) halten; beim Sperren/Panic/Beenden **vor** dem Verwerfen mit Nullen überschreiben. Die Passphrase unmittelbar nach der Ableitung verwerfen; Passphrase und Schlüssel dürfen **nie** in Logs, Exceptions, `get_status()` oder sonstwie ans Frontend gelangen. Im Code dokumentieren: Python gibt keine harten Garantien (der GC kann Kopien hinterlassen), das Nullen ist Best-Effort und trotzdem Pflicht. |
 > | **G26** | **entfällt** | ❌ verworfen (zu fehleranfällig) | 2026-06-20 | Nur noch Regressions-Check: `SetWindowDisplayAffinity` kommt im Code nicht vor. | **Screenshot-Schutz (entfernt).** Idee war, das Fenster per `SetWindowDisplayAffinity(hwnd, WDA_EXCLUDEFROMCAPTURE)` aus Bildschirmaufnahmen herauszunehmen. Mehrfach umgesetzt und wieder entfernt, weil er reale Probleme machte: auf manchen GPU-/Treiber-Konstellationen blockiert die Affinity das WebView2-Rendern komplett (Fenster bleibt weiss / reagiert nicht), und die Startup-Verdrahtung verklemmte zudem die Nachrichtenschleife. Zusatznachteile: blendet das Fenster auch in legitimer Freigabe/Aufnahme schwarz aus und nuetzt nichts gegen eine Kamera. **Entscheidung: dauerhaft entfernt, nicht wieder einbauen.** Falls je erneut gewuenscht, zwingend mit Render-Verifikation nach dem Setzen (Affinity automatisch zuruecknehmen, wenn der Inhalt nicht mehr rendert) und ausschliesslich ueber `_run_on_ui_thread`. |
@@ -2380,35 +2380,34 @@ Einrichtungs-UI (Phase 8) und ins Status-Modal, nicht nur in dieses Dokument.
 > oder die Platte mit BitLocker verschlüsselt ist." Kein "gar nicht" ohne diese
 > Bedingung.
 
-#### B.10.5 Der Panik-Endschirm behauptet einen Wipe, den es nicht gab (bewusste Abwägung)
+#### B.10.5 Der Panik-Endschirm bleibt ehrlich (kein behaupteter Wipe, Entscheidung N11.17)
 
-Der Panik-Endschirm meldet "All data securely wiped" und bietet zwei Ausgänge:
-**Finish** (beendet nur, alle Daten bleiben) und **Killswitch** (löscht wirklich).
-*(Stand-Hinweis: diese Aussendarstellung gilt erst ab Phase 8; bis dahin zeigt der
-Endschirm nach G22 den ehrlichen Text "Workspace cleared", umgestellt 2026-07-17.)*
-Bei "Finish" ist die Meldung also **nachweislich falsch**. Das ist Absicht (N10.3,
-"bewusste Aussendarstellung") und bleibt so, aber die Abwägung gehört hierher, nicht
-in eine UI-Beschreibung:
+Der Panik-Endschirm bietet zwei Ausgänge: **Finish** (beendet nur, alle Daten
+bleiben) und **Killswitch** (löscht wirklich). Seit 2026-07-17 (G22) tragen
+Wipe-Schirm und Endschirm ehrliche Texte ("Clearing workspace" / "Workspace
+cleared").
 
-- **Dafür:** Gegen einen flüchtigen Beobachter (K3, teils K6) wirkt der Endschirm
-  abschreckend und beendet die Situation ohne Datenverlust. Der Nutzer muss im
-  Ernstfall nicht in Sekunden entscheiden, ob er seine Daten opfert; er kann den
-  Schirm zeigen und **später** immer noch den Killswitch drücken.
-- **Dagegen (das Risiko, das der Nutzer kennt und akzeptiert):** Gegen einen
-  Angreifer, der die Platte behält und untersucht (K1/K2 nach K6), ist die Behauptung
-  eine **überprüfbare Lüge**. Findet er die Daten anschliessend doch, steht der
-  Nutzer als jemand da, der aktiv getäuscht hat, was seine Lage verschlechtern kann.
-  Wer in einem echten Zwangs-Szenario ist, muss den **Killswitch** drücken, nicht
-  "Finish". Der Endschirm ist Abschreckungs-Theater gegen Gelegenheits-Zugriff, keine
-  Verteidigung gegen forensische Prüfung.
-- **Konsequenz für die UI (Phase 8):** Der Killswitch-Knopf bleibt der zweite,
-  bewusst gewählte Ausgang und wird nicht versteckt. Die Formulierung des Endschirms
-  wird **nicht** abgeschwächt (das wäre der Sinn der Massnahme), aber sie steht ab
-  jetzt hier als bekannte, gewollte Falschaussage dokumentiert, und G22 (ehrlicher
-  Status) gilt ausdrücklich **nicht** für diesen einen Schirm: G22 verlangt Ehrlichkeit
-  gegenüber dem **Nutzer** über den Verschlüsselungszustand, der Endschirm richtet
-  sich an einen **Dritten**. Diese Ausnahme ist die einzige im ganzen Plan und muss
-  jede spätere G22-Prüfung überleben.
+**Entscheidung N11.17 (2026-07-21): diese ehrlichen Texte bleiben dauerhaft.** Der
+früher (N10.3) für Phase 8 vorgesehene, bewusst falsche Aussenschirm ("All data
+securely wiped" bei "Finish", obwohl die Daten bleiben) wird **nicht** gebaut. Die
+Abwägung, die zu dieser Umkehr führt, gehört hierher, nicht in eine UI-Beschreibung:
+
+- **Was für den falschen Text sprach:** Gegen einen flüchtigen Beobachter (K3, teils
+  K6) hätte ein "sicher gewiped"-Schirm abschreckend gewirkt und die Situation ohne
+  Datenverlust beendet; der Nutzer hätte den Schirm zeigen und **später** immer noch
+  den Killswitch drücken können.
+- **Was dagegen entscheidet (und jetzt den Ausschlag gibt):** Gegen einen Angreifer,
+  der die Platte behält und untersucht (K1/K2 nach K6), wäre die Behauptung eine
+  **überprüfbare Lüge**. Findet er die Daten anschliessend doch, steht der Nutzer als
+  jemand da, der aktiv getäuscht hat, was seine Lage verschlechtern kann. Der
+  abschreckende Nutzen ist bloßes Theater gegen Gelegenheits-Zugriff und wiegt dieses
+  konkrete Risiko nicht auf. Wer in einem echten Zwangs-Szenario ist, drückt ohnehin
+  den **Killswitch** (echte, unwiderrufliche Löschung), nicht "Finish".
+- **Konsequenz für die UI:** Der Endschirm sagt, was wirklich passiert ist
+  ("Workspace cleared"), und nichts darüber hinaus. Der Killswitch-Knopf bleibt der
+  zweite, bewusst gewählte Ausgang für den echten Ernstfall und wird nicht versteckt.
+  **G22 (ehrliche Sicherheits-Behauptungen) gilt damit ohne jede Ausnahme im ganzen
+  Plan;** die früher hier verzeichnete einzige G22-Ausnahme entfällt ersatzlos.
 - **Plausible Deniability wird nicht gebaut.** Ein versteckter Zweit-Tresor mit
   Schein-Passphrase wäre die einzige echte Antwort auf K6. Er ist bewusst
   **nicht geplant** (Komplexität, und in der Praxis verrät die Dateigrösse ihn
@@ -2436,7 +2435,7 @@ Diese Tabelle ist der geforderte Rückbezug ("jedes Gate referenziert seine Klas
 | G19 (Single-Instance) | (Robustheit) | Kein Angreifer: Korruption durch zwei Instanzen |
 | G20 (Eingabe-Validierung) | K4 (Härtung) | Fehlerhafte/bösartige Eingaben an der Bridge |
 | G21 (Export-Härtung) | (Korrektheit) | Reservierte Dateinamen, kaputte Export-Struktur |
-| G22 (ehrlicher Status) | (Nutzer-Ehrlichkeit) | Falsche Sicherheitsanzeige. Ausnahme: Panik-Endschirm, B.10.5 |
+| G22 (ehrlicher Status) | (Nutzer-Ehrlichkeit) | Falsche Sicherheitsanzeige. Ohne Ausnahme, auch der Panik-Endschirm bleibt ehrlich (N11.17, B.10.5) |
 | G23 (Clipboard-Hygiene) | K2, K4 | Win+V-History und Cloud-Clipboard als Auslass-Kanal |
 | G25 (RAM-Schlüssel-Hygiene) | K2 | Schlüssel im Speicherabbild, best effort |
 | G26 (Screenshot-Schutz) | ❌ **keine** | Nichts. Genau deshalb verworfen: Massnahme ohne Klasse. |
@@ -3042,7 +3041,7 @@ Toast quittiert (Nutzerwunsch: keine Bestaetigungs-Benachrichtigungen).
 > Liste nennt nur die Nummern; Regel aus Plananalyse S1):**
 > - **✅ G20** (Validierung lokaler Eingaben an der Bridge; umgesetzt 2026-07-17, Volltext in B.2, Etikett G20)
 > - **✅ G21** (Export-Härtung + echter Save-Dialog, gilt für `export_list` und `export_all`; umgesetzt 2026-07-17, Volltext oben in dieser Phase, Etikett G21)
-> - **✅ G22** (ehrliche Sicherheits-Behauptungen in der ganzen UI; Rest umgesetzt 2026-07-17: Panik-Endschirm und Wipe-Fortschritt bis Phase 8 auf ehrliche Texte umgestellt)
+> - **✅ G22** (ehrliche Sicherheits-Behauptungen in der ganzen UI; Rest umgesetzt 2026-07-17: Panik-Endschirm und Wipe-Fortschritt auf ehrliche Texte umgestellt, seit N11.17 dauerhaft)
 > - **✅ G29** (Fehler-Hygiene, Fehlercode-Katalog B.2, Logging-Politik; umgesetzt 2026-07-17, Volltext in B.2, Etikett N11.12)
 > - **✅ G12** (externe WebView-Navigation verweigern; vorgezogen, umgesetzt 2026-07-17)
 > - **✅ G23** (Einzel-Task-Kopie, umgesetzt 2026-06-10; hier nur per Prüfweg verifizieren,
@@ -3775,6 +3774,7 @@ liegen durchgestrichen in Anhang 3, Umbau-Etappe 5.)
 | N11.14 / S7 | 2026-07-13 | Triage des UX/UI-Audits | Anhang 2 |
 | N11.15 (.1-.6) / U2, V8 | 2026-07-13, .5/.6: 2026-07-15 | `config.json`: Schema, Fehlerfaelle, unerreichbarer Tresor, Redirect, Ueberschreib-Schutz | B.11 |
 | N11.16 | 2026-07-17 | Alle Toasts bis auf den Undo-Toast (N11.2.1) ersatzlos entfernt (Nutzerwunsch: keine Benachrichtigungen): erst die Erfolgs-Bestaetigungen, dann auch die Fehler-/Validierungs-Toasts; Fehler laufen still bzw. bleiben ueber das Status-Modal (G29-Ringpuffer) einsehbar | B.4 + B.2 (Toast-Politik + Fehlercode-Katalog) |
+| N11.17 | 2026-07-21 | Panik-Endschirm bleibt dauerhaft ehrlich („Workspace cleared"); der fuer Phase 8 vorgesehene, bewusst falsche Aussenschirm („All data securely wiped") wird nicht gebaut, damit gilt G22 ausnahmslos (kehrt die frueher einzige G22-Ausnahme aus N10.3/B.10.5 um) | B.10.5 (+ B.4 N10.3, B.9 G22) |
 
 
 
@@ -4213,7 +4213,7 @@ fertigen Phase ist eine Einladung, von vorne zu bauen.)*
 | ✅ G19 | erledigt (2026-06-20, vorgezogen); Rest V3 offen | Single-Instance-Mutex, heute `Local\NoaToDoSingleton` (zweite Instanz zeigt Hinweis und beendet sich); Rest-Pflicht V3 (2026-07-15): Namensraum auf `Global\NoaToDo-<User-SID>` umstellen, sonst startet derselbe Benutzer per RDP/Benutzerumschaltung eine zweite Instanz |
 | ✅ G20 | erledigt (2026-07-17) | Regel-4-Validierung auch lokal + `reorder`-Typprüfung + `set_setting`-Key-Whitelist + Wert-/Typ-Prüfung je Key (Enums, Akzent-Hex-Whitelist, `sidebarWidth` beim Schreiben geklemmt, `autoLock`-Stufen, `edit_task.fields` typgeprüft; deklaratives Schema am Decorator, V5) |
 | ✅ G21 | erledigt (2026-07-17) | Export-Härtung: reservierte Windows-Namen, verbotene Windows-Zeichen + `..` durch `_`, Kappung auf ca. 120 Zeichen (V6), Newline-Ersetzung, echter Save-Dialog; gilt für `export_list` und `export_all` |
-| ✅ G22 | erledigt (2026-07-17) | Ehrliche Sicherheits-Behauptungen in der ganzen UI: `get_status()`/Status-Modal (2026-07-16) + Panik-Endschirm/Wipe-Fortschritt (2026-07-17, "Workspace cleared"); Aussendarstellung des Endschirms erst wieder ab Phase 8 (B.10.5) |
+| ✅ G22 | erledigt (2026-07-17) | Ehrliche Sicherheits-Behauptungen in der ganzen UI: `get_status()`/Status-Modal (2026-07-16) + Panik-Endschirm/Wipe-Fortschritt (2026-07-17, "Workspace cleared"); der Endschirm bleibt dauerhaft ehrlich, kein „Wipe"-Aussenschirm ab Phase 8 (N11.17, B.10.5) |
 | ✅ G23 | erledigt (2026-06-10) | Einzel-Task-Kopie im Backend: keine Win+V-History, kein Cloud-Clipboard, Auto-Clear 60 s, `Strg+C` entfernt |
 | 🔒 G25 | 8 | RAM-Schlüssel-Hygiene: `bytearray` + Nullen, Passphrase sofort verwerfen, nie loggen |
 | ❌ G26 | verworfen + entfernt (2026-06-20) | Screenshot-Schutz `WDA_EXCLUDEFROMCAPTURE` blendete Aufnahmen schwarz aus, verhindert aber auf manchen GPUs das Rendern (Fenster weiss / reagiert nicht). Mehrfach ein-/ausgebaut, endgueltig entfernt. Nicht wieder einbauen ohne Render-Verifikation + Affinity-Rollback |
