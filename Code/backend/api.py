@@ -407,7 +407,7 @@ class Api:
 
     Seit Phase 8 haelt die Api keine offene DB mehr direkt, sondern eine
     :class:`security.Session` mit einem entsperrten :class:`security.Vault`
-    (oder keinem, wenn gesperrt). ``self.db`` ist eine Property auf die DB der
+    (oder keinem, wenn gesperrt). ``self._db`` ist eine Property auf die DB der
     Sitzung; gesperrt gibt es keine DB, und die G13-Allowlist im
     ``@bridge``-Decorator laesst schreibende/lesende Methoden gar nicht erst zu.
     """
@@ -470,12 +470,17 @@ class Api:
     # DB-Zugriff und Session-Verdrahtung
     # =====================================================================
     @property
-    def db(self) -> "db_module.Database":
+    def _db(self) -> "db_module.Database":
         """Die DB der entsperrten Sitzung.
 
         Gesperrt gibt es keine; da aber die G13-Allowlist alle DB-beruehrenden
         Methoden gesperrt abweist, kommt hier im Normalfall nur der entsperrte
-        Zustand an. Fehlt die DB dennoch, ist das ein interner Fehler.
+        Zustand an. Fehlt die DB dennoch, ist das ein interner Fehler. Der
+        ``_``-Praefix ist Pflicht: PyWebView durchsucht bei der Bridge-
+        Introspektion alle OEFFENTLICHEN Attribute des js_api-Objekts (ruft
+        ``getattr`` auf jedes); eine oeffentliche ``db``-Property wuerde dabei
+        im gesperrten/Onboarding-Zustand ``RuntimeError`` werfen und den
+        Fensterstart abbrechen.
         """
         vault = self._session.vault
         if vault is None or vault.db is None:
@@ -530,8 +535,8 @@ class Api:
         if self.locked:
             return {"locked": True}
         return {
-            "lists": self.db.get_lists_with_tasks(),
-            "settings": _typed_settings(self.db.get_all_settings()),
+            "lists": self._db.get_lists_with_tasks(),
+            "settings": _typed_settings(self._db.get_all_settings()),
             "online": self.online,
             "locked": self.locked,
         }
@@ -557,26 +562,26 @@ class Api:
 
     @bridge
     def get_lists(self) -> list[dict[str, Any]]:
-        return self.db.get_lists_with_tasks()
+        return self._db.get_lists_with_tasks()
 
     # =====================================================================
     # Listen
     # =====================================================================
     @bridge(schema={"name": v_text(MAX_LIST_NAME)}, mutates=True)
     def add_list(self, name: str) -> dict[str, Any]:
-        return self.db.add_list(name)
+        return self._db.add_list(name)
 
     @bridge(schema={"list_id": v_id, "name": v_text(MAX_LIST_NAME)}, mutates=True)
     def rename_list(self, list_id: str, name: str) -> dict[str, Any]:
-        return self.db.rename_list(list_id, name)
+        return self._db.rename_list(list_id, name)
 
     @bridge(schema={"list_id": v_id}, mutates=True)
     def delete_list(self, list_id: str) -> dict[str, Any]:
         # Undo-Puffer (N11.2.1, U9): GENAU die letzte Loeschung wird samt allen
         # Aufgaben im RAM gehalten; eine neue Loeschung ueberschreibt den
         # Puffer und verwirft die vorige endgueltig. Kein Soft-Delete.
-        self._undo_list = self.db.get_list_snapshot(list_id)  # KeyError -> not_found
-        return self.db.delete_list(list_id)
+        self._undo_list = self._db.get_list_snapshot(list_id)  # KeyError -> not_found
+        return self._db.delete_list(list_id)
 
     @bridge(schema={"list_id": v_id}, mutates=True)
     def undo_delete_list(self, list_id: str) -> dict[str, Any]:
@@ -593,30 +598,30 @@ class Api:
         if buf is None or buf["list"]["id"] != list_id:
             return _err("not_found")
         self._undo_list = None
-        return self.db.restore_list(buf)
+        return self._db.restore_list(buf)
 
     # =====================================================================
     # Aufgaben
     # =====================================================================
     @bridge(schema={"list_id": v_id, "text": v_text(MAX_TASK_TEXT)}, mutates=True)
     def add_task(self, list_id: str, text: str) -> dict[str, Any]:
-        return self.db.add_task(list_id, text)
+        return self._db.add_task(list_id, text)
 
     @bridge(schema={"task_id": v_id}, mutates=True)
     def toggle_task(self, task_id: str) -> dict[str, Any]:
-        return self.db.toggle_task(task_id)
+        return self._db.toggle_task(task_id)
 
     @bridge(schema={"task_id": v_id, "fields": v_task_fields}, mutates=True)
     def edit_task(self, task_id: str, fields: dict[str, Any]) -> dict[str, Any]:
-        return self.db.edit_task(task_id, fields)
+        return self._db.edit_task(task_id, fields)
 
     @bridge(schema={"task_id": v_id}, mutates=True)
     def delete_task(self, task_id: str) -> dict[str, Any]:
-        return self.db.delete_task(task_id)
+        return self._db.delete_task(task_id)
 
     @bridge(schema={"list_id": v_id, "ordered_ids": v_str_list}, mutates=True)
     def reorder(self, list_id: str, ordered_ids: list[str]) -> dict[str, Any]:
-        return self.db.reorder(list_id, ordered_ids)
+        return self._db.reorder(list_id, ordered_ids)
 
     @bridge(schema={"task_id": v_id, "target_list_id": v_id}, mutates=True)
     def move_task(self, task_id: str, target_list_id: str) -> dict[str, Any]:
@@ -626,7 +631,7 @@ class Api:
         ``not_found``, Ziel = aktuelle Liste -> ``invalid``; ``done`` bleibt
         erhalten, die Aufgabe haengt ans Ende ihrer Sektion in der Zielliste.
         """
-        return self.db.move_task(task_id, target_list_id)
+        return self._db.move_task(task_id, target_list_id)
 
     @bridge(schema={"ordered_ids": v_str_list}, mutates=True)
     def reorder_lists(self, ordered_ids: list[str]) -> dict[str, Any]:
@@ -635,13 +640,13 @@ class Api:
         Validierung nach N11.2.2 (U11): exakt die volle Listenmenge, sonst
         ``invalid`` und nichts wird geschrieben (alles oder nichts).
         """
-        return self.db.reorder_lists(ordered_ids)
+        return self._db.reorder_lists(ordered_ids)
 
     # =====================================================================
     # Export (Phase 7 / Gate G21: Härtung + echter Save-Dialog)
     # =====================================================================
     def _list_or_none(self, list_id: str) -> dict[str, Any] | None:
-        for lst in self.db.get_lists_with_tasks():
+        for lst in self._db.get_lists_with_tasks():
             if lst["id"] == list_id:
                 return lst
         return None
@@ -757,7 +762,7 @@ class Api:
     def _export_include_done(self) -> bool:
         """Setting ``exportDone`` (Default an): sollen erledigte Aufgaben mit in
         den Export? Gilt für ``export_list`` und ``export_all`` gleichermaßen."""
-        return self.db.get_setting("exportDone", "true") != "false"
+        return self._db.get_setting("exportDone", "true") != "false"
 
     @bridge(schema={"list_id": v_id, "fmt": v_fmt})
     def export_list(self, list_id: str, fmt: str = "md") -> dict[str, Any]:
@@ -787,7 +792,7 @@ class Api:
         ``NoaToDo-Export-YYYY-MM-DD.<fmt>`` (lokales Datum, U10 Punkt 1).
         Erledigte Aufgaben nur, wenn das Setting ``exportDone`` an ist.
         """
-        lists = self.db.get_lists_with_tasks()
+        lists = self._db.get_lists_with_tasks()
         done = self._export_include_done()
         lines = _export_md(lists, done) if fmt == "md" else _export_txt(lists, done)
         date = datetime.now().strftime("%Y-%m-%d")
@@ -803,7 +808,7 @@ class Api:
         gelöscht, sofern die Zwischenablage noch unseren Inhalt trägt. Eine
         ganze Liste kopiert man bewusst nicht mehr, dafür gibt es den Export.
         """
-        task = self.db.get_task(task_id)
+        task = self._db.get_task(task_id)
         if task is None:
             return _err("not_found")
         return self._copy_secure(task["text"])
@@ -851,7 +856,7 @@ class Api:
         # G20 (c)/(d): Key-Whitelist + Wert-/Typ-Pruefung je Key (V5). Der
         # normalisierte String landet in der DB; alles andere ist "invalid".
         normalized = _validate_setting(key, value)
-        result = self.db.set_setting(key, normalized)
+        result = self._db.set_setting(key, normalized)
         if self._on_setting_change:
             self._on_setting_change(key, normalized)
         return result
@@ -1368,7 +1373,7 @@ class Api:
     def _autolock_minutes(self) -> int:
         """Aktuelles Auto-Lock-Timeout in Minuten (Setting ``autoLock``, 0=nie)."""
         try:
-            return int(self.db.get_setting("autoLock", "15"))
+            return int(self._db.get_setting("autoLock", "15"))
         except Exception:
             return 15
 

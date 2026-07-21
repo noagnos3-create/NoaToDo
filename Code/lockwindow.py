@@ -32,12 +32,18 @@ _DANGER = (0xD9, 0x5C, 0x4A)
 
 
 def run_lock_window(api: Any, boot_state: str, boot_reason: str | None,
-                    icon_path: str | None) -> str:
+                    icon_path: str | None, _test_after_shown=None) -> str:
     """Baut das native Lock-/Fehler-Fenster und laeuft, bis es sich schliesst.
 
     Rueckgabe: ``"unlocked"`` (Tresor offen, weiter zur WebView-App),
     ``"quit"`` (Off-Knopf / Fenster-X: App beenden) oder ``"onboarding"``
     (Reset: Tresor geloescht, zurueck ins Onboarding).
+
+    ``_test_after_shown`` ist eine reine Test-Naht (production ruft ohne sie):
+    ein Callback, der nach dem Anzeigen einmal mit den Steuerelementen
+    aufgerufen wird, damit ein automatisierter Test den Unlock-Klick
+    deterministisch ausloesen kann, ohne auf Fenster-Fokus/Tastatur-Injektion
+    in einer nicht-interaktiven Session angewiesen zu sein.
     """
     import clr
 
@@ -343,6 +349,19 @@ def run_lock_window(api: Any, boot_state: str, boot_reason: str | None,
     def on_shown(sender, args):
         pw.Focus()
         timer.Start()
+        if _test_after_shown is not None:
+            probe = Timer()
+            probe.Interval = 800
+
+            def fire(_s, _a):
+                probe.Stop()
+                try:
+                    _test_after_shown({"pw": pw, "unlock": unlock,
+                                       "off": off, "form": form})
+                except Exception as exc:
+                    print("test_after_shown error:", exc, flush=True)
+            probe.Tick += EventHandler(fire)
+            probe.Start()
         # Falls beim Start schon eine Rate-Limit-Sperre laeuft, sofort zeigen.
         try:
             rem = api._rate.remaining()
