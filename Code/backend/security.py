@@ -586,7 +586,7 @@ class RateLimiter:
         self._persist()
 
     def reset(self) -> None:
-        """Nur der Erfolg raeumt auf (erfolgreiches unlock bzw. reset_vault)."""
+        """Nur der Erfolg raeumt auf (erfolgreiches unlock)."""
         rl = self._rl()
         rl["fails"] = 0
         rl["stage"] = 0
@@ -595,6 +595,17 @@ class RateLimiter:
         rl["locked_at"] = None
         self._mono_until = None
         self._persist()
+
+    def reset_memory(self) -> None:
+        """Nur den fluechtigen Zustand zuruecksetzen, OHNE zu persistieren.
+
+        Fuer ``reset_vault``: dort ist die ``config.json`` schon geloescht;
+        ein persistierendes ``reset()`` wuerde ueber ``_load_config`` eine neue
+        Konfig mit leerem ``vault_path`` zurueckschreiben und den naechsten Boot
+        faelschlich in ``vault_error`` statt ins Onboarding schicken.
+        """
+        self._mono_until = None
+        self._boot_check_done = False
 
 
 # ---------------------------------------------------------------------------
@@ -787,23 +798,24 @@ class Vault:
         zeroize(old_aes)
         zeroize(old_chacha)
         inner = self.snapshot_inner()
-        bak = self.enc_path + ".bak"
-        old_primary = self.enc_path + ".oldkey"
-        # Alten Primaerstand beiseite legen (stirbt gleich sicher), dann neu
-        # schreiben; die .bak-Rotation in wrap_to_file greift hier ins Leere,
-        # weil die Primaerdatei schon weg ist -> danach frische .bak anlegen.
-        secure_delete(bak)
-        try:
-            if os.path.exists(self.enc_path):
-                os.replace(self.enc_path, old_primary)
-        except OSError:
-            pass
+        # Reihenfolge datensicher (kein Fenster ohne gueltige .enc): erst das
+        # neue Primaer atomar schreiben (G16 rotiert dabei das ALTE, noch
+        # alt-lesbare Primaer nach .bak); scheitert das (z.B. Platte voll),
+        # bleibt der alte, intakte Stand als .enc/.bak stehen (VaultError ->
+        # change_passphrase liefert vault, kein Datenverlust). Erst NACH dem
+        # erfolgreichen Schreiben die alt-lesbare .bak sicher wegraeumen und
+        # durch eine mit dem NEUEN Schluessel ersetzen (N11.3 c: nach dem
+        # Wechsel ist nichts mehr mit der alten Passphrase entschluesselbar).
         wrap_to_file(self.enc_path, self._chacha_key, self.params, self.salt, inner)
+        bak = self.enc_path + ".bak"
+        secure_delete(bak)
         try:
             shutil.copyfile(self.enc_path, bak)
         except OSError:
+            # Frische .bak konnte nicht angelegt werden: hinnehmbar (die
+            # G16-Absturzsicherung fehlt dann bis zum naechsten Write-back),
+            # aber NICHTS bleibt alt-lesbar (die alte .bak ist sicher geloescht).
             pass
-        secure_delete(old_primary)
 
     # -- Abbau -------------------------------------------------------------
     def close(self) -> None:

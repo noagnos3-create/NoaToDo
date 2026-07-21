@@ -1685,7 +1685,13 @@ async function doLock() {
   clearWorkspace();
   state.locked = true;
   render();
-  await api().lock();
+  const res = await api().lock();
+  if (res && res.error) {
+    // Teardown/Write-back gescheitert (z.B. Platte voll, N6): NICHT gesperrt,
+    // kein falscher Lock-Cover. Ansicht frisch aus dem Backend wiederherstellen.
+    state.locked = false;
+    await refreshState();
+  }
 }
 
 // Theme-Wechsel-Flackern vermeiden (ein Frame ohne Transitions).

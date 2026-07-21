@@ -454,6 +454,11 @@ class Api:
         self._dialog_lock = threading.Lock()
         self._dialog_open = False   # ist gerade ein nativer Dialog offen?
         self._dialog_voided = False  # nach einer Sperre: Dialog-Ergebnis verwerfen
+        # N11.11.5: feuert die Auto-Sperre bei offenem nativem Dialog, laufen
+        # Schritte 1-7 sofort, aber die NATIVEN Schritte 9-11 (Fenster abbauen,
+        # PROFILE_DIR wischen) werden GEPARKT, bis der Dialog zu ist (sonst wird
+        # das Hauptfenster unter einem modalen Dialog abgebaut -> Haenger/Crash).
+        self._pending_window_teardown = False
         # Redigierter Fehler-Ringpuffer (Gate G29 / N11.12.1): die letzten 50
         # Fehler, NUR im RAM, nie auf der Platte. Eintraege sind bereits beim
         # Schreiben redigiert (Pfade -> <path>, 200 Zeichen) und enthalten nie
@@ -674,6 +679,13 @@ class Api:
             finally:
                 self._dialog_open = False
                 self._dialog_lock.release()
+                # N11.11.5: hat eine Auto-Sperre waehrend des offenen Dialogs
+                # gefeuert, wurden die nativen Schritte 9-11 geparkt. Jetzt, wo
+                # der Dialog zu ist (keine Modalitaet mehr), das Fenster abbauen.
+                if self._pending_window_teardown:
+                    self._pending_window_teardown = False
+                    if self._request_teardown:
+                        self._request_teardown()
 
         return guard()
 
@@ -1213,9 +1225,13 @@ class Api:
         """
         self._teardown_in_progress = True
         security_module.run_teardown("reset", self._session)
-        self._rate.reset()
+        # run_teardown('reset') hat config.json bereits geloescht (Schritt 8);
+        # den Ratelimiter NUR im Speicher zuruecksetzen, sonst schriebe
+        # _rate.reset() ueber _load_config eine neue Konfig mit leerem
+        # vault_path zurueck (naechster Boot faelschlich vault_error).
         self._vault_path = None
         self._config_cache = None
+        self._rate.reset_memory()
         self._boot_state = "onboarding"
         if self._request_teardown:
             self._request_teardown()
@@ -1398,7 +1414,19 @@ class Api:
                     "window.noa && window.noa.onLocked && window.noa.onLocked();0")
         except Exception:
             pass
-        if self._request_teardown:
+        # N11.11.5: War beim Feuern ein nativer Dialog offen (deferred_native),
+        # sind Schritte 1-7 gelaufen (Schluessel genullt), aber das Hauptfenster
+        # darf NICHT unter dem modalen Dialog abgebaut werden. Den Dialog selbst
+        # schliessen (Best effort) und den Fenster-Abbau parken, bis der Dialog
+        # zurueckkehrt (dann feuert der _native_dialog-Kontext den geparkten
+        # Abbau). Sonst (kein Dialog): sofort abbauen.
+        if getattr(self._session, "deferred_native", False):
+            self._pending_window_teardown = True
+            try:
+                self._close_active_dialog()
+            except Exception:
+                pass
+        elif self._request_teardown:
             self._request_teardown()
 
     def _clear_own_clipboard(self) -> None:
