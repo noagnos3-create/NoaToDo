@@ -22,7 +22,9 @@ from collections import deque
 from datetime import datetime
 from typing import Any, Callable
 
+from . import config as config_module
 from . import db as db_module
+from . import security as security_module
 
 # ---------------------------------------------------------------------------
 # Fehler-Hygiene (Gate G29 / Bauplan N11.12).
@@ -300,18 +302,31 @@ class _NativeDialogBusy(Exception):
     """Zweiter nativer Dialog, während schon einer offen ist (N11.11.5)."""
 
 
-def bridge(fn: Callable | None = None, *, schema: dict[str, Callable] | None = None) -> Callable:
-    """Fängt Ausnahmen ab und liefert die Fehlerkonvention aus B.2 (Gate G29),
-    und validiert Argumente gegen das deklarative Schema (Gate G20).
+# Serverseitige Lock-Durchsetzung als ALLOWLIST (Gate G13, B.2). Alles, was
+# NICHT hier steht, wird gesperrt mit {"error":"locked"} abgewiesen, ohne die
+# DB zu beruehren; das schliesst lock()/panic() ausdruecklich ein und macht
+# jede kuenftig ergaenzte Methode per Default gesperrt. get_state() liefert
+# gesperrt nur {"locked": true}. Die vier Onboarding-/Reset-Methoden laufen
+# gerade OHNE Schluessel; change_passphrase steht bewusst NICHT drin.
+ALLOWED_WHEN_LOCKED = {
+    "unlock", "quit_app", "killswitch", "get_state",
+    "get_boot_state", "choose_vault_dir", "create_vault", "reset_vault",
+}
 
-    Nutzung: ``@bridge`` (ohne Validierung) oder
-    ``@bridge(schema={"text": v_text(4096)})``. Das Schema haengt als
+
+def bridge(fn: Callable | None = None, *, schema: dict[str, Callable] | None = None,
+           mutates: bool = False) -> Callable:
+    """Fängt Ausnahmen ab und liefert die Fehlerkonvention aus B.2 (Gate G29),
+    validiert Argumente gegen das deklarative Schema (Gate G20) und setzt die
+    serverseitige Lock-Durchsetzung als Allowlist durch (Gate G13).
+
+    Nutzung: ``@bridge``, ``@bridge(schema={...})`` oder zusaetzlich
+    ``mutates=True`` fuer schreibende Methoden (dann wird nach einem
+    erfolgreichen Aufruf der G17-Write-back angestossen). Das Schema haengt als
     ``wrapper._schema`` an der Methode (introspektierbar fuer Phase-9-Tests).
 
     Ans Frontend gehen nur Katalog-Codes mit statischem Text; bei ``internal``
-    zusaetzlich eine kurze ``ref`` auf den Ringpuffer-Eintrag. Der Eintrag
-    selbst (Methodenname, Exception-Klasse, redigierte Kurzmeldung) bleibt im
-    RAM und ist nur ueber das Status-Modal einsehbar.
+    zusaetzlich eine kurze ``ref`` auf den Ringpuffer-Eintrag.
     """
 
     def deco(fn: Callable) -> Callable:
@@ -319,14 +334,19 @@ def bridge(fn: Callable | None = None, *, schema: dict[str, Callable] | None = N
 
         @functools.wraps(fn)
         def wrapper(self, *args, **kwargs):
+            # Gate G13: gesperrt ist alles ausserhalb der Allowlist tot, ohne
+            # die DB zu beruehren. Zuerst, vor jeder Validierung/Ausfuehrung.
+            if getattr(self, "locked", False) and fn.__name__ not in ALLOWED_WHEN_LOCKED:
+                return _err("locked")
             try:
                 if schema:
                     bound = sig.bind(self, *args, **kwargs)
                     for name, validator in schema.items():
                         if name in bound.arguments:
                             bound.arguments[name] = validator(bound.arguments[name])
-                    return fn(*bound.args, **bound.kwargs)
-                return fn(self, *args, **kwargs)
+                    result = fn(*bound.args, **bound.kwargs)
+                else:
+                    result = fn(self, *args, **kwargs)
             except InvalidInput:
                 return _err("invalid")
             except db_module.InvalidInput:
@@ -353,8 +373,14 @@ def bridge(fn: Callable | None = None, *, schema: dict[str, Callable] | None = N
             except Exception as exc:  # pragma: no cover - defensiv
                 ref = self._log_error(fn.__name__, "internal", exc)
                 return _err("internal", ref=ref)
+            # G17: nach einer erfolgreichen Mutation den debounced Write-back
+            # anstossen (kein Fehler-Dict, echte Aenderung).
+            if mutates and not (isinstance(result, dict) and result.get("error")):
+                self._notify_change()
+            return result
 
         wrapper._schema = schema or {}
+        wrapper._mutates = mutates
         return wrapper
 
     if fn is not None:
@@ -363,7 +389,7 @@ def bridge(fn: Callable | None = None, *, schema: dict[str, Callable] | None = N
 
 
 # Typumwandlung beim Lesen der settings-Tabelle (dort liegt alles als String).
-_BOOL_SETTINGS = {"dark", "exportDone"}
+_BOOL_SETTINGS = {"dark", "exportDone", "sound"}
 
 
 def _typed_settings(raw: dict[str, str]) -> dict[str, Any]:
@@ -377,12 +403,31 @@ def _typed_settings(raw: dict[str, str]) -> dict[str, Any]:
 
 
 class Api:
-    """Wird in ``main.py`` als ``js_api`` an das PyWebView-Fenster gehängt."""
+    """Wird in ``main.py`` als ``js_api`` an das PyWebView-Fenster gehängt.
 
-    def __init__(self, database: db_module.Database):
-        self.db = database
+    Seit Phase 8 haelt die Api keine offene DB mehr direkt, sondern eine
+    :class:`security.Session` mit einem entsperrten :class:`security.Vault`
+    (oder keinem, wenn gesperrt). ``self.db`` ist eine Property auf die DB der
+    Sitzung; gesperrt gibt es keine DB, und die G13-Allowlist im
+    ``@bridge``-Decorator laesst schreibende/lesende Methoden gar nicht erst zu.
+    """
+
+    def __init__(self, session: "security_module.Session"):
+        self._session = session
+        session.api = self
         self.online = True
-        self.locked = False
+        # Startet gesperrt, sobald ein Tresor existiert; main.py setzt den
+        # Zustand ueber die Boot-Weiche. Onboarding laeuft mit locked=False
+        # (es gibt noch keinen Tresor, aber auch keine Daten).
+        self.locked = True
+        # Boot-Zustand (dreiwertig, N11.13; N11.15.3 macht ihn vierwertig):
+        # 'onboarding' | 'locked' | 'unlocked' | 'vault_error'. main.py setzt
+        # ihn beim Start; get_boot_state() liefert ihn ans Frontend.
+        self._boot_state = "onboarding"
+        self._boot_reason = None   # bei vault_error: config_damaged|vault_unreachable
+        self._vault_path = None    # Pfad aus config.json (None = Onboarding)
+        # Entsperr-Rate-Limit-Leiter (B.8.4/N11.4.1), persistiert in config.json.
+        self._rate = security_module.RateLimiter(self._load_config, self._save_config)
         # Unterstrich-Präfix ist Pflicht: PyWebView durchsucht das Api-Objekt
         # rekursiv nach exponierbaren Methoden (util.get_functions) und steigt
         # dabei in jedes öffentliche Attribut ab. Ein dort liegendes Window-
@@ -390,25 +435,69 @@ class Api:
         # Fenster bereit ist -> "Main window failed to start". Namen mit "_"
         # werden von der Introspektion übersprungen.
         self._window = None  # von main.py gesetzt, für Backend->Frontend-Events
+        # Callback, den main.py setzt: baut das aktuelle Fenster ab (WebView
+        # oder natives Lock-Fenster) und laesst die Boot-Schleife die nativen
+        # teardown-Schritte 9 bis 11 nach session.next_state ausfuehren (G35).
+        self._request_teardown = None
         self._mini = False        # kompakter Mini-Fenster-Modus aktiv?
         self._on_setting_change = None  # optionaler Callback(key, value) für main.py
         self._on_frame_changed = None  # Callback(mini) nach jedem Mini-Modus-Wechsel
-                                       # (Handle wird neu erzeugt: Titelleisten-Theme
-                                       # muss neu gesetzt werden)
         self._clip_timer = None   # Timer für das Auto-Leeren der Zwischenablage
         # Höchstens EIN nativer Dialog gleichzeitig (N11.11.5): alle
         # create_file_dialog-Aufrufe laufen über _native_dialog(); ein zweiter
         # Aufruf bei offenem Dialog liefert den Katalog-Code busy.
         self._dialog_lock = threading.Lock()
+        self._dialog_open = False   # ist gerade ein nativer Dialog offen?
+        self._dialog_voided = False  # nach einer Sperre: Dialog-Ergebnis verwerfen
         # Redigierter Fehler-Ringpuffer (Gate G29 / N11.12.1): die letzten 50
         # Fehler, NUR im RAM, nie auf der Platte. Eintraege sind bereits beim
         # Schreiben redigiert (Pfade -> <path>, 200 Zeichen) und enthalten nie
         # Bridge-Argumente. Geleert bei Sperre/Panik/Killswitch/Quit.
         self._errors = deque(maxlen=50)
         # Undo-Puffer der letzten geloeschten Liste (N11.2.1): genau EINE
-        # Loeschung, nur im RAM, verworfen bei Lock/Panik/Killswitch/Quit
-        # (zusammen mit dem Schluessel-Nullen, sobald Phase 8 teardown bringt).
+        # Loeschung, nur im RAM, verworfen im teardown (Schritt 7).
         self._undo_list = None
+        # Zwischengespeicherte config.json (ein Schreiber, G19). Wird lazy
+        # geladen und bei Bedarf atomar zurueckgeschrieben.
+        self._config_cache = None
+
+    # =====================================================================
+    # DB-Zugriff und Session-Verdrahtung
+    # =====================================================================
+    @property
+    def db(self) -> "db_module.Database":
+        """Die DB der entsperrten Sitzung.
+
+        Gesperrt gibt es keine; da aber die G13-Allowlist alle DB-beruehrenden
+        Methoden gesperrt abweist, kommt hier im Normalfall nur der entsperrte
+        Zustand an. Fehlt die DB dennoch, ist das ein interner Fehler.
+        """
+        vault = self._session.vault
+        if vault is None or vault.db is None:
+            raise RuntimeError("vault not open")
+        return vault.db
+
+    def _notify_change(self) -> None:
+        """G17-Write-back nach einer erfolgreichen Mutation anstossen."""
+        wb = self._session.writeback
+        if wb is not None:
+            wb.notify_change()
+
+    def _load_config(self) -> dict:
+        """config.json lazy laden (fuer die Rate-Limit-Leiter)."""
+        if self._config_cache is None:
+            try:
+                cfg = config_module.load_config()
+            except config_module.ConfigDamaged:
+                cfg = None
+            if cfg is None:
+                cfg = config_module.new_config(self._vault_path or "")
+            self._config_cache = cfg
+        return self._config_cache
+
+    def _save_config(self, cfg: dict) -> None:
+        self._config_cache = cfg
+        config_module.save_config(cfg)
 
     def _log_error(self, method: str, code: str, exc: BaseException) -> str:
         """Fehler in den Ringpuffer schreiben; liefert die kurze ``ref``."""
@@ -430,6 +519,11 @@ class Api:
     # =====================================================================
     @bridge
     def get_state(self) -> dict[str, Any]:
+        # Gate G13: gesperrt gibt get_state NICHTS heraus ausser dem Fakt der
+        # Sperre (keine Listen, keine Settings). Damit bleibt die Regel scharf,
+        # dass ein einziger JS-Aufruf gesperrt keine Daten liefert.
+        if self.locked:
+            return {"locked": True}
         return {
             "lists": self.db.get_lists_with_tasks(),
             "settings": _typed_settings(self.db.get_all_settings()),
@@ -438,21 +532,40 @@ class Api:
         }
 
     @bridge
+    def get_boot_state(self) -> dict[str, Any]:
+        """Dreiwertige (bei Fehlern vierwertige) Boot-Weiche (N11.13/N11.15.3).
+
+        Erster und einziger Aufruf des Frontends vor dem Rendern. main.py hat
+        den Zustand beim Start ueber die Existenz von ``tasks.db.enc``
+        entschieden (N11.8.2). Nach einem Unlock steht die Sitzung, dann meldet
+        die Methode ``unlocked``. Gibt nie Aufgabendaten heraus (nur den Pfad,
+        kein Geheimnis).
+        """
+        if self._session.vault is not None and not self.locked:
+            state = "unlocked"
+        else:
+            state = self._boot_state
+        out = {"state": state, "vault_path": self._vault_path}
+        if state == "vault_error" and self._boot_reason:
+            out["reason"] = self._boot_reason
+        return out
+
+    @bridge
     def get_lists(self) -> list[dict[str, Any]]:
         return self.db.get_lists_with_tasks()
 
     # =====================================================================
     # Listen
     # =====================================================================
-    @bridge(schema={"name": v_text(MAX_LIST_NAME)})
+    @bridge(schema={"name": v_text(MAX_LIST_NAME)}, mutates=True)
     def add_list(self, name: str) -> dict[str, Any]:
         return self.db.add_list(name)
 
-    @bridge(schema={"list_id": v_id, "name": v_text(MAX_LIST_NAME)})
+    @bridge(schema={"list_id": v_id, "name": v_text(MAX_LIST_NAME)}, mutates=True)
     def rename_list(self, list_id: str, name: str) -> dict[str, Any]:
         return self.db.rename_list(list_id, name)
 
-    @bridge(schema={"list_id": v_id})
+    @bridge(schema={"list_id": v_id}, mutates=True)
     def delete_list(self, list_id: str) -> dict[str, Any]:
         # Undo-Puffer (N11.2.1, U9): GENAU die letzte Loeschung wird samt allen
         # Aufgaben im RAM gehalten; eine neue Loeschung ueberschreibt den
@@ -460,7 +573,7 @@ class Api:
         self._undo_list = self.db.get_list_snapshot(list_id)  # KeyError -> not_found
         return self.db.delete_list(list_id)
 
-    @bridge(schema={"list_id": v_id})
+    @bridge(schema={"list_id": v_id}, mutates=True)
     def undo_delete_list(self, list_id: str) -> dict[str, Any]:
         """Letzte Listen-Loeschung rueckgaengig machen (N11.2.1).
 
@@ -480,27 +593,27 @@ class Api:
     # =====================================================================
     # Aufgaben
     # =====================================================================
-    @bridge(schema={"list_id": v_id, "text": v_text(MAX_TASK_TEXT)})
+    @bridge(schema={"list_id": v_id, "text": v_text(MAX_TASK_TEXT)}, mutates=True)
     def add_task(self, list_id: str, text: str) -> dict[str, Any]:
         return self.db.add_task(list_id, text)
 
-    @bridge(schema={"task_id": v_id})
+    @bridge(schema={"task_id": v_id}, mutates=True)
     def toggle_task(self, task_id: str) -> dict[str, Any]:
         return self.db.toggle_task(task_id)
 
-    @bridge(schema={"task_id": v_id, "fields": v_task_fields})
+    @bridge(schema={"task_id": v_id, "fields": v_task_fields}, mutates=True)
     def edit_task(self, task_id: str, fields: dict[str, Any]) -> dict[str, Any]:
         return self.db.edit_task(task_id, fields)
 
-    @bridge(schema={"task_id": v_id})
+    @bridge(schema={"task_id": v_id}, mutates=True)
     def delete_task(self, task_id: str) -> dict[str, Any]:
         return self.db.delete_task(task_id)
 
-    @bridge(schema={"list_id": v_id, "ordered_ids": v_str_list})
+    @bridge(schema={"list_id": v_id, "ordered_ids": v_str_list}, mutates=True)
     def reorder(self, list_id: str, ordered_ids: list[str]) -> dict[str, Any]:
         return self.db.reorder(list_id, ordered_ids)
 
-    @bridge(schema={"task_id": v_id, "target_list_id": v_id})
+    @bridge(schema={"task_id": v_id, "target_list_id": v_id}, mutates=True)
     def move_task(self, task_id: str, target_list_id: str) -> dict[str, Any]:
         """Aufgabe in eine andere Liste verschieben (N7/N11.2, Phase 7).
 
@@ -510,7 +623,7 @@ class Api:
         """
         return self.db.move_task(task_id, target_list_id)
 
-    @bridge(schema={"ordered_ids": v_str_list})
+    @bridge(schema={"ordered_ids": v_str_list}, mutates=True)
     def reorder_lists(self, ordered_ids: list[str]) -> dict[str, Any]:
         """Sidebar-Reihenfolge der Listen speichern (N7/N11.2, Phase 7).
 
@@ -533,7 +646,10 @@ class Api:
 
         Flag im ``finally`` freigegeben; ein zweiter Aufruf bei offenem Dialog
         wirft ``_NativeDialogBusy`` (-> Katalog-Code ``busy`` im Decorator).
-        Ein offener Dialog zählt NICHT als Aktivität (Auto-Lock, Phase 8).
+        Ein offener Dialog zählt NICHT als Aktivität (Auto-Lock, N11.4.2). Beim
+        Eintritt wird ``_dialog_voided`` zurueckgesetzt; feuert waehrend des
+        offenen Dialogs eine Sperre, setzt ``_resolve_native_dialog`` es auf
+        True und das Ergebnis wird verworfen (N11.11.5 Punkt 5).
         """
         import contextlib
 
@@ -541,19 +657,76 @@ class Api:
         def guard():
             if not self._dialog_lock.acquire(blocking=False):
                 raise _NativeDialogBusy()
+            self._dialog_open = True
+            self._dialog_voided = False
             try:
                 yield
             finally:
+                self._dialog_open = False
                 self._dialog_lock.release()
 
         return guard()
+
+    def _resolve_native_dialog(self, cancel: bool) -> bool:
+        """teardown Schritt 2 (N11.11.5): offenen Dialog aufloesen.
+
+        Liefert True, wenn gerade ein Dialog offen war (dann duerfen die
+        nativen teardown-Schritte 9 bis 11 bei ``autolock`` geparkt werden, bis
+        er zurueckkehrt). Setzt das Ergebnis auf nichtig (``_dialog_voided``),
+        sodass ein nach der Sperre zurueckkehrender Dialog KEINE Datei schreibt
+        und ``locked`` liefert (Angriffsvektor 2). ``cancel`` (jeder Grund
+        ausser autolock) versucht zusaetzlich, das modale Fenster sofort zu
+        schliessen (Best-Effort ueber WM_CLOSE ans aktive Popup).
+        """
+        if not self._dialog_open:
+            return False
+        self._dialog_voided = True
+        if cancel:
+            try:
+                self._close_active_dialog()
+            except Exception:
+                pass
+        return True
+
+    def _close_active_dialog(self) -> None:
+        """Best-Effort: das modale Dialogfenster des Hauptfensters schliessen.
+
+        Sendet WM_CLOSE an das aktive Popup, das dem Hauptformular gehoert.
+        Gelingt es nicht (kein Handle), bleibt der Rest geparkt und laeuft,
+        sobald der Nutzer den Dialog selbst schliesst (N11.11.5 Punkt 4). Nur
+        ueber den UI-Thread, wenn ein Fenster existiert.
+        """
+        win = self._window
+        native = getattr(win, "native", None) if win is not None else None
+        if native is None:
+            return
+
+        def work():
+            try:
+                hwnd = int(native.Handle.ToInt64())
+                # GetWindow(hwnd, GW_ENABLEDPOPUP=6) liefert das aktive,
+                # dem Fenster gehoerende modale Popup (der Save-Dialog).
+                popup = ctypes.windll.user32.GetWindow(hwnd, 6)
+                if popup:
+                    ctypes.windll.user32.PostMessageW(popup, 0x0010, 0, 0)  # WM_CLOSE
+            except Exception:
+                pass
+
+        try:
+            from System import Action
+            native.BeginInvoke(Action(work))
+        except Exception:
+            pass
 
     def _export_via_dialog(self, filename: str, lines: list[str]) -> dict[str, Any]:
         """Save-Dialog zeigen und die Datei wirklich schreiben (G21 c).
 
         UTF-8 ohne BOM, CRLF-Zeilenenden (U10 Punkt 3). Dialog-Abbruch: keine
         Datei, kein Nebeneffekt, Rückgabe ``canceled`` (nach B.2 bewusst
-        still, U10 Punkt 4).
+        still, U10 Punkt 4). Feuert waehrend des Dialogs eine Sperre
+        (``_dialog_voided``), wird der gewaehlte Pfad verworfen, der
+        Export-Inhalt aus dem Speicher genullt und ``locked`` geliefert
+        (N11.11.5 Punkt 5).
         """
         win = self._window
         if win is None:
@@ -565,6 +738,11 @@ class Api:
         # PyWebView liefert je nach Version einen String oder eine Sequenz.
         if isinstance(result, (list, tuple)):
             result = result[0] if result else None
+        if self._dialog_voided or self.locked:
+            # Eine Sperre ist waehrend des offenen Dialogs gefeuert: nichts
+            # schreiben, den Export-Inhalt verwerfen (N11.11.5 Punkt 5).
+            lines[:] = []
+            return _err("locked")
         if not result:
             return _err("canceled")
         with open(result, "w", encoding="utf-8", newline="") as fh:
@@ -631,6 +809,9 @@ class Api:
             # Kein eigener Katalog-Code: Clipboard-Ausfall ist ein interner
             # Fehler; der @bridge-Decorator macht daraus internal + ref.
             raise RuntimeError("clipboard unavailable")
+        # Merker fuer teardown Schritt 5 (V7): so kann die Sperre pruefen, ob
+        # noch UNSER Inhalt im Clipboard liegt, bevor sie es leert.
+        self._last_clip_text = text
         if self._clip_timer is not None:
             self._clip_timer.cancel()
         self._clip_timer = threading.Timer(
@@ -660,7 +841,7 @@ class Api:
     # =====================================================================
     # Einstellungen
     # =====================================================================
-    @bridge
+    @bridge(mutates=True)
     def set_setting(self, key: str, value: Any) -> dict[str, Any]:
         # G20 (c)/(d): Key-Whitelist + Wert-/Typ-Pruefung je Key (V5). Der
         # normalisierte String landet in der DB; alles andere ist "invalid".
@@ -767,35 +948,32 @@ class Api:
     # =====================================================================
     @bridge
     def get_status(self) -> dict[str, Any]:
-        db_path = getattr(self.db, "path", None)
-        size = os.path.getsize(db_path) if db_path and os.path.exists(db_path) else 0
-        # Gate G22 (ehrliche Sicherheits-Behauptungen): Solange der oeffentliche
-        # Entwicklungs-Schluessel benutzt wird, meldet der Status den REALEN
-        # (unsicheren) Zustand, nie "active"/"encrypted". Schicht 2 (ChaCha20) und
-        # die Passphrase-Ableitung existieren erst ab Phase 8. Keine Verschluesselung
-        # vortaeuschen, solange der Schluessel oeffentlich im Repo steht.
-        dev_key = getattr(self.db, "dev_key", True)
-        if dev_key:
-            encryption = {
-                "layer1": "SQLCipher · AES-256 (public dev key, INSECURE)",
-                "layer2": "ChaCha20-Poly1305 · Argon2id (not implemented)",
-                "active": False,
-                "dev_key": True,
-            }
-        else:
-            encryption = {
-                "layer1": "SQLCipher · AES-256",
-                "layer2": "ChaCha20-Poly1305 · Argon2id",
-                "active": True,
-                "dev_key": False,
-            }
+        # Gate G22 (ehrliche Sicherheits-Behauptungen): seit Phase 8 ist die
+        # Verschluesselung real (beide Schichten, Argon2id, DPAPI-Pepper), also
+        # meldet der Status jetzt den echten aktiven Zustand mit den konkreten
+        # Werten (kein Dev-Key mehr, G9). Die Groesse bezieht sich auf das
+        # einzige Ruhe-Artefakt tasks.db.enc, nicht auf eine Klartext-DB.
+        enc_path = self._vault_path
+        size = os.path.getsize(enc_path) if enc_path and os.path.exists(enc_path) else 0
+        params = security_module.KdfParams()
+        encryption = {
+            "layer1": "SQLCipher · AES-256",
+            "layer2": "ChaCha20-Poly1305",
+            "kdf": (f"Argon2id · {params.memory_cost // 1024} MiB · "
+                    f"t={params.time_cost} · p={params.parallelism}"),
+            "pepper": security_module.pepper_exists(),
+            "active": True,
+            "dev_key": False,
+        }
         return {
             "db": {
-                "path": db_path,
+                "path": enc_path,
                 "size": size,
                 "size_human": f"{size / 1024:.1f} KB" if size else "0 KB",
+                "artifact": "tasks.db.enc",
             },
             "encryption": encryption,
+            "bitlocker": _bitlocker_status(enc_path),
             "runtime": {"webview2": _webview2_version()},
             # Redigierter Fehler-Ringpuffer (G29): neueste zuerst, nur fuer die
             # "Recent errors"-Sektion des Status-Modals. Eintraege sind schon
@@ -854,74 +1032,472 @@ class Api:
         return {"connected": True, "percent": percent, "level": level}
 
     # =====================================================================
-    # Sicherheit (Stubs: Phase 8)
+    # Auto-Sperre-Aktivitaet (B.8.3 / N11.4.2)
     # =====================================================================
     @bridge
+    def activity_ping(self) -> dict[str, Any]:
+        """Stempelt Aktivitaet auf die monotone Backend-Uhr (N11.4.2).
+
+        Der EINZIGE Aufruf, der den Auto-Sperr-Timer zuruecksetzt; er nimmt
+        keinen Zeitwert entgegen, kann ``last_activity`` nie in die Zukunft
+        setzen und den Timer nicht abschalten. Steht bewusst NICHT in
+        ALLOWED_WHEN_LOCKED: gesperrt liefert der Decorator ``locked`` und der
+        Timer bleibt unberuehrt (eine gesperrte App laesst sich nicht
+        wachhalten).
+        """
+        al = self._session.autolock
+        if al is not None:
+            al.ping()
+        return {"ok": True}
+
+    # =====================================================================
+    # Onboarding / Tresor-Verwaltung (N11.13, Phase 8)
+    # =====================================================================
+    @bridge
+    def choose_vault_dir(self) -> dict[str, Any]:
+        """Nativer Ordner-Dialog fuer den Tresor-Ort (N11.13, G32).
+
+        Prueft die Schreibbarkeit, warnt bei erkannten Cloud-/Wechsel-/
+        Netzpfaden (G32/N11.15.4) und meldet ``has_vault:true``, wenn im Ordner
+        schon eine ``tasks.db.enc`` liegt (dann bietet das Onboarding "Diesen
+        Tresor oeffnen" statt "neu anlegen", N11.15.6). Abbruch -> ``canceled``.
+        """
+        win = self._window
+        if win is None:
+            raise RuntimeError("window not ready")
+        import webview
+
+        with self._native_dialog():
+            result = win.create_file_dialog(webview.FOLDER_DIALOG)
+        if isinstance(result, (list, tuple)):
+            result = result[0] if result else None
+        if not result:
+            return _err("canceled")
+        path = str(result)
+        if not os.path.isdir(path) or not os.access(path, os.W_OK):
+            return _err("invalid")
+        has_vault = os.path.exists(os.path.join(path, "tasks.db.enc"))
+        return {
+            "path": path,
+            "has_vault": has_vault,
+            "warning": _path_risk_warning(path),
+        }
+
+    @bridge(schema={"path": v_id, "passphrase": v_id})
+    def create_vault(self, path: str, passphrase: str) -> dict[str, Any]:
+        """Neuen, leeren Tresor anlegen (N11.13, Onboarding-Schritt 3).
+
+        Passphrase-Regel: ausschliesslich Mindestlaenge 12 (N11.3). Ein
+        bestehender Tresor wird NIE ueberschrieben (Backend-Riegel N11.15.6:
+        vorhandene ``tasks.db.enc`` -> ``invalid``). G33: eine alte Dev-DB wird
+        beim ersten Anlegen ueber den Secure-Delete-Pfad entsorgt. Danach ist
+        die App entsperrt.
+        """
+        if len(passphrase) < 12:
+            return _err("invalid")
+        enc_path = os.path.join(path, "tasks.db.enc")
+        if os.path.exists(enc_path):
+            return _err("invalid")   # N11.15.6: nie ueberschreiben
+        if not os.path.isdir(path) or not os.access(path, os.W_OK):
+            return _err("invalid")
+        try:
+            vault = security_module.Vault.create(enc_path, passphrase)
+        except MemoryError:
+            return _err("memory")
+        except security_module.VaultError:
+            return _err("vault")
+        # G33: alte Dev-DB (data/tasks.db samt Journalen) sicher wegraeumen.
+        _cleanup_dev_legacy_db()
+        cfg = config_module.new_config(enc_path)
+        config_module.save_config(cfg)
+        self._config_cache = cfg
+        self._vault_path = enc_path
+        self._attach_vault(vault)
+        return {"ok": True}
+
+    @bridge(schema={"old": v_id, "new": v_id})
+    def change_passphrase(self, old: str, new: str) -> dict[str, Any]:
+        """Passphrase in den Einstellungen aendern (N11.3 a-d, nur entsperrt).
+
+        Bewusst NICHT in ALLOWED_WHEN_LOCKED (braucht die Schluessel). Die
+        alte Passphrase wird ueber die abgeleiteten Schluessel geprueft (kein
+        gespeicherter Hash); frisches Salt + frische Nonce, der Pepper bleibt,
+        die ``.bak`` wird mit dem neuen Schluessel neu geschrieben (nichts
+        bleibt alt-lesbar), die Argon2-Parameter werden auf den Soll-Stand
+        gehoben. Rate-Limit wie beim Entsperren.
+        """
+        vault = self._session.vault
+        if vault is None:
+            raise RuntimeError("vault not open")
+        if len(new) < 12:
+            return _err("invalid")
+        wait = self._rate.remaining()
+        if wait > 0:
+            return _err("rate_limited", retry_in=wait)
+        pepper = security_module.get_pepper(create=False)
+        try:
+            old_aes, old_chacha = security_module.derive_keys(
+                old, pepper, vault.salt, vault.params)
+        except MemoryError:
+            security_module.zeroize(pepper)
+            return _err("memory")
+        ok = vault.matches_aes(old_aes)
+        security_module.zeroize(old_aes)
+        security_module.zeroize(old_chacha)
+        if not ok:
+            # Falsche alte Passphrase: als Rateversuch werten (N11.13).
+            self._rate.register_fail()
+            security_module.zeroize(pepper)
+            return _err("passphrase", retry_in=self._rate.remaining() or 2)
+        new_salt = os.urandom(security_module.SALT_LEN)
+        new_params = security_module.KdfParams()   # Soll-Stand (KDF-Upgrade)
+        try:
+            new_aes, new_chacha = security_module.derive_keys(
+                new, pepper, new_salt, new_params)
+        except MemoryError:
+            security_module.zeroize(pepper)
+            return _err("memory")
+        finally:
+            security_module.zeroize(pepper)
+        vault.rewrap_with(new_aes, new_chacha, new_params, new_salt)
+        self._rate.reset()
+        return {"ok": True}
+
+    @bridge
+    def reset_vault(self) -> dict[str, Any]:
+        """Ausweg der vergessenen Passphrase (N11.13): teardown('reset').
+
+        Loescht Tresor + .bak + Metadaten + Pepper (Schritte 6-8), beendet die
+        App NICHT, sondern laesst die Boot-Schleife ins Onboarding springen
+        (next_state='onboarding'). Im UI wie der Killswitch abgesichert
+        (Bestaetigung, dann RESET tippen); erreichbar auch aus dem gesperrten
+        Zustand (Allowlist).
+        """
+        security_module.run_teardown("reset", self._session)
+        self._rate.reset()
+        self._vault_path = None
+        self._config_cache = None
+        self._boot_state = "onboarding"
+        if self._request_teardown:
+            self._request_teardown()
+        return {"ok": True}
+
+    # =====================================================================
+    # Sperren / Entsperren / Panik / Beenden (B.8, Phase 8)
+    # =====================================================================
+    @bridge
+    def unlock(self, passphrase: str) -> dict[str, Any]:
+        """Entsperren nach der N6-Fehlerlogik (B.2) + Rate-Limit (N11.4.1).
+
+        Reihenfolge (im Zweifel pro Sicherheit): (1) unverschluesselten Kopf
+        lesen und pruefen (Datei fehlt / Kopf unlesbar -> ``vault``, KEIN
+        Argon2, treibt die Leiter nicht); (2) Rate-Limit pruefen
+        (``rate_limited`` + retry_in); (3) persist-before-verify: den Versuch
+        zaehlen und schreiben, BEVOR die teure Ableitung laeuft; (4) ableiten +
+        AEAD (Tag-Fehler -> ``passphrase`` + retry_in, treibt die Leiter;
+        MemoryError -> ``memory``, treibt sie NICHT; fehlender Pepper ->
+        ``vault``, treibt sie nicht); (5) Erfolg: Leiter zuruecksetzen,
+        Sitzung aufbauen, entsperrt.
+        """
+        if not self._vault_path:
+            return _err("vault")
+        # (1) Kopf lesen/pruefen ohne Passphrase, ohne Argon2 (N6 Schritt 1/2).
+        try:
+            params, salt, nonce, header, ciphertext = security_module.read_container(
+                self._vault_path)
+        except security_module.VaultError:
+            return _err("vault")
+        # (2) Rate-Limit.
+        wait = self._rate.remaining()
+        if wait > 0:
+            return _err("rate_limited", retry_in=wait)
+        # (3) persist-before-verify: jetzt zaehlen und schreiben.
+        self._rate.register_fail()
+        # (4) Pepper + Ableitung + AEAD.
+        try:
+            pepper = security_module.get_pepper(create=False)
+        except security_module.VaultError:
+            self._rate.undo_last_fail()   # fehlender Pepper ist kein Rateversuch
+            return _err("vault")
+        try:
+            aes_key, chacha_key = security_module.derive_keys(
+                passphrase, pepper, salt, params)
+        except MemoryError:
+            self._rate.undo_last_fail()   # Speicher-Not treibt die Leiter nicht
+            security_module.zeroize(pepper)
+            return _err("memory")
+        finally:
+            security_module.zeroize(pepper)
+        try:
+            inner = security_module.unwrap(chacha_key, header, nonce, ciphertext)
+        except security_module.WrongPassphrase:
+            security_module.zeroize(aes_key)
+            security_module.zeroize(chacha_key)
+            return _err("passphrase", retry_in=self._rate.remaining() or 2)
+        # (5) Erfolg.
+        try:
+            vault = security_module.Vault.from_keys(
+                self._vault_path, aes_key, chacha_key, params, salt, inner)
+        finally:
+            inner = b""
+        self._rate.reset()
+        self._attach_vault(vault)
+        return {"ok": True}
+
+    @bridge
     def lock(self) -> dict[str, Any]:
-        self.locked = True
-        # G29/N11.12.1 + N11.2.1: Fehler-Ringpuffer und Listen-Undo-Puffer
-        # sind Sitzungs-RAM und werden bei jedem Austritt aus dem entsperrten
-        # Zustand verworfen (bis Phase 8 die gemeinsame teardown(reason)-
-        # Sequenz uebernimmt, N11.11 Schritt 3/7): eine gesperrte App haelt
-        # keinen geloeschten Aufgabentext und keine Diagnose-Historie im RAM.
+        """Sperren (Lock-Button / Ctrl+L): die eine teardown-Sequenz (G35).
+
+        Steps 1-8 laufen synchron (flush, DB zu, Schluessel nullen); die
+        nativen Schritte 9-11 (WebView abbauen, PROFILE_DIR wischen, Lock-
+        Screen) uebernimmt main.py ueber den teardown-Request. N11.10: der
+        Online-/Funkzustand wird beim Sperren NICHT angefasst.
+        """
+        try:
+            security_module.run_teardown("lock", self._session)
+        except security_module.TeardownAbort:
+            # Schritt 4 (Write-back) gescheitert: nicht sperren, Fehler zeigen.
+            return _err("vault")
+        if self._request_teardown:
+            self._request_teardown()
+        return {"locked": True}
+
+    @bridge
+    def panic(self) -> dict[str, Any]:
+        """Panik-Confirm: KEIN Ausgang (N11.11.1), fuehrt in den Endschirm.
+
+        Raeumt den Raum (Frontend) + schaltet offline (N11.10 gilt nur fuers
+        Sperren, der Panik-Flow behaelt das Offline-Schalten) + verwirft die
+        fluechtigen RAM-Puffer. Der eigentliche Abbau (Schluessel nullen,
+        Dateien) passiert erst ueber die Endschirm-Knoepfe (Finish ->
+        quit_app -> teardown('quit'); Killswitch -> teardown('killswitch')).
+        """
+        self.online = False
         self._errors.clear()
         self._undo_list = None
         return {"locked": True}
 
     @bridge
-    def unlock(self, passphrase: str) -> dict[str, Any]:
-        # Phase 8: Argon2-Hash prüfen + Schlüssel ableiten. Vorerst immer offen.
-        self.locked = False
-        return {"ok": True}
-
-    @bridge
-    def panic(self) -> dict[str, Any]:
-        self.locked = True
-        self.online = False
-        self._errors.clear()   # G29: keine Diagnose-Historie im gesperrten Zustand
-        self._undo_list = None  # N11.2.1: Undo-Puffer verfaellt bei Panik
-        return {"locked": True}
-
-    @bridge
     def killswitch(self) -> dict[str, Any]:
-        """Löscht unwiderruflich alle Nutzerdaten aus der DB (Nachtrag N10).
+        """Unwiderrufliche Datei-Loeschung (B.8.7/N11.8.1): teardown('killswitch').
 
-        Nur vom Panik-Endschirm aus erreichbar (zweistufig bestätigter
-        Killswitch-Knopf). Löscht ausschließlich Datenbank-Inhalte, nie das
-        Programm; der nächste Start verhält sich wie ein Erststart ohne
-        Demo-Daten (Details in db.killswitch).
+        Reine Datei-Operation ohne Schluessel (tasks.db.enc + .bak + Metadaten
+        + Pepper + Arbeitsordner), funktioniert gesperrt wie entsperrt
+        (Allowlist). Danach beendet die Boot-Schleife die App; der naechste
+        Start ist mangels Datei ein leerer Erststart.
         """
-        self._errors.clear()   # G29: Diagnose-Historie faellt mit den Daten
-        self._undo_list = None  # N11.2.1: auch der Undo-Puffer
-        return self.db.killswitch()
+        security_module.run_teardown("killswitch", self._session)
+        self._vault_path = None
+        self._config_cache = None
+        if self._request_teardown:
+            self._request_teardown()
+        return {"ok": True}
 
     @bridge
     def quit_app(self) -> dict[str, Any]:
-        """Beendet die App sauber (Off-Knopf des Lock-Screens, Panik-Endschirm).
+        """Sauberes Beenden (Off-Knopf, Panik-Finish, Fenster-X):
+        teardown('quit').
 
-        Läuft im API-Worker-Thread: das Schließen wird deshalb per
-        ``form.BeginInvoke`` auf den WinForms-UI-Thread gestellt (asynchron,
-        nicht blockierend), analog zu set_mini; ein direkter Fensterzugriff von
-        hier könnte die Nachrichtenschleife verklemmen. Das sichere Wischen der
-        Spuren (PROFILE_DIR, Gate G14) folgt in Phase 8 auf genau diesem Pfad.
+        Flush, DB zu, Schluessel nullen; danach baut main.py das Fenster ab,
+        wischt PROFILE_DIR (G14) und beendet den Prozess. Loescht nie Nutzer-
+        oder App-Daten.
         """
-        self._errors.clear()    # G29: Ringpuffer verlaesst die Sitzung nicht
-        self._undo_list = None  # N11.2.1: Undo-Puffer verfaellt beim Beenden
-        win = self._window
-        if win is None:
-            raise RuntimeError("window not ready")   # -> internal + ref (G29)
-        form = getattr(win, "native", None)
-        if form is not None:
-            try:
-                from System import Action  # pythonnet, nach webview.start verfügbar
+        try:
+            security_module.run_teardown("quit", self._session)
+        except security_module.TeardownAbort:
+            return _err("vault")
+        if self._request_teardown:
+            self._request_teardown()
+        return {"ok": True}
 
-                form.BeginInvoke(Action(form.Close))
-                return {"ok": True}
+    # =====================================================================
+    # Session-Verdrahtung (von main.py / teardown genutzt, nie ueber die Bridge)
+    # =====================================================================
+    def _attach_vault(self, vault: "security_module.Vault") -> None:
+        """Frisch entsperrte/angelegte Sitzung aktivieren (Write-back + Auto-Lock)."""
+        self._session.vault = vault
+        self._session.writeback = security_module.WriteBack(vault.flush)
+        if self._session.autolock is None:
+            self._session.autolock = security_module.AutoLock(
+                self._autolock_minutes, self._on_autolock)
+            self._session.autolock.start()
+        self._session.autolock.arm()
+        self.locked = False
+        self._boot_state = "unlocked"
+
+    def _autolock_minutes(self) -> int:
+        """Aktuelles Auto-Lock-Timeout in Minuten (Setting ``autoLock``, 0=nie)."""
+        try:
+            return int(self.db.get_setting("autoLock", "15"))
+        except Exception:
+            return 15
+
+    def _on_autolock(self) -> None:
+        """Callback des Auto-Sperr-Timers (eigener Thread, B.8.3).
+
+        Feuert die teardown('autolock')-Sequenz. Bei offenem nativem Dialog
+        laufen Schritte 1-7 sofort und die nativen Schritte werden ueber
+        main.py geparkt (N11.11.5); der Timer selbst bleibt fail-safe.
+        """
+        try:
+            security_module.run_teardown("autolock", self._session)
+        except security_module.TeardownAbort:
+            return
+        # Frontend sofort auf den Lock-Screen (reines DOM, auch unter einem
+        # modalen Dialog sicher, N11.11.5 Punkt 2).
+        try:
+            if self._window is not None:
+                self._window.evaluate_js(
+                    "window.noa && window.noa.onLocked && window.noa.onLocked();0")
+        except Exception:
+            pass
+        if self._request_teardown:
+            self._request_teardown()
+
+    def _clear_own_clipboard(self) -> None:
+        """teardown Schritt 5 (V7/G23): Clipboard leeren, wenn App-Inhalt drin.
+
+        Bricht den 60-s-Auto-Clear-Timer ab und leert das Clipboard sofort,
+        aber NUR wenn es noch unseren zuletzt kopierten Text traegt (dieselbe
+        Pruefung wie der Auto-Clear). Fremder Inhalt (der Nutzer hat inzwischen
+        etwas anderes kopiert) bleibt unangetastet.
+        """
+        if self._clip_timer is not None:
+            try:
+                self._clip_timer.cancel()
             except Exception:
                 pass
-        # Fallback ohne native Form: PyWebViews eigener Weg.
-        win.destroy()
-        return {"ok": True}
+            self._clip_timer = None
+        last = getattr(self, "_last_clip_text", None)
+        if last is not None:
+            _clear_clipboard_if_matches(last)
+            self._last_clip_text = None
+
+    def _detach_db(self) -> None:
+        """teardown Schritt 6: nach dem Schliessen des Vault greift kein
+        DB-Zugriff mehr durch (die ``db``-Property wirft dann, und die
+        G13-Allowlist blockt ohnehin alle DB-Methoden im gesperrten Zustand).
+        Der Konfig-Cache bleibt gueltig (er enthaelt nichts Geheimes)."""
+        return
+
+    def _drop_volatile(self) -> None:
+        """teardown Schritt 7: fluechtige RAM-Puffer verwerfen (G29/N11.2.1)."""
+        self._errors.clear()
+        self._undo_list = None
+
+
+# ---------------------------------------------------------------------------
+# BitLocker-Status (Gate G31): ehrlich "unknown" bei unlesbarer Abfrage
+# ---------------------------------------------------------------------------
+
+def _bitlocker_status(path: str | None) -> dict[str, Any]:
+    """Realer BitLocker-Schutzstatus des Tresor-Laufwerks (G31, B.10.4).
+
+    Fragt ``Win32_EncryptableVolume`` per PowerShell/WMI ab. Ist die Abfrage
+    nicht lesbar (kein Admin, WMI-Klasse fehlt, Timeout), meldet die Funktion
+    ehrlich ``"unknown"`` und NIE ein falsches "protected" (G22/G31). Rein
+    informativ fuer das Status-Modal; die App erzwingt nichts.
+    """
+    drive = None
+    if path:
+        drive = os.path.splitdrive(os.path.abspath(path))[0]  # z.B. "C:"
+    if not drive:
+        drive = os.path.splitdrive(os.path.abspath(os.getcwd()))[0]
+    result = {"state": "unknown", "drive": drive}
+    if not drive:
+        return result
+    import subprocess
+
+    # ProtectionStatus: 0 = aus, 1 = an, 2 = unbekannt. Ueber die Security-WMI-
+    # Klasse, die keine Admin-Rechte fuer das reine Lesen braucht.
+    ps = (
+        "$v = Get-CimInstance -Namespace 'root/cimv2/Security/MicrosoftVolumeEncryption' "
+        "-ClassName Win32_EncryptableVolume "
+        f"-Filter \"DriveLetter='{drive}'\" -ErrorAction Stop; "
+        "$v.ProtectionStatus"
+    )
+    try:
+        out = subprocess.run(
+            ["powershell.exe", "-NoProfile", "-NonInteractive", "-Command", ps],
+            capture_output=True, timeout=8,
+            creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+        )
+        val = out.stdout.decode("ascii", "ignore").strip()
+    except Exception:
+        return result
+    if val == "1":
+        result["state"] = "protected"
+    elif val == "0":
+        result["state"] = "off"
+    # alles andere (leer, "2", Fehler): bleibt "unknown" (ehrlich)
+    return result
+
+
+# ---------------------------------------------------------------------------
+# Tresor-Ort-Warnungen (Gate G32 / N11.15.4): Cloud, Wechsel-, Netzpfade
+# ---------------------------------------------------------------------------
+
+def _path_risk_warning(path: str) -> str | None:
+    """Warntext bei riskanten Tresor-Orten (G32/N11.15.4), sonst ``None``.
+
+    Erkennt Cloud-Sync-Ordner (OneDrive/Dropbox, Env-Vars + Heuristik) sowie
+    Wechsel-/Netzlaufwerke. Nennt bei Cloud immer BEIDE Kernsaetze:
+    Versionshistorie beim Anbieter UND Killswitch/Reset loeschen dort nichts.
+    Warnung, nie Sperre.
+    """
+    p = os.path.abspath(path)
+    low = p.lower()
+    cloud_roots = []
+    for var in ("OneDrive", "OneDriveConsumer", "OneDriveCommercial"):
+        v = os.environ.get(var)
+        if v:
+            cloud_roots.append(v.lower())
+    is_cloud = any(low.startswith(r) for r in cloud_roots)
+    if not is_cloud and ("onedrive" in low or "dropbox" in low or "google drive" in low):
+        is_cloud = True
+    if is_cloud:
+        return ("This folder is in a cloud-synced location. The encrypted file "
+                "would be uploaded, the provider keeps version history, and "
+                "Killswitch/Reset cannot delete those cloud copies.")
+    # Wechsel-/Netzlaufwerk (best effort).
+    try:
+        drive = os.path.splitdrive(p)[0]
+        if drive:
+            dtype = ctypes.windll.kernel32.GetDriveTypeW(ctypes.c_wchar_p(drive + "\\"))
+            if dtype == 2:   # DRIVE_REMOVABLE
+                return ("This is a removable drive. If it is unplugged, the app "
+                        "cannot open the vault, and secure erase is not reliable "
+                        "on foreign file systems.")
+            if dtype == 4:   # DRIVE_REMOTE
+                return ("This is a network/UNC location. If the share is offline "
+                        "the app cannot open the vault, and secure erase is not "
+                        "reliable there.")
+        if p.startswith("\\\\"):
+            return ("This is a network/UNC location. If the share is offline the "
+                    "app cannot open the vault, and secure erase is not reliable "
+                    "there.")
+    except Exception:
+        pass
+    return None
+
+
+# ---------------------------------------------------------------------------
+# Alte Dev-DB entsorgen (Gate G33): beim ersten create_vault
+# ---------------------------------------------------------------------------
+
+def _cleanup_dev_legacy_db() -> None:
+    """Alte Klartext-lesbare Dev-DB ``data/tasks.db`` sicher wegraeumen (G33).
+
+    Die frueheren Phasen oeffneten ``data/tasks.db`` mit einem oeffentlichen
+    Schluessel. Beim ersten echten ``create_vault()`` wird sie samt
+    ``-journal``/``-wal``/``-shm`` ueber den Secure-Delete-Pfad entsorgt (nie
+    blankes ``os.remove``). Ehrliche Restgrenze (SSD-Wear-Leveling) nennt das
+    Onboarding als Einmal-Hinweis.
+    """
+    base = os.path.join(
+        os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "data", "tasks.db")
+    for suffix in ("", "-journal", "-wal", "-shm"):
+        security_module.secure_delete(base + suffix)
 
 
 # ---------------------------------------------------------------------------

@@ -566,6 +566,25 @@ class RateLimiter:
         self._persist()
         return wait
 
+    def undo_last_fail(self) -> None:
+        """Einen gezaehlten Fehlversuch zuruecknehmen (kein Rateversuch, N6).
+
+        Fuer die Faelle, die NICHT die Leiter vorantreiben (``memory``,
+        ``vault``/fehlender Pepper): weil persist-before-verify den Versuch
+        schon gezaehlt hat, wird er hier wieder abgezogen, sobald feststeht,
+        dass es kein Passphrase-Rateversuch war.
+        """
+        rl = self._rl()
+        rl["fails"] = max(0, int(rl.get("fails") or 0) - 1)
+        stage, duration = ladder_stage(rl["fails"])
+        rl["stage"] = stage
+        rl["duration"] = duration
+        if duration <= 0:
+            rl["next_try_at"] = None
+            rl["locked_at"] = None
+            self._mono_until = None
+        self._persist()
+
     def reset(self) -> None:
         """Nur der Erfolg raeumt auf (erfolgreiches unlock bzw. reset_vault)."""
         rl = self._rl()
@@ -676,6 +695,30 @@ class Vault:
         vault._open_db(None)
         vault.flush()
         return vault
+
+    @classmethod
+    def from_keys(cls, enc_path: str, aes_key: bytearray, chacha_key: bytearray,
+                  params: KdfParams, salt: bytes, inner_image: bytes) -> "Vault":
+        """Sitzung aus bereits abgeleiteten Schluesseln + entpacktem Image bauen.
+
+        Fuer den rate-limit-bewussten Entsperr-Pfad in ``api.py``, der die
+        Krypto-Schritte selbst interleavt (Header lesen -> Leiter zaehlen ->
+        ableiten -> entpacken), damit ``vault``/``memory`` die Leiter nicht
+        vorantreiben (N6/N11.4.1). ``aes_key``/``chacha_key`` gehen in den
+        Besitz der Sitzung ueber.
+        """
+        vault = cls(enc_path, aes_key, chacha_key, params, salt)
+        vault._open_db(inner_image)
+        return vault
+
+    def matches_aes(self, candidate: bytes) -> bool:
+        """Konstante-Zeit-Vergleich gegen den aktuellen Schicht-1-Schluessel.
+
+        Fuer ``change_passphrase``: die alte Passphrase gilt als korrekt, wenn
+        die aus ihr (mit dem aktuellen Salt/Pepper) abgeleiteten AES-Bytes dem
+        offenen Schluessel entsprechen. Kein gespeicherter Hash noetig.
+        """
+        return hmac.compare_digest(bytes(self._aes_key), bytes(candidate))
 
     def _open_db(self, inner_image: bytes | None) -> None:
         """Arbeitsdatei schreiben und SQLCipher-Verbindung oeffnen (N11.9/G7)."""
