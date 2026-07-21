@@ -439,6 +439,11 @@ class Api:
         # oder natives Lock-Fenster) und laesst die Boot-Schleife die nativen
         # teardown-Schritte 9 bis 11 nach session.next_state ausfuehren (G35).
         self._request_teardown = None
+        # True, sobald eine teardown-ausloesende Methode (lock/quit/killswitch/
+        # reset/autolock) laeuft. Der Fenster-X-Handler (main.py) prueft es, um
+        # nicht bei einer bereits laufenden Sperre faelschlich quit_app zu
+        # feuern (das wuerde next_state='locked' zu 'exit' verfaelschen).
+        self._teardown_in_progress = False
         self._mini = False        # kompakter Mini-Fenster-Modus aktiv?
         self._on_setting_change = None  # optionaler Callback(key, value) für main.py
         self._on_frame_changed = None  # Callback(mini) nach jedem Mini-Modus-Wechsel
@@ -1115,6 +1120,34 @@ class Api:
         self._attach_vault(vault)
         return {"ok": True}
 
+    @bridge(schema={"path": v_id})
+    def open_existing_vault(self, path: str) -> dict[str, Any]:
+        """Vorhandenen Tresor im Onboarding oeffnen (N11.15.6), nie ueberschreiben.
+
+        Der Ordner enthaelt schon eine ``tasks.db.enc``: statt einen neuen
+        anzulegen, wird nur der Pfad in eine frische ``config.json`` geschrieben
+        und die Boot-Schleife ins native Lock-Fenster geschickt (Passphrase-
+        Eingabe). Laeuft im Onboarding (``locked=False``), gibt nie Daten
+        heraus.
+        """
+        enc_path = os.path.join(path, "tasks.db.enc")
+        if not os.path.exists(enc_path):
+            return _err("vault")
+        cfg = config_module.new_config(enc_path)
+        config_module.save_config(cfg)
+        self._config_cache = cfg
+        self._vault_path = enc_path
+        self._boot_state = "locked"
+        self.locked = True
+        # Kein teardown noetig (es ist kein Tresor offen, keine Schluessel):
+        # nur das WebView abbauen, die Boot-Schleife zeigt dann das native
+        # Lock-Fenster.
+        self._session.next_state = "locked"
+        self._teardown_in_progress = True
+        if self._request_teardown:
+            self._request_teardown()
+        return {"ok": True}
+
     @bridge(schema={"old": v_id, "new": v_id})
     def change_passphrase(self, old: str, new: str) -> dict[str, Any]:
         """Passphrase in den Einstellungen aendern (N11.3 a-d, nur entsperrt).
@@ -1173,6 +1206,7 @@ class Api:
         (Bestaetigung, dann RESET tippen); erreichbar auch aus dem gesperrten
         Zustand (Allowlist).
         """
+        self._teardown_in_progress = True
         security_module.run_teardown("reset", self._session)
         self._rate.reset()
         self._vault_path = None
@@ -1253,10 +1287,12 @@ class Api:
         Screen) uebernimmt main.py ueber den teardown-Request. N11.10: der
         Online-/Funkzustand wird beim Sperren NICHT angefasst.
         """
+        self._teardown_in_progress = True
         try:
             security_module.run_teardown("lock", self._session)
         except security_module.TeardownAbort:
             # Schritt 4 (Write-back) gescheitert: nicht sperren, Fehler zeigen.
+            self._teardown_in_progress = False
             return _err("vault")
         if self._request_teardown:
             self._request_teardown()
@@ -1286,6 +1322,7 @@ class Api:
         (Allowlist). Danach beendet die Boot-Schleife die App; der naechste
         Start ist mangels Datei ein leerer Erststart.
         """
+        self._teardown_in_progress = True
         security_module.run_teardown("killswitch", self._session)
         self._vault_path = None
         self._config_cache = None
@@ -1302,9 +1339,11 @@ class Api:
         wischt PROFILE_DIR (G14) und beendet den Prozess. Loescht nie Nutzer-
         oder App-Daten.
         """
+        self._teardown_in_progress = True
         try:
             security_module.run_teardown("quit", self._session)
         except security_module.TeardownAbort:
+            self._teardown_in_progress = False
             return _err("vault")
         if self._request_teardown:
             self._request_teardown()
@@ -1324,6 +1363,7 @@ class Api:
         self._session.autolock.arm()
         self.locked = False
         self._boot_state = "unlocked"
+        self._teardown_in_progress = False
 
     def _autolock_minutes(self) -> int:
         """Aktuelles Auto-Lock-Timeout in Minuten (Setting ``autoLock``, 0=nie)."""
@@ -1339,9 +1379,11 @@ class Api:
         laufen Schritte 1-7 sofort und die nativen Schritte werden ueber
         main.py geparkt (N11.11.5); der Timer selbst bleibt fail-safe.
         """
+        self._teardown_in_progress = True
         try:
             security_module.run_teardown("autolock", self._session)
         except security_module.TeardownAbort:
+            self._teardown_in_progress = False
             return
         # Frontend sofort auf den Lock-Screen (reines DOM, auch unter einem
         # modalen Dialog sicher, N11.11.5 Punkt 2).
