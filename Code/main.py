@@ -283,17 +283,76 @@ def emit(window, event: str, payload=None) -> None:
         pass
 
 
+def _current_user_sid() -> str | None:
+    """SID des aktuellen Benutzers als String (fuer den G19-Mutex-Namen).
+
+    Ueber das Prozess-Token (OpenProcessToken -> GetTokenInformation(TokenUser)
+    -> ConvertSidToStringSidW). Scheitert das, gibt es None zurueck; der
+    Aufrufer faellt dann auf den alten ``Local\\``-Namen zurueck.
+    """
+    try:
+        advapi32 = ctypes.windll.advapi32
+        kernel32 = ctypes.windll.kernel32
+        # 64-bit-sichere Signaturen: Handles/Pointer sind c_void_p, nicht int.
+        kernel32.GetCurrentProcess.restype = ctypes.c_void_p
+        advapi32.OpenProcessToken.argtypes = (
+            ctypes.c_void_p, ctypes.c_uint32, ctypes.POINTER(ctypes.c_void_p))
+        advapi32.GetTokenInformation.argtypes = (
+            ctypes.c_void_p, ctypes.c_int, ctypes.c_void_p, ctypes.c_uint32,
+            ctypes.POINTER(ctypes.c_uint32))
+        advapi32.ConvertSidToStringSidW.argtypes = (
+            ctypes.c_void_p, ctypes.POINTER(ctypes.c_wchar_p))
+        kernel32.LocalFree.argtypes = (ctypes.c_void_p,)
+        kernel32.CloseHandle.argtypes = (ctypes.c_void_p,)
+        TOKEN_QUERY = 0x0008
+        TokenUser = 1
+        token = ctypes.c_void_p()
+        proc = kernel32.GetCurrentProcess()
+        if not advapi32.OpenProcessToken(proc, TOKEN_QUERY, ctypes.byref(token)):
+            return None
+        try:
+            length = ctypes.c_uint32(0)
+            advapi32.GetTokenInformation(token, TokenUser, None, 0, ctypes.byref(length))
+            buf = ctypes.create_string_buffer(length.value)
+            if not advapi32.GetTokenInformation(token, TokenUser, buf, length.value,
+                                                ctypes.byref(length)):
+                return None
+            # TOKEN_USER beginnt mit SID_AND_ATTRIBUTES: der erste Pointer ist die SID.
+            sid_ptr = ctypes.cast(buf, ctypes.POINTER(ctypes.c_void_p))[0]
+            str_ptr = ctypes.c_wchar_p()
+            if not advapi32.ConvertSidToStringSidW(sid_ptr, ctypes.byref(str_ptr)):
+                return None
+            try:
+                return str_ptr.value
+            finally:
+                kernel32.LocalFree(str_ptr)
+        finally:
+            kernel32.CloseHandle(token)
+    except Exception:
+        return None
+
+
 def _acquire_single_instance() -> bool:
-    """Belegt einen benannten Windows-Mutex (Gate G19, vorgezogen).
+    """Belegt einen benannten Windows-Mutex (Gate G19).
 
     Verhindert eine zweite Instanz: zwei Prozesse wuerden sich denselben festen
-    WebView2-Profilordner (und spaeter ``tasks.db.enc`` bzw. dessen Arbeitskopie)
+    WebView2-Profilordner und ``tasks.db.enc`` (bzw. dessen Arbeitskopie)
     gegenseitig sperren oder ueberschreiben (weisses Fenster, "reagiert nicht",
-    spaeter Datenkorruption). Gibt True zurueck, wenn diese Instanz die erste ist.
+    Datenkorruption). Gibt True zurueck, wenn diese Instanz die erste ist.
+
+    Namensraum ``Global\\NoaToDo-<User-SID>`` (V3, Rest-Pflicht aus Phase 8):
+    ein ``Local\\``-Mutex ist nur pro Logon-Session eindeutig, sodass derselbe
+    Benutzer per RDP oder Benutzerumschaltung eine zweite Instanz auf demselben
+    Tresor starten koennte (genau die Korruption, gegen die G19 existiert).
+    ``Global\\`` ist maschinenweit, das SID-Suffix macht ihn pro Benutzer
+    eindeutig (verschiedene Benutzer haben eigene Tresore und duerfen je eine
+    Instanz laufen lassen). Ohne ermittelbare SID Fallback auf den alten Namen.
     """
     global _single_instance_handle
     kernel32 = ctypes.windll.kernel32
-    _single_instance_handle = kernel32.CreateMutexW(None, False, "Local\\NoaToDoSingleton")
+    sid = _current_user_sid()
+    name = f"Global\\NoaToDo-{sid}" if sid else "Local\\NoaToDoSingleton"
+    _single_instance_handle = kernel32.CreateMutexW(None, False, name)
     _ERROR_ALREADY_EXISTS = 183
     return kernel32.GetLastError() != _ERROR_ALREADY_EXISTS
 
