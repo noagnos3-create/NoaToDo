@@ -475,7 +475,7 @@ input { font: inherit; }
    =========================================================================== */
 .sidebar {
   grid-area: sidebar; position: relative; z-index: 5;
-  width: var(--sidebar-width, 256px); display: flex; flex-direction: column;
+  width: var(--sidebar-width, 300px); display: flex; flex-direction: column;
   background: color-mix(in oklab, var(--surface) 60%, transparent);
   border-right: 1px solid var(--border);
   overflow: hidden;
@@ -483,7 +483,7 @@ input { font: inherit; }
 }
 .app[data-sidebar="closed"] .sidebar { width: 0; opacity: 0; border-right-color: transparent; }
 .app[data-resizing] .sidebar { transition: none; }
-.sidebar-inner { width: var(--sidebar-width, 256px); display: flex; flex-direction: column; height: 100%; padding: 54px 10px 10px; }
+.sidebar-inner { width: var(--sidebar-width, 300px); display: flex; flex-direction: column; height: 100%; padding: 54px 10px 10px; }
 
 .sidebar-resize-handle {
   position: absolute; top: 0; right: 0; bottom: 0; width: 6px;
@@ -1010,6 +1010,13 @@ input { font: inherit; }
 .modal p { margin: 0; color: var(--text-dim); font-size: 14px; line-height: 1.55; }
 .modal p .mono { color: var(--accent); }
 .modal-actions { display: flex; gap: 10px; padding: 0 26px 24px; }
+/* Status-Modal: seit Phase 8 zeigt es das volle ehrliche Dashboard (beide
+   Schichten, KDF, Pepper, letzter Wrap, BitLocker) plus "Recent errors". In
+   flachen Fenstern scrollt der Rumpf, statt oben und unten aus dem Bild zu
+   laufen (gleiches Muster wie .modal-settings). */
+.modal-status { display: flex; flex-direction: column; max-height: calc(100vh - 48px); }
+.modal-status .modal-body { overflow-y: auto; }
+.modal-status .modal-actions { flex: 0 0 auto; }
 .btn {
   flex: 1; padding: 11px; border-radius: 10px; font-weight: 600; font-size: 14px;
   border: 1px solid var(--border); background: var(--surface-2); color: var(--text);
@@ -1387,8 +1394,8 @@ input { font: inherit; }
    NoaToDo-Ergänzung (nicht aus dem Konzept): Segment-Control fürs
    Settings-Modal. Themt über die bestehenden Tokens, damit es zur App passt.
    =========================================================================== */
-.seg { display: inline-flex; padding: 2px; gap: 2px; border-radius: 9px;
-  background: var(--surface-3); border: 1px solid var(--border); }
+.seg { display: inline-flex; flex-wrap: wrap; padding: 2px; gap: 2px; border-radius: 9px;
+  background: var(--surface-3); border: 1px solid var(--border); max-width: 100%; }
 .seg-btn { appearance: none; border: 0; background: transparent; color: var(--text-dim);
   font: 500 12.5px/1 inherit; font-family: inherit; padding: 6px 12px; border-radius: 7px;
   cursor: pointer; transition: background .14s, color .14s; }
@@ -1398,11 +1405,24 @@ input { font: inherit; }
 
 /* Settings-Modal, Desktop-Layout: breit, zwei Spalten, Sektionskoepfe im
    Stil des Sidebar-Labels (Mono-Eyebrow + Hairline). */
-.modal-settings { width: min(660px, calc(100vw - 48px)); }
+/* Breite: 860px statt 660px. Mit 660px war eine Spalte nur ~285px breit, das
+   reicht dem sechsteiligen Auto-lock-Segment (Phase 8) nicht, es lief rechts
+   aus dem Modal heraus. */
+.modal-settings {
+  width: min(860px, calc(100vw - 48px));
+  /* In flachen Fenstern (und in der Einspalten-Ansicht) scrollt der Inhalt,
+     statt oben und unten aus dem Bild zu laufen. */
+  display: flex; flex-direction: column; max-height: calc(100vh - 48px);
+}
+.modal-settings .modal-body { overflow-y: auto; }
+.modal-settings .modal-actions { flex: 0 0 auto; }
 .settings-grid {
   display: grid; grid-template-columns: 1fr 1fr; column-gap: 40px;
   align-items: start; margin-top: 10px;
 }
+/* Grid-Kinder duerfen schrumpfen (Default min-width:auto laesst breite
+   Controls stattdessen ueber die Spalte hinauslaufen). */
+.settings-col { min-width: 0; }
 .settings-head {
   display: flex; align-items: center; gap: 10px; padding: 16px 0 7px;
   font-family: var(--font-mono); font-size: 10.5px; font-weight: 700;
@@ -1410,20 +1430,22 @@ input { font: inherit; }
 }
 .settings-head .line { flex: 1; height: 1px; background: var(--border); }
 .set-row {
-  display: flex; align-items: center; gap: 12px; padding: 11px 0;
+  display: flex; flex-wrap: wrap; align-items: center; gap: 12px; padding: 11px 0;
   border-bottom: 1px dashed var(--border);
   transition: opacity .25s ease;   /* weiches Dimmen der Kanalzeilen */
 }
-.set-label { font-size: 13.5px; font-weight: 500; }
+.set-label { font-size: 13.5px; font-weight: 500; flex: 1 1 auto; min-width: 0; }
 .set-hint {
   display: block; margin-top: 3px;
   font-family: var(--font-mono); font-size: 10px; font-weight: 500;
   letter-spacing: .02em; color: var(--text-faint);
 }
-.set-ctl { margin-left: auto; display: flex; align-items: center; }
+.set-ctl { margin-left: auto; display: flex; align-items: center; max-width: 100%; }
 .set-ctl .swatches { padding: 0; }
-@media (max-width: 760px) {
-  .modal-settings { width: min(440px, 100%); }
+/* In sehr schmalen Fenstern: eine Spalte, und ein zu breites Segment bricht
+   um, statt aus dem Modal zu laufen. */
+@media (max-width: 920px) {
+  .modal-settings { width: min(560px, calc(100vw - 32px)); }
   .settings-grid { grid-template-columns: 1fr; }
 }
 
@@ -1559,3 +1581,90 @@ input { font: inherit; }
   display: flex; gap: 10px; justify-content: center; margin-top: 18px;
 }
 .ob-actions .btn { min-width: 120px; }
+
+/* ===================================================================
+   Phase 8: Willkommens-Schirm nach dem Anlegen des Tresors (N11.20).
+   Laeuft genau einmal, direkt nach create_vault(): die Logo-Marke
+   glimmt gedaempft im Hintergrund (Ring zeichnet sich, Lichtwisch
+   laeuft darueber), der Gruss faehrt zeichenweise ein, dann blendet
+   der ganze Schirm auf die schon fertige, leere App ab.
+   Die Ausblend-Dauer unten MUSS zu WELCOME_FADE_MS in app.js passen.
+   =================================================================== */
+.welcome {
+  position: fixed; inset: 0; z-index: 210;   /* ueber allem, auch dem Sidebar-Knopf */
+  display: grid; place-items: center;
+  background: var(--bg);
+  overflow: hidden;
+  transition: opacity 520ms ease, transform 520ms ease;
+}
+.welcome.leaving { opacity: 0; transform: scale(1.04); pointer-events: none; }
+/* Warmer Akzent-Schimmer hinter der Marke, faehrt langsam auf. */
+.wl-glow {
+  position: absolute; inset: -25%;
+  background: radial-gradient(circle at 50% 48%,
+              color-mix(in srgb, var(--accent) 24%, transparent) 0%,
+              transparent 60%);
+  animation: wl-glow-in 1.7s ease-out both;
+}
+@keyframes wl-glow-in { from { opacity: 0; transform: scale(.9); } to { opacity: 1; transform: none; } }
+/* Marke und Gruss liegen in derselben Grid-Zelle: das Logo steht hinter dem
+   Text, ohne absolute Positionierung (transform bleibt fuer die Animation frei). */
+.wl-mark, .wl-text { grid-area: 1 / 1; }
+.wl-mark {
+  --wl-op: .12;
+  position: relative;
+  width: min(64vmin, 500px); aspect-ratio: 1 / 1;
+  color: var(--accent);
+  animation: wl-mark-in 1.2s cubic-bezier(.2,.85,.25,1) both,
+             wl-breathe 6s ease-in-out 1.2s infinite;
+}
+.app[data-theme="dark"] .wl-mark { --wl-op: .17; }
+.wl-mark svg { display: block; width: 100%; height: 100%; overflow: visible; }
+/* Gedaempft ist nur die BASIS-Kopie; die Deckkraft sitzt bewusst nicht auf
+   .wl-mark, sonst koennte der Lichtwisch darin nie heller werden als sie. */
+.wl-mark > svg { opacity: var(--wl-op); }
+@keyframes wl-mark-in { from { opacity: 0; transform: scale(.86); } to { opacity: 1; transform: none; } }
+@keyframes wl-breathe { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.045); } }
+/* Der Ring zeichnet sich vom oberen Scheitel aus einmal rundherum. */
+.wl-ring {
+  stroke-dasharray: 296; stroke-dashoffset: 296;      /* 2*pi*r bei r=47 */
+  transform: rotate(-90deg); transform-origin: 60px 60px;
+  animation: wl-draw 1.15s cubic-bezier(.3,.7,.2,1) .05s both;
+}
+@keyframes wl-draw { to { stroke-dashoffset: 0; } }
+.wl-n { transform-origin: 60px 60px; animation: wl-n-in .7s ease-out .5s both; }
+@keyframes wl-n-in { from { opacity: 0; transform: translateY(7px) scale(.9); } to { opacity: 1; transform: none; } }
+/* Das Glimmern: eine zweite, hellere Kopie der Marke, durch ein wanderndes
+   Gradienten-Fenster (Maske) sichtbar. Laeuft als Endlos-Lichtwisch. */
+.wl-sheen {
+  position: absolute; inset: 0;
+  opacity: .34;                   /* heller als die Basis-Kopie, aber kein Blitz */
+  -webkit-mask-image: linear-gradient(100deg, transparent 6%, #000 50%, transparent 94%);
+          mask-image: linear-gradient(100deg, transparent 6%, #000 50%, transparent 94%);
+  -webkit-mask-size: 70% 100%;  mask-size: 70% 100%;
+  -webkit-mask-repeat: no-repeat; mask-repeat: no-repeat;
+  animation: wl-sheen-sweep 3.4s ease-in-out .6s infinite;
+}
+@keyframes wl-sheen-sweep {
+  0%        { -webkit-mask-position: -140% 0; mask-position: -140% 0; }
+  55%, 100% { -webkit-mask-position: 260% 0;  mask-position: 260% 0; }
+}
+/* Der Gruss: pro Wort ein inline-block (kein Umbruch mitten im Wort),
+   pro Zeichen ein gestaffelter Einflug (Verzoegerung inline aus app.js). */
+.wl-text { position: relative; text-align: center; padding: 0 24px; }
+.wl-title {
+  margin: 0; color: var(--text);
+  font-size: clamp(30px, 6vw, 52px); font-weight: 800; letter-spacing: -.03em;
+}
+.wl-word { display: inline-block; white-space: nowrap; }
+.wl-ch { display: inline-block; animation: wl-ch-in .62s cubic-bezier(.2,.85,.25,1) both; }
+@keyframes wl-ch-in {
+  from { opacity: 0; transform: translateY(.4em); filter: blur(7px); }
+  to   { opacity: 1; transform: none; filter: blur(0); }
+}
+.wl-sub {
+  margin: 16px 0 0; color: var(--text-dim);
+  font-size: 14px; letter-spacing: .01em;
+  animation: wl-sub-in .9s ease-out 1.65s both;
+}
+@keyframes wl-sub-in { from { opacity: 0; transform: translateY(9px); } to { opacity: 1; transform: none; } }

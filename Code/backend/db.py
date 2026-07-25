@@ -513,6 +513,11 @@ _DEFAULT_SETTINGS = {
     "dark": "true",
     "density": "comfortable",
     "sidebar": "open",
+    # Sidebar-Startbreite. Wird NUR beim Erststart-Seed geschrieben; sobald der
+    # Nutzer die Sidebar einmal gezogen hat, gilt ausschliesslich sein
+    # gespeicherter Wert (``set_setting`` klemmt ihn auf 180 bis 520, G20/V5).
+    # Muss zu SIDEBAR_WIDTH_DEFAULT in frontend/app.js passen.
+    "sidebarWidth": "300",
     "exportDone": "true",
     "sound": "true",
     "autoLock": "15",
