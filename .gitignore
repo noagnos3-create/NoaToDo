@@ -17,6 +17,11 @@ data/
 *.db-wal
 *.db-shm
 *.log
+# Der echte Tresor (und seine Sicherungsgeneration) gehoert nie ins Repo,
+# auch verschluesselt nicht: das sind Nutzerdaten, keine Quelltexte.
+*.db.enc
+*.db.enc.bak
+*.db.enc.tmp
 
 # Secrets / local config
 .env

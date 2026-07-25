@@ -38,13 +38,8 @@ PROFILE_DIR = os.path.join(_LOCALAPPDATA, "NoaToDo", "webview")
 # Haelt den Single-Instance-Mutex fuer die gesamte Prozesslebensdauer offen.
 _single_instance_handle = None
 
-_TB_DARK  = "#1f1b14"   # entspricht --surface (dark) aus style.css
-_TB_LIGHT = "#faf6ee"   # entspricht --surface (light) aus style.css
-_TB_TEXT_DARK  = "#f2ead9"  # heller Titeltext auf dunkler Leiste
-_TB_TEXT_LIGHT = "#1f1b14"  # dunkler Titeltext auf heller Leiste
-_DWMWA_USE_IMMERSIVE_DARK_MODE = 20  # Windows 10 1903+
-_DWMWA_CAPTION_COLOR           = 35  # Windows 11 22000+
-_DWMWA_TEXT_COLOR              = 36  # Windows 11 22000+
+# Titelleistenfarben und die DWM-Attribute dazu stehen in wintheme.py (eine
+# Quelle fuer das native Aussehen, siehe _apply_titlebar_theme weiter unten).
 # SetWindowPos-Flags fuer Frame-Neuberechnung nach DWM-Aenderungen
 _SWP_NOSIZE        = 0x0001
 _SWP_NOMOVE        = 0x0002
@@ -80,25 +75,18 @@ def _get_hwnd(window, wait: bool = False) -> int:
 
 
 def _apply_titlebar_theme(hwnd: int, dark: bool) -> None:
-    """Passt Titelleistenfarbe und Textmodus per DWM-API an das App-Theme an."""
+    """Passt Titelleistenfarbe und Textmodus per DWM-API an das App-Theme an.
+
+    Die Umsetzung liegt in ``wintheme`` (eine Quelle fuer das native Aussehen),
+    damit WebView-Fenster und natives Sperrfenster exakt dieselbe Titelleiste
+    bekommen. Der Import ist bewusst lazy: er zieht System.Windows.Forms nach
+    und soll erst laufen, wenn ohnehin schon ein Fenster existiert.
+    """
     if not hwnd:
         return
     try:
-        dwm = ctypes.windll.dwmapi
-        dm = ctypes.c_int(1 if dark else 0)
-        dwm.DwmSetWindowAttribute(hwnd, _DWMWA_USE_IMMERSIVE_DARK_MODE,
-                                  ctypes.byref(dm), ctypes.sizeof(dm))
-        h = _TB_DARK if dark else _TB_LIGHT
-        r, g, b = int(h[1:3], 16), int(h[3:5], 16), int(h[5:7], 16)
-        colorref = ctypes.c_int(r | (g << 8) | (b << 16))
-        dwm.DwmSetWindowAttribute(hwnd, _DWMWA_CAPTION_COLOR,
-                                  ctypes.byref(colorref), ctypes.sizeof(colorref))
-        # Titeltext passend zur Caption-Farbe: hell auf dunkel, dunkel auf hell.
-        th = _TB_TEXT_DARK if dark else _TB_TEXT_LIGHT
-        tr, tg, tb = int(th[1:3], 16), int(th[3:5], 16), int(th[5:7], 16)
-        text_ref = ctypes.c_int(tr | (tg << 8) | (tb << 16))
-        dwm.DwmSetWindowAttribute(hwnd, _DWMWA_TEXT_COLOR,
-                                  ctypes.byref(text_ref), ctypes.sizeof(text_ref))
+        import wintheme
+        wintheme.apply_titlebar_theme(hwnd, dark)
     except Exception:
         pass
 
@@ -772,12 +760,22 @@ def main() -> None:
 
     # Single-Instance-Schutz (Gate G19): zweite Instanz sofort beenden.
     if not _acquire_single_instance():
-        ctypes.windll.user32.MessageBoxW(
-            0,
-            "NoaToDo läuft bereits. Es kann nur eine Instanz geöffnet sein.",
-            "NoaToDo",
-            0x40,  # MB_ICONINFORMATION
-        )
+        # Hinweis im App-Design statt der weissen Windows-MessageBox: auch
+        # Nebenfenster sollen nie nach Windows aussehen (wintheme).
+        try:
+            import wintheme
+            wintheme.show_message(
+                "NoaToDo is already running.\nOnly one instance can be open.",
+                "NoaToDo",
+                os.path.join(HERE, "frontend", "icon.ico"),
+            )
+        except Exception:
+            ctypes.windll.user32.MessageBoxW(
+                0,
+                "NoaToDo läuft bereits. Es kann nur eine Instanz geöffnet sein.",
+                "NoaToDo",
+                0x40,  # MB_ICONINFORMATION
+            )
         print("[NoaToDo] Bereits aktiv, zweite Instanz beendet sich.", flush=True)
         return
 
@@ -816,7 +814,13 @@ def main() -> None:
             state = api._boot_state
             if state in ("locked", "vault_error"):
                 import lockwindow
-                res = lockwindow.run_lock_window(api, state, api._boot_reason, icon)
+                res = lockwindow.run_lock_window(
+                    api, state, api._boot_reason, icon,
+                    # Taskleisten-Eintrag des Sperrfensters mit AppID + Logo
+                    # verknuepfen (sonst zeigt die Leiste das Python-Symbol).
+                    on_ready=lambda hwnd: _apply_taskbar_identity(
+                        hwnd, _APP_USER_MODEL_ID, icon),
+                )
                 if res == "quit":
                     _finish_native_teardown()
                     break

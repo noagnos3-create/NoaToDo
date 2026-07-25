@@ -1,12 +1,22 @@
-"""Natives Lock-Fenster (Phase 8, Spike-Ergebnis N11.18).
+"""Natives Sperrfenster im App-Design (Phase 8, Spike-Ergebnis N11.18).
 
 Der Zweitprofil-Spike (U3/N11.8.3) hat bewiesen: PyWebView bietet keine zwei
 WebView2-Profile im selben Prozess an, also gilt der **native Fallback**. Das
-Lock-Fenster ist ein schlankes WinForms-Fenster **ohne WebView** (keine Engine
-haelt ``PROFILE_DIR`` offen, es gibt kein ``LOCK_PROFILE_DIR``, Aufgabendaten
+Sperrfenster ist ein WinForms-Fenster **ohne WebView** (keine Engine haelt
+``PROFILE_DIR`` offen, es gibt kein ``LOCK_PROFILE_DIR``, Aufgabendaten
 erreichen es baulich nicht). Es erscheint, sobald ein Tresor existiert und die
 App gesperrt/nicht-entsperrt ist, und ruft ``api.unlock``/``api.quit_app``/
 ``api.reset_vault`` **direkt** (keine Bridge, Spike-Frage 2).
+
+**Optik (2026-07-25):** das Fenster ist kein kleiner Windows-Dialog mehr,
+sondern uebernimmt den Sperrbildschirm aus dem Designkonzept: es startet
+**maximiert** wie das Hauptfenster, traegt dieselbe dunkle Titelleiste (DWM,
+Caption in ``--surface``), denselben Hintergrund (Grundton plus 28px-Raster),
+den grossen Akzent-Ring mit dem Schloss-Zeichen aus ``Icons.Lock`` und
+Pillenformen fuer Eingabe und Knoepfe. Alle Bausteine kommen aus
+``wintheme.py``, damit natives Fenster und WebView-App dieselben Tokens
+benutzen. Beim Sperren aus der laufenden App bleibt der Bildschirm dadurch
+optisch stehen: gleiche Groesse, gleiche Farben, gleiches Bild.
 
 Erfuellt die N4-/N6-Pflichten so weit im nativen Rahmen moeglich (die
 Web-Animationen entfallen bewusst): Passwortfeld mit Show/Hide, neutrale
@@ -16,28 +26,32 @@ Fehlermeldung bei falscher Passphrase, Caps-Lock-Warnung, Unlocking-Zustand
 (kein WebView, Spike-Frage 8). Jede druckbare Taste landet im Passwortfeld
 (B.8-Regel, Spike-Frage 9): das Feld hat den Fokus, andere Controls sind
 Buttons/Links ohne Texteingabe.
+
+Das Fenster ist immer dunkel: waehrend der Sperre ist der Tresor zu, die
+Theme-Einstellung liegt **in** ihm und ist nicht lesbar (config.json haelt nur
+Nicht-Geheimes, B.11). Dark ist die Vorgabe der App.
 """
 from __future__ import annotations
 
 import threading
 from typing import Any
 
-# Farben (an die App-Tokens angelehnt, dark).
-_BG = (0x1F, 0x1B, 0x14)
-_SURFACE = (0x2A, 0x24, 0x1A)
-_TEXT = (0xF2, 0xEA, 0xD9)
-_FAINT = (0xA8, 0x9C, 0x86)
-_ACCENT = (0xD9, 0x77, 0x57)
-_DANGER = (0xD9, 0x5C, 0x4A)
+import wintheme as T
 
 
 def run_lock_window(api: Any, boot_state: str, boot_reason: str | None,
-                    icon_path: str | None, _test_after_shown=None) -> str:
-    """Baut das native Lock-/Fehler-Fenster und laeuft, bis es sich schliesst.
+                    icon_path: str | None, _test_after_shown=None,
+                    on_ready=None) -> str:
+    """Baut das native Sperr-/Fehlerfenster und laeuft, bis es sich schliesst.
 
     Rueckgabe: ``"unlocked"`` (Tresor offen, weiter zur WebView-App),
     ``"quit"`` (Off-Knopf / Fenster-X: App beenden) oder ``"onboarding"``
     (Reset: Tresor geloescht, zurueck ins Onboarding).
+
+    ``on_ready`` bekommt (sobald das Fenster steht) dessen HWND; main.py haengt
+    daran die Taskleisten-Identitaet (AppID + App-Icon), damit auch der
+    Taskleisten-Eintrag des Sperrfensters das NoaToDo-Logo traegt und nicht das
+    generische Python-Symbol.
 
     ``_test_after_shown`` ist eine reine Test-Naht (production ruft ohne sie):
     ein Callback, der nach dem Anzeigen einmal mit den Steuerelementen
@@ -45,162 +59,170 @@ def run_lock_window(api: Any, boot_state: str, boot_reason: str | None,
     deterministisch ausloesen kann, ohne auf Fenster-Fokus/Tastatur-Injektion
     in einer nicht-interaktiven Session angewiesen zu sein.
     """
-    import clr
-
-    clr.AddReference("System.Windows.Forms")
-    clr.AddReference("System.Drawing")
     from System import Action, EventHandler
-    from System.Drawing import Color, ContentAlignment, Font, FontStyle, Point, Size
+    from System.Drawing import Point, Size
     from System.Windows.Forms import (
-        AnchorStyles, Application, BorderStyle, Button, CheckBox, FlatStyle,
-        Form, FormBorderStyle, FormStartPosition, Keys, Label, LinkLabel,
-        TextBox, Timer,
+        Application, FormBorderStyle, FormWindowState, Form, KeyEventHandler,
+        KeyPressEventHandler, Keys, PaintEventHandler, Timer,
     )
 
-    def col(rgb):
-        return Color.FromArgb(rgb[0], rgb[1], rgb[2])
-
     result = {"value": "quit"}   # Default: Fenster-X = quit (N11.11.1)
-    # Wird True, sobald ein bewusster Ausgang (unlock/quit/reset) das Fenster
+    # Wird gesetzt, sobald ein bewusster Ausgang (unlock/quit/reset) das Fenster
     # schliesst; dann darf der FormClosing-Handler NICHT noch einmal quit_app
     # ausloesen.
-    state = {"closing_intent": None, "busy": False, "reset_stage": 0}
-
-    form = Form()
-    form.Text = "NoaToDo"
-    form.StartPosition = FormStartPosition.CenterScreen
-    form.FormBorderStyle = FormBorderStyle.FixedDialog
-    form.MaximizeBox = False
-    form.MinimizeBox = True
-    form.ClientSize = Size(440, 380)
-    form.BackColor = col(_BG)
-    form.ForeColor = col(_TEXT)
-    if icon_path:
-        try:
-            from System.Drawing import Icon
-            form.Icon = Icon(icon_path)
-        except Exception:
-            pass
-
-    # --- Off-Knopf oben rechts (N10.2) ------------------------------------
-    off = Button()
-    off.Text = "⏻"
-    off.Font = Font("Segoe UI", 12.0)
-    off.FlatStyle = FlatStyle.Flat
-    off.FlatAppearance.BorderSize = 0
-    off.BackColor = col(_BG)
-    off.ForeColor = col(_FAINT)
-    off.Size = Size(34, 30)
-    off.Location = Point(form.ClientSize.Width - 44, 10)
-    off.Anchor = AnchorStyles.Top | AnchorStyles.Right
-    off.TabStop = False
-
-    # --- Titel ------------------------------------------------------------
-    title = Label()
-    title.AutoSize = False
-    title.TextAlign = ContentAlignment.MiddleCenter
-    title.Font = Font("Segoe UI Semibold", 15.0, FontStyle.Bold)
-    title.ForeColor = col(_TEXT)
-    title.Size = Size(400, 30)
-    title.Location = Point(20, 64)
-
-    subtitle = Label()
-    subtitle.AutoSize = False
-    subtitle.TextAlign = title.TextAlign
-    subtitle.Font = Font("Segoe UI", 9.5)
-    subtitle.ForeColor = col(_FAINT)
-    subtitle.Size = Size(400, 40)
-    subtitle.Location = Point(20, 96)
-
+    state = {"closing_intent": None, "busy": False, "reset_open": False}
     vault_error = boot_state == "vault_error"
+
+    # ------------------------------------------------------------------
+    # Fenster: maximiert wie das Hauptfenster, App-Farben, dunkle Titelleiste
+    # ------------------------------------------------------------------
+    form = Form()
+    form.Text = "NoaToDo"          # B.4/A7: Titel enthaelt nie Nutzerinhalt
+    form.FormBorderStyle = FormBorderStyle.Sizable
+    form.MinimumSize = Size(560, 620)
+    form.WindowState = FormWindowState.Maximized
+    T.style_form(form, icon_path)
+
+    scale = {"v": 1.0}
+
+    def s(v: float) -> int:
+        return int(round(v * scale["v"]))
+
+    # Masse des gezeichneten Rings (setzt layout(), malt on_form_paint).
+    geom = {"ring_x": 0, "ring_y": 0, "ring_d": 184}
+
+    # ------------------------------------------------------------------
+    # Steuerelemente (alle aus wintheme, also in App-Optik)
+    # ------------------------------------------------------------------
+    off = T.PillButton("", "icon", (42, 42), glyph="power")
+
+    title = T.AppLabel("", 16.5, True, T.TEXT, display=True, size=(600, 38))
+    subtitle = T.AppLabel("", 10.5, False, T.TEXT_DIM, size=(700, 26))
+
     if vault_error:
-        title.Text = "Vault cannot be opened"
+        title.text = "Vault cannot be opened"
         reasons = {
             "config_damaged": "The configuration is unreadable and the vault path is unknown.",
             "vault_unreachable": "The vault file is not reachable (drive removed or path gone).",
             "vault_damaged": "The vault file looks damaged. Try a backup, or reset.",
         }
-        subtitle.Text = reasons.get(boot_reason or "", "The vault could not be opened.")
+        subtitle.text = reasons.get(boot_reason or "", "The vault could not be opened.")
     else:
-        title.Text = "NoaToDo is locked"
-        subtitle.Text = "Enter your passphrase to unlock."
+        title.text = "NoaToDo is locked"
+        subtitle.text = "Enter your passphrase to unlock."
 
-    # --- Passwortfeld -----------------------------------------------------
-    pw = TextBox()
-    pw.UseSystemPasswordChar = True
-    pw.Font = Font("Segoe UI", 12.0)
-    pw.BackColor = col(_SURFACE)
-    pw.ForeColor = col(_TEXT)
-    pw.BorderStyle = BorderStyle.FixedSingle
-    pw.Size = Size(300, 30)
-    pw.Location = Point(70, 150)
+    pw_pill = T.PillInput((380, 52), password=True, cue="Password", font_size=12.0)
+    pw = pw_pill.box
 
-    show = CheckBox()
-    show.Text = "Show"
-    show.Font = Font("Segoe UI", 8.5)
-    show.ForeColor = col(_FAINT)
-    show.Size = Size(60, 22)
-    show.Location = Point(70, 186)
-    show.FlatStyle = off.FlatStyle
-    show.TabStop = False
+    # Show/Hide sitzt IN der Pille (Fuellfarbe der Pille als Hintergrund).
+    show = T.PillButton("Show", "ghost", (62, 32), font_size=8.5, bold=False,
+                        backdrop=T.SURFACE)
+    pw_pill.control.Controls.Add(show.control)
 
-    caps = Label()
-    caps.AutoSize = False
-    caps.TextAlign = title.TextAlign
-    caps.Font = Font("Segoe UI", 8.5)
-    caps.ForeColor = col(_DANGER)
-    caps.Size = Size(200, 20)
-    caps.Location = Point(170, 187)
-    caps.Text = ""
+    caps = T.AppLabel("", 9.0, False, T.DANGER, size=(500, 20))
+    unlock = T.PillButton("Unlock", "primary", (380, 50), font_size=11.0)
+    status = T.AppLabel("", 10.0, False, T.DANGER, size=(700, 26))
 
-    # --- Unlock-Knopf -----------------------------------------------------
-    unlock = Button()
-    unlock.Text = "Unlock"
-    unlock.Font = Font("Segoe UI Semibold", 10.5, FontStyle.Bold)
-    unlock.FlatStyle = off.FlatStyle
-    unlock.FlatAppearance.BorderSize = 0
-    unlock.BackColor = col(_ACCENT)
-    unlock.ForeColor = col(_BG)
-    unlock.Size = Size(300, 36)
-    unlock.Location = Point(70, 220)
+    forgot = T.TextLink("Reset vault" if vault_error else "Forgot passphrase?",
+                        9.5, width=300, height=26)
+    reset_pill = T.PillInput((240, 44), cue="Type RESET", font_size=10.5)
+    reset_btn = T.PillButton("Erase vault", "danger", (150, 44), font_size=9.5)
+    reset_pill.control.Visible = False
+    reset_btn.control.Visible = False
 
-    # --- Statuszeile (Fehler / Countdown / Unlocking) ---------------------
-    status = Label()
-    status.AutoSize = False
-    status.TextAlign = title.TextAlign
-    status.Font = Font("Segoe UI", 9.5)
-    status.ForeColor = col(_DANGER)
-    status.Size = Size(400, 24)
-    status.Location = Point(20, 266)
-    status.Text = ""
+    # ------------------------------------------------------------------
+    # Layout: eine mittige Spalte wie .lock-card, bei jeder Groesse neu gesetzt
+    # ------------------------------------------------------------------
+    def layout():
+        try:
+            scale["v"] = T.dpi_scale(int(form.Handle.ToInt64()))
+        except Exception:
+            scale["v"] = 1.0
+        w = form.ClientSize.Width
+        h = form.ClientSize.Height
+        cx = w // 2
 
-    # --- Reset-Bereich (vergessene Passphrase, N11.3) ---------------------
-    forgot = LinkLabel()
-    forgot.Text = "Forgot passphrase?"
-    forgot.Font = Font("Segoe UI", 9.0)
-    forgot.LinkColor = col(_FAINT)
-    forgot.ActiveLinkColor = col(_ACCENT)
-    forgot.AutoSize = True
-    forgot.Location = Point(160, 300)
+        ring_d = s(184)
+        gap = s(26)
+        title_h, sub_h = s(38), s(26)
+        input_h, caps_h, btn_h, status_h = s(52), s(20), s(50), s(26)
+        block = (ring_d + gap + title_h + s(4) + sub_h + gap + input_h
+                 + s(6) + caps_h + s(10) + btn_h + s(8) + status_h)
+        y = max(s(24), (h - block) // 2 - s(20))
 
-    reset_box = TextBox()
-    reset_box.Font = Font("Segoe UI", 11.0)
-    reset_box.BackColor = col(_SURFACE)
-    reset_box.ForeColor = col(_TEXT)
-    reset_box.Size = Size(180, 28)
-    reset_box.Location = Point(70, 300)
-    reset_box.Visible = False
+        geom["ring_d"] = ring_d
+        geom["ring_x"] = cx - ring_d // 2
+        geom["ring_y"] = y
+        y += ring_d + gap
 
-    reset_btn = Button()
-    reset_btn.Text = "Reset"
-    reset_btn.Font = Font("Segoe UI", 9.0)
-    reset_btn.FlatStyle = off.FlatStyle
-    reset_btn.FlatAppearance.BorderSize = 1
-    reset_btn.BackColor = col(_BG)
-    reset_btn.ForeColor = col(_DANGER)
-    reset_btn.Size = Size(90, 28)
-    reset_btn.Location = Point(260, 300)
-    reset_btn.Visible = False
+        title.control.Size = Size(min(w - s(40), s(700)), title_h)
+        title.control.Location = Point(cx - title.control.Width // 2, y)
+        y += title_h + s(4)
+
+        subtitle.control.Size = Size(min(w - s(40), s(760)), sub_h)
+        subtitle.control.Location = Point(cx - subtitle.control.Width // 2, y)
+        y += sub_h + gap
+
+        pill_w = min(w - s(60), s(380))
+        pw_pill.control.Size = Size(pill_w, input_h)
+        pw_pill.control.Location = Point(cx - pill_w // 2, y)
+        show.control.Size = Size(s(62), s(32))
+        show.control.Location = Point(pill_w - s(62) - s(10),
+                                      (input_h - s(32)) // 2)
+        pw_pill.layout_box(right_reserve=s(62) + s(18), scale=scale["v"])
+        y += input_h + s(6)
+
+        caps.control.Size = Size(min(w - s(40), s(500)), caps_h)
+        caps.control.Location = Point(cx - caps.control.Width // 2, y)
+        y += caps_h + s(10)
+
+        unlock.control.Size = Size(pill_w, btn_h)
+        unlock.control.Location = Point(cx - pill_w // 2, y)
+        y += btn_h + s(8)
+
+        status.control.Size = Size(min(w - s(40), s(760)), status_h)
+        status.control.Location = Point(cx - status.control.Width // 2, y)
+        y += status_h
+
+        # Fusszeile: Reset-Weg. Mit Abstand unter dem Block, aber nie unter den
+        # Fensterrand (kleine Fenster: direkt anschliessen).
+        foot_h = s(44)
+        foot_y = min(h - foot_h - s(30), y + s(52))
+        foot_y = max(foot_y, y + s(16))
+
+        forgot.control.Size = Size(s(300), s(26))
+        forgot.control.Location = Point(cx - s(150), foot_y + (foot_h - s(26)) // 2)
+
+        row_w = s(240) + s(12) + s(150)
+        reset_pill.control.Size = Size(s(240), foot_h)
+        reset_pill.control.Location = Point(cx - row_w // 2, foot_y)
+        reset_pill.layout_box(scale=scale["v"])
+        reset_btn.control.Size = Size(s(150), foot_h)
+        reset_btn.control.Location = Point(cx - row_w // 2 + s(240) + s(12), foot_y)
+
+        off.control.Size = Size(s(42), s(42))
+        off.control.Location = Point(w - s(42) - s(22), s(18))
+
+        form.Invalidate()
+
+    # ------------------------------------------------------------------
+    # Hintergrund + Ring zeichnen (style.css .lock-screen / .lock-ring)
+    # ------------------------------------------------------------------
+    def on_form_paint(_s, e):
+        g = e.Graphics
+        w, h = form.ClientSize.Width, form.ClientSize.Height
+        T.paint_backdrop(g, 0, 0, w, h, T.TITLE_STRIP)
+        d = geom["ring_d"]
+        x, y = geom["ring_x"], geom["ring_y"]
+        cx, cy = x + d / 2.0, y + d / 2.0
+        # Schein wie box-shadow: 0 18px 48px accent
+        T.draw_glow(g, cx, cy + d * 0.10, d * 0.92, T.ACCENT, 46)
+        T.fill_pill(g, x, y, d, d, d / 2.0, T.ACCENT_WASH, T.ACCENT_LINE,
+                    max(1.0, scale["v"]))
+        T.draw_lock_glyph(g, cx, cy, d * (84.0 / 184.0), T.ACCENT)
+
+    form.Paint += PaintEventHandler(on_form_paint)
+    form.Resize += EventHandler(lambda _s, _a: layout())
 
     # ------------------------------------------------------------------
     # Verhalten
@@ -212,25 +234,24 @@ def run_lock_window(api: Any, boot_state: str, boot_reason: str | None,
             pass
 
     def set_status(text, danger=True):
-        status.ForeColor = col(_DANGER if danger else _FAINT)
-        status.Text = text
+        status.set(text, T.DANGER if danger else T.TEXT_DIM)
 
-    def on_show_changed(sender, args):
-        pw.UseSystemPasswordChar = not show.Checked
+    def on_show_click(_s, _a):
+        visible = pw.UseSystemPasswordChar
+        pw.UseSystemPasswordChar = not visible
+        show.set_text("Hide" if visible else "Show")
         pw.Focus()
-    show.CheckedChanged += EventHandler(on_show_changed)
-
-    def update_caps():
-        try:
-            caps.Text = "Caps Lock is on" if (Application.OpenForms and
-                                              form.IsHandleCreated and
-                                              _caps_on()) else ""
-        except Exception:
-            caps.Text = ""
+    show.control.Click += EventHandler(on_show_click)
 
     def _caps_on():
         import ctypes
         return bool(ctypes.windll.user32.GetKeyState(0x14) & 0x0001)
+
+    def update_caps():
+        try:
+            caps.set("Caps Lock is on" if _caps_on() else "")
+        except Exception:
+            caps.set("")
 
     countdown = {"remaining": 0}
 
@@ -239,29 +260,31 @@ def run_lock_window(api: Any, boot_state: str, boot_reason: str | None,
         # Unlock-Knopf frei, wenn die Sperrzeit abgelaufen ist.
         if countdown["remaining"] > 0:
             countdown["remaining"] -= 1
-            set_status(f"Too many attempts. Try again in {countdown['remaining']}s.")
             if countdown["remaining"] <= 0:
-                unlock.Enabled = True
+                unlock.set_enabled(True)
                 set_status("", danger=False)
+            else:
+                set_status(f"Too many attempts. Try again in {countdown['remaining']}s.")
 
     timer = Timer()
     timer.Interval = 1000
 
-    def on_tick(sender, args):
+    def on_tick(_s, _a):
         update_caps()
         tick_countdown()
     timer.Tick += EventHandler(on_tick)
 
     def do_unlock():
-        if state["busy"]:
+        if state["busy"] or not unlock.control.Enabled:
             return
         passphrase = pw.Text or ""
         state["busy"] = True
-        unlock.Enabled = False
+        unlock.set_enabled(False)
         set_status("Unlocking…", danger=False)
 
         def worker():
             res = api.unlock(passphrase)
+
             def apply():
                 state["busy"] = False
                 if isinstance(res, dict) and res.get("ok"):
@@ -269,7 +292,7 @@ def run_lock_window(api: Any, boot_state: str, boot_reason: str | None,
                     result["value"] = "unlocked"
                     form.Close()
                     return
-                unlock.Enabled = True
+                unlock.set_enabled(True)
                 pw.Text = ""
                 pw.Focus()
                 code = res.get("error") if isinstance(res, dict) else "internal"
@@ -278,10 +301,10 @@ def run_lock_window(api: Any, boot_state: str, boot_reason: str | None,
                     retry = int(res.get("retry_in") or 0)
                     if retry > 1:
                         countdown["remaining"] = retry
-                        unlock.Enabled = False
+                        unlock.set_enabled(False)
                 elif code == "rate_limited":
                     countdown["remaining"] = int(res.get("retry_in") or 0)
-                    unlock.Enabled = False
+                    unlock.set_enabled(False)
                     set_status(f"Too many attempts. Try again in {countdown['remaining']}s.")
                 elif code == "memory":
                     set_status("Not enough memory. Close other apps and try again.")
@@ -293,37 +316,45 @@ def run_lock_window(api: Any, boot_state: str, boot_reason: str | None,
 
         threading.Thread(target=worker, daemon=True).start()
 
-    def on_unlock_click(sender, args):
-        do_unlock()
-    unlock.Click += EventHandler(on_unlock_click)
+    unlock.control.Click += EventHandler(lambda _s, _a: do_unlock())
 
-    def on_pw_key(sender, args):
+    def on_pw_key(_s, args):
         if args.KeyCode == Keys.Enter:
             args.SuppressKeyPress = True
             do_unlock()
-    pw.KeyDown += EventHandler(on_pw_key)
+    pw.KeyDown += KeyEventHandler(on_pw_key)
 
-    def on_off_click(sender, args):
+    def on_off_click(_s, _a):
         state["closing_intent"] = "quit"
         result["value"] = "quit"
         try:
             api.quit_app()   # teardown('quit'); request_teardown schliesst das Fenster
         except Exception:
             form.Close()
-    off.Click += EventHandler(on_off_click)
+    off.control.Click += EventHandler(on_off_click)
 
-    def on_forgot(sender, args):
+    def open_reset():
         # Reset ist wie der Killswitch abgesichert: erst sichtbar machen, dann
         # muss "RESET" getippt werden, dann loescht der Knopf wirklich.
-        forgot.Visible = False
-        reset_box.Visible = True
-        reset_btn.Visible = True
-        reset_box.Focus()
+        state["reset_open"] = True
+        forgot.control.Visible = False
+        reset_pill.control.Visible = True
+        reset_btn.control.Visible = True
+        reset_pill.box.Focus()
         set_status("Type RESET to erase the vault and start over.", danger=True)
-    forgot.LinkClicked += EventHandler(on_forgot)
+    forgot.control.Click += EventHandler(lambda _s, _a: open_reset())
 
-    def on_reset_click(sender, args):
-        if (reset_box.Text or "").strip() != "RESET":
+    def close_reset():
+        state["reset_open"] = False
+        reset_pill.box.Text = ""
+        reset_pill.control.Visible = False
+        reset_btn.control.Visible = False
+        forgot.control.Visible = True
+        set_status("", danger=False)
+        pw.Focus()
+
+    def do_reset():
+        if (reset_pill.box.Text or "").strip() != "RESET":
             set_status("Type RESET (all caps) to confirm.")
             return
         state["closing_intent"] = "onboarding"
@@ -332,9 +363,35 @@ def run_lock_window(api: Any, boot_state: str, boot_reason: str | None,
             api.reset_vault()   # teardown('reset'); request_teardown schliesst
         except Exception:
             form.Close()
-    reset_btn.Click += EventHandler(on_reset_click)
+    reset_btn.control.Click += EventHandler(lambda _s, _a: do_reset())
 
-    def on_form_closing(sender, args):
+    def on_reset_key(_s, args):
+        if args.KeyCode == Keys.Enter:
+            args.SuppressKeyPress = True
+            do_reset()
+    reset_pill.box.KeyDown += KeyEventHandler(on_reset_key)
+
+    def on_form_key(_s, args):
+        # Esc schliesst nur den Reset-Weg; es gibt bewusst keinen Weg an der
+        # Sperre vorbei.
+        if args.KeyCode == Keys.Escape and state["reset_open"]:
+            args.SuppressKeyPress = True
+            close_reset()
+    form.KeyPreview = True
+    form.KeyDown += KeyEventHandler(on_form_key)
+
+    def on_form_keypress(_s, args):
+        # B.8-Regel (Spike-Frage 9): jede druckbare Taste landet im Passwortfeld,
+        # auch wenn der Fokus gerade auf einem Knopf steht (Klick auf "Unlock").
+        ch = args.KeyChar
+        if ord(ch) < 32 or pw.Focused or reset_pill.box.Focused:
+            return
+        pw.Focus()
+        pw.AppendText(ch)
+        args.Handled = True
+    form.KeyPress += KeyPressEventHandler(on_form_keypress)
+
+    def on_form_closing(_s, _a):
         # Fenster-X ohne bewussten Ausgang = quit (N11.11.1, Spike-Frage 5):
         # denselben sicheren Beenden-Pfad nehmen.
         if state["closing_intent"] is None:
@@ -346,18 +403,29 @@ def run_lock_window(api: Any, boot_state: str, boot_reason: str | None,
                 pass
     form.FormClosing += EventHandler(on_form_closing)
 
-    def on_shown(sender, args):
+    def on_shown(_s, _a):
+        try:
+            hwnd = int(form.Handle.ToInt64())
+        except Exception:
+            hwnd = 0
+        T.apply_titlebar_theme(hwnd, True)
+        if on_ready is not None and hwnd:
+            try:
+                on_ready(hwnd)
+            except Exception:
+                pass
+        layout()
         pw.Focus()
         timer.Start()
         if _test_after_shown is not None:
             probe = Timer()
             probe.Interval = 800
 
-            def fire(_s, _a):
+            def fire(_s2, _a2):
                 probe.Stop()
                 try:
-                    _test_after_shown({"pw": pw, "unlock": unlock,
-                                       "off": off, "form": form})
+                    _test_after_shown({"pw": pw, "unlock": unlock.control,
+                                       "off": off.control, "form": form})
                 except Exception as exc:
                     print("test_after_shown error:", exc, flush=True)
             probe.Tick += EventHandler(fire)
@@ -369,24 +437,19 @@ def run_lock_window(api: Any, boot_state: str, boot_reason: str | None,
             rem = 0
         if rem > 0:
             countdown["remaining"] = rem
-            unlock.Enabled = False
+            unlock.set_enabled(False)
             set_status(f"Too many attempts. Try again in {rem}s.")
     form.Shown += EventHandler(on_shown)
 
     # request_teardown: die Api ruft das (nach teardown-Schritten 1-8), um das
-    # aktuelle Fenster abzubauen. Im Lock-Fenster heisst das: die Form
+    # aktuelle Fenster abzubauen. Im Sperrfenster heisst das: die Form
     # schliessen (der Ausgang steht schon in state/result). Ueber den UI-Thread.
     api._request_teardown = lambda: ui(form.Close)
 
-    for ctl in (off, title, subtitle, pw, show, caps, unlock, status,
-                forgot, reset_box, reset_btn):
+    for ctl in (off.control, title.control, subtitle.control, pw_pill.control,
+                caps.control, unlock.control, status.control, forgot.control,
+                reset_pill.control, reset_btn.control):
         form.Controls.Add(ctl)
-
-    if vault_error:
-        # Bei Tresor-Fehler den Reset-Weg sofort anbieten (N6): der Nutzer kann
-        # ohnehin nicht entsperren. Unlock bleibt fuer den Fall, dass die Datei
-        # doch da ist (z.B. Stick wieder eingesteckt).
-        forgot.Text = "Reset vault"
 
     Application.Run(form)
     try:

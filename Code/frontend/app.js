@@ -77,6 +77,15 @@ function wifiSvg(level) {
 
 const ACCENTS = ['#d97757', '#c75d3a', '#5a9d6b', '#4a86c5', '#d4a23c', '#a66a9c'];
 
+// Sidebar-Breite: Standardwert fuer den Erststart (und als Rueckfall, wenn in den
+// Settings kein/ein unplausibler Wert steht). Der Seed in db.py schreibt genau
+// diesen Wert einmalig in einen frisch angelegten Tresor; sobald der Nutzer die
+// Sidebar einmal gezogen hat, gilt nur noch sein gespeicherter Wert.
+// Erlaubte Spanne (Backend klemmt beim Schreiben, G20/V5): 180 bis 520.
+const SIDEBAR_WIDTH_DEFAULT = 300;
+const SIDEBAR_WIDTH_MIN = 180;
+const SIDEBAR_WIDTH_MAX = 520;
+
 // ===========================================================================
 // Zustand (nur Cache; Wahrheit bleibt das Backend)
 // ===========================================================================
@@ -92,7 +101,7 @@ let state = {
   focus: false,
   mini: false,       // kompakter Mini-Fenster-Modus (oben rechts angeheftet)
   railPinned: false, // Tool-Rail fixiert (per Chevron-Griff), bleibt sichtbar
-  sidebarWidth: 256, // Sidebar-Breite in px, per Drag veraenderbar
+  sidebarWidth: SIDEBAR_WIDTH_DEFAULT, // Sidebar-Breite in px, per Drag veraenderbar
   adding: false,     // Inline-"New list"-Eingabe sichtbar
   addingTask: false, // Inline-"New task"-Eingabe im unteren Dock sichtbar
   doneOpen: false,   // "Completed"-Sektion eingeklappt?
@@ -103,6 +112,11 @@ let state = {
   // 1 Ort waehlen, 2 Passphrase + Verlust-Warnung, 3 fertig/anlegen.
   // { step, path, hasVault, warning, busy, error } | null.
   onboarding: null,
+  // Willkommens-Schirm (N11.20): Blende ueber der schon fertig gerenderten App,
+  // bei jedem Weg hinein (Anlegen, normaler Start, Entsperren).
+  // { leaving:bool, greetingOnly:bool } | null (greetingOnly: ohne Unterzeile,
+  // also nur der Gruss, mittig im Logo; gilt fuer Start und Entsperren).
+  welcome: null,
 };
 
 const root = document.getElementById('root');
@@ -573,23 +587,66 @@ function renderModal() {
   const list = activeList();
   switch (state.modal) {
     case 'status': {
+      // Gate G22 (ehrliche Sicherheits-Behauptungen) + Audit 8.4 (Status-Modal als
+      // ehrliches Security-Dashboard): seit Phase 8 stammt JEDE Zeile aus dem beim
+      // Oeffnen frisch geholten get_status() (beide Schichten, Argon2-Parameter,
+      // Pepper ja/nein, Zeitpunkt des letzten Wraps, realer BitLocker-Status G31 /
+      // B.10.4). Hier steht nichts fest verdrahtet: fehlt die Antwort noch, zeigt
+      // die Zeile "checking...", nie eine behauptete Eigenschaft. (Vorher standen
+      // hier Phase-7-Festtexte, "tasks.db" und "dev key, layer 2 pending", die
+      // nach Phase 8 in beide Richtungen falsch waren.)
       const online = state.online;
+      const d = statusData;
+      const enc = (d && d.encryption) || null;
+      const dbi = (d && d.db) || null;
+      const bl = (d && d.bitlocker) || null;
+      const rt = (d && d.runtime) || null;
+      // Jede Zeile ist [Wert, Farbe, Tag]; ohne Antwort neutral und ohne Aussage.
+      const wait = [statusFailed ? 'unavailable' : 'checking...', 'var(--text-faint)', ''];
+      const encOk = !!(enc && enc.active);
+      const layerColor = encOk ? 'var(--secure)' : 'var(--danger)';
+      const layerTag = encOk ? 'active' : 'inactive';
+      const vault = dbi
+        ? (dbi.size
+          ? [`${dbi.artifact} · ${dbi.size_human}`, 'var(--secure)', 'encrypted']
+          : [`${dbi.artifact} · not found`, 'var(--danger)', 'missing'])
+        : wait;
+      const pepper = enc
+        ? (enc.pepper
+          ? ['present · this Windows account', 'var(--secure)', 'bound']
+          : ['not in the credential store', 'var(--danger)', 'missing'])
+        : wait;
+      // BitLocker: ein nicht lesbarer WMI-Wert bleibt ehrlich "unknown" und wird
+      // nie als "protected" dargestellt (G31/G22).
+      let disk = wait;
+      if (bl) {
+        const drv = bl.drive ? bl.drive + ' · ' : '';
+        if (bl.state === 'protected') disk = [drv + 'BitLocker on', 'var(--secure)', 'protected'];
+        else if (bl.state === 'off') disk = [drv + 'BitLocker off', 'var(--danger)', 'unprotected'];
+        else disk = [drv + 'not readable', 'var(--text-faint)', 'unknown'];
+      }
       const rows = [
-        ['Local database', 'tasks.db', 'var(--secure)', 'healthy'],
-        // Gate G22: solange der oeffentliche Dev-Schluessel (DEV_AES_KEY) benutzt
-        // wird, darf hier keine echte Verschluesselung ("active"/"encrypted") in
-        // gruen stehen. Ehrlicher Ist-Zustand in Warnfarbe: einlagiges AES-256 mit
-        // oeffentlichem Schluessel, Schicht 2 (ChaCha20) + Passphrase erst ab
-        // Phase 8. Ab Phase 8 zeigt diese Zeile echte Werte (siehe get_status).
-        ['Encryption', 'AES-256 · dev key, layer 2 pending', 'var(--danger)', 'dev'],
+        ['Vault file', ...vault],
+        ['Encryption layer 1', ...(enc ? [enc.layer1, layerColor, layerTag] : wait)],
+        ['Encryption layer 2', ...(enc ? [enc.layer2, layerColor, layerTag] : wait)],
+        ['Key derivation', ...(enc ? [enc.kdf, 'var(--text-faint)', ''] : wait)],
+        ['Pepper', ...pepper],
+        ['Last wrap', ...(enc ? [enc.last_wrap || 'unknown', 'var(--text-faint)', ''] : wait)],
+        ['Disk encryption', ...disk],
         ['Network', online ? 'local only · online' : 'local only · offline', online ? 'var(--secure)' : 'var(--text-faint)', online ? 'online' : 'offline'],
-        ['WebView2 runtime', 'system', 'var(--secure)', 'ok'],
+        // Version aus der Registry; nicht lesbar -> "unknown" statt eines "ok",
+        // das keine Deckung haette.
+        ['WebView2 runtime', ...(rt
+          ? (rt.webview2 && rt.webview2 !== 'unknown'
+            ? [rt.webview2, 'var(--secure)', 'ok']
+            : ['not readable', 'var(--text-faint)', 'unknown'])
+          : wait)],
       ];
       const body = rows.map((r, i) => `
         <div style="display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:${i < rows.length - 1 ? '1px dashed var(--border)' : 'none'}">
-          <span style="font-size:13.5px;font-weight:500">${r[0]}</span>
-          <span class="mono" style="margin-left:auto;font-size:11px;color:var(--text-faint)">${r[1]}</span>
-          ${r[3] ? `<span class="tag" style="color:${r[2]};min-width:64px;text-align:right">${r[3]}</span>` : ''}
+          <span style="font-size:13.5px;font-weight:500;flex:0 0 auto">${esc(r[0])}</span>
+          <span class="mono" style="margin-left:auto;font-size:11px;color:var(--text-faint);text-align:right">${esc(r[1])}</span>
+          ${r[3] ? `<span class="tag" style="color:${r[2]};min-width:64px;text-align:right;flex:0 0 auto">${esc(r[3])}</span>` : ''}
         </div>`).join('');
       // "Recent errors" (Gate G29 / N11.12.1): der redigierte Fehler-Ringpuffer
       // des Backends, eingeklappt, mit Kopier-Knopf ueber den gehaerteten
@@ -615,7 +672,7 @@ function renderModal() {
           ${errs.length ? `<button class="btn" data-act="copy-errors" style="margin-top:8px">${I.Copy} Copy</button>` : ''}` : ''}
         </div>`;
       return scrim(`
-        <div class="modal">
+        <div class="modal modal-status">
           <div class="modal-body">
             <div class="modal-icon accent">${I.Diag}</div>
             <h3>App status</h3>
@@ -868,11 +925,113 @@ function renderOnboarding() {
       </div>
     </div>`;
 }
+
+// ===========================================================================
+// Willkommens-Schirm (Phase 8, N11.20). Laeuft bei jedem Weg in die entsperrte
+// App: nach dem Anlegen des Tresors (create_vault), bei jedem normalen Start
+// und nach jedem Entsperren (beides kommt ueber boot() mit dem Boot-Zustand
+// 'unlocked' herein). Die Logo-Marke glimmt gedaempft im Hintergrund, der
+// Gruss faehrt zeichenweise ein, danach blendet der Schirm auf die schon
+// fertig gerenderte, leere App ab. Rein praesentationsbezogen: er haelt
+// nichts auf (der Auto-Sperr-Timer laeuft weiter, die Bridge ist unberuehrt)
+// und ist per Klick oder Tastendruck ueberspringbar. Kein Nutzerinhalt auf
+// dem Schirm, nur feste Texte.
+// ===========================================================================
+// Standzeit bis zum Ausblenden. Nach dem Anlegen laenger: dort steht unter dem
+// Gruss noch die Unterzeile, die erst nach ~2,6 s vollstaendig da ist und in
+// Ruhe lesbar bleiben soll. Bei Start/Entsperren steht nur der Gruss, da genuegt
+// die kurze Standzeit.
+const WELCOME_HOLD_MS = 2900;
+const WELCOME_HOLD_VAULT_MS = 4800;
+const WELCOME_FADE_MS = 520;    // muss zur .welcome-Transition in style.css passen
+const WELCOME_TITLE = 'Welcome to NoaToDo';
+
+// Die Logo-Marke (Kreisring + N) als Inline-SVG: erbt so die Akzentfarbe, ist
+// per CSS animierbar und braucht kein Bild-Asset (also keine CSP-Ausnahme).
+const WelcomeMark = `<svg viewBox="0 0 120 120" aria-hidden="true">
+      <circle class="wl-ring" cx="60" cy="60" r="47" fill="none" stroke="currentColor" stroke-width="6" />
+      <path class="wl-n" fill="currentColor" d="M34 88 V32 H47 L73 70 V32 H86 V88 H73 L47 50 V88 Z" />
+    </svg>`;
+
+function renderWelcome() {
+  if (!state.welcome) return '';
+  // Der Gruss laeuft zeichenweise ein: pro Wort ein inline-block (damit nichts
+  // mitten im Wort umbricht), pro Zeichen ein gestaffelter Einflug.
+  let i = 0;
+  const title = WELCOME_TITLE.split(' ').map((word) => {
+    const chars = [...word].map((ch) => {
+      const delay = (0.45 + (i++) * 0.045).toFixed(3);
+      return `<span class="wl-ch" style="animation-delay:${delay}s">${esc(ch)}</span>`;
+    }).join('');
+    return `<span class="wl-word">${chars}</span>`;
+  }).join(' ');
+  // Die Ausblend-Klasse kommt aus dem Zustand mit: sollte doch einmal ein
+  // Render mitten in die Blende fallen, darf der Schirm nicht wieder
+  // vollflaechig auferstehen.
+  const leaving = state.welcome.leaving ? ' leaving' : '';
+  // Die Unterzeile gibt es NUR direkt nach dem Anlegen des Tresors (da ist sie
+  // die eigentliche Nachricht). Beim normalen Start und nach dem Entsperren
+  // steht allein der Gruss, und der sitzt dadurch genau in der Logo-Mitte.
+  const sub = state.welcome.greetingOnly
+    ? ''
+    : `<p class="wl-sub">Your vault is ready. Everything stays on this PC.</p>`;
+  return `
+    <div class="welcome${leaving}" id="welcome">
+      <div class="wl-glow"></div>
+      <div class="wl-mark">
+        ${WelcomeMark}
+        <div class="wl-sheen">${WelcomeMark}</div>
+      </div>
+      <div class="wl-text">
+        <h1 class="wl-title">${title}</h1>
+        ${sub}
+      </div>
+    </div>`;
+}
+
+let welcomeTimer = null;
+
+// Startet die Standzeit. Wird erst gerufen, wenn die App darunter schon
+// gerendert ist (sonst blitzt sie beim Abblenden nackt auf).
+function runWelcome() {
+  if (!state.welcome) return;
+  clearTimeout(welcomeTimer);
+  const hold = state.welcome.greetingOnly ? WELCOME_HOLD_MS : WELCOME_HOLD_VAULT_MS;
+  welcomeTimer = setTimeout(finishWelcome, hold);
+}
+
+// Abblenden IN-PLACE (bewusst ohne render()): ein Re-Render wuerde den Schirm
+// neu erzeugen und alle Intro-Animationen von vorn starten, statt ihn
+// abzublenden (gleiche Begruendung wie beim zweistufigen Killswitch-Knopf).
+function finishWelcome() {
+  if (!state.welcome || state.welcome.leaving) return;
+  state.welcome.leaving = true;
+  clearTimeout(welcomeTimer);
+  const el = document.getElementById('welcome');
+  if (!el) { state.welcome = null; welcomeTimer = null; render(); return; }
+  el.classList.add('leaving');
+  welcomeTimer = setTimeout(() => {
+    state.welcome = null;
+    welcomeTimer = null;
+    render();
+  }, WELCOME_FADE_MS);
+}
+
+// Sofort weg, ohne Blende: wird beim Sperren/Panik gebraucht, damit der Schirm
+// niemals ueber dem Lock-Cover haengen bleibt.
+function cancelWelcome() {
+  clearTimeout(welcomeTimer);
+  welcomeTimer = null;
+  state.welcome = null;
+}
 // Frisch geholtes get_status()-Ergebnis fuer das Status-Modal (transient),
 // plus Auf/Zu-Zustand der "Recent errors"-Sektion (G29). Kein Teil von state:
 // rein praesentationsbezogen, verfaellt mit dem Modal.
 let statusData = null;
 let errorsOpen = false;
+// Scheitert der Abruf, stehen die Zeilen auf "unavailable" statt ewig auf
+// "checking..." (G22: lieber kein Wert als ein falscher oder ein haengender).
+let statusFailed = false;
 
 // ===========================================================================
 // Panik-Flow (Nachtrag N10). Entsichert wie eine Cockpit-Waffenabdeckung,
@@ -921,15 +1080,21 @@ function renderPanic() {
         </div>`;
     }
     const killing = p.stage === 'killing';
+    // Fortschritt kommt aus dem Zustand, NICHT hart aus der Vorlage: ein
+    // Re-Render mitten im Lauf (z.B. das onNetChange-Ereignis der echten
+    // Funkabschaltung, N11.5) baut diese Knoten neu, und mit festem 0 % faellt
+    // der Balken dabei sichtbar auf Null zurueck.
+    const r = typeof p.progress === 'number' ? p.progress : 0;
+    const stepText = p.stepText || (killing ? 'Deleting user data' : 'Clearing workspace');
     return `
       <div class="panic-screen">
         <div class="panic-screen-card">
           <div class="panic-screen-ring">${I.Alert}</div>
           <h2>${killing ? 'Erasing user data' : 'Clearing workspace'}</h2>
-          <div class="panic-bar"><div class="panic-bar-fill" id="panic-fill"></div></div>
+          <div class="panic-bar"><div class="panic-bar-fill" id="panic-fill" style="width:${(r * 100).toFixed(1)}%"></div></div>
           <div class="panic-wipe-row">
-            <span class="mono" id="panic-step">${killing ? 'Deleting user data' : 'Clearing workspace'}</span>
-            <span class="mono panic-pct" id="panic-pct">0%</span>
+            <span class="mono" id="panic-step">${esc(stepText)}</span>
+            <span class="mono panic-pct" id="panic-pct">${Math.floor(r * 100)}%</span>
           </div>
         </div>
       </div>`;
@@ -964,16 +1129,25 @@ function renderPanic() {
 // wechselt entlang der Schritte, am Ende feuert onDone. Bricht ab, wenn der
 // Panik-Zustand die erwartete Stage verlassen hat.
 function runPanicProgress(stage, steps, dur, onDone) {
-  const fill = document.getElementById('panic-fill');
-  const pct = document.getElementById('panic-pct');
-  const step = document.getElementById('panic-step');
   const t0 = performance.now();
+  state.panic.progress = 0;
+  state.panic.stepText = steps[0];
   function frame(now) {
     if (!state.panic || state.panic.stage !== stage) return;
     const r = Math.min(1, (now - t0) / dur);
+    const label = steps[Math.min(steps.length - 1, Math.floor(r * steps.length))];
+    // Stand im Zustand mitschreiben, damit ein Re-Render mittendrin dort
+    // weitermacht statt bei 0 % (siehe Kommentar in renderPanic).
+    state.panic.progress = r;
+    state.panic.stepText = label;
+    // Knoten JEDEN Frame frisch holen: ein Re-Render ersetzt sie, alte
+    // Referenzen haengen dann im Leeren und der Balken stand still.
+    const fill = document.getElementById('panic-fill');
+    const pct = document.getElementById('panic-pct');
+    const step = document.getElementById('panic-step');
     if (fill) fill.style.width = (r * 100).toFixed(1) + '%';
     if (pct) pct.textContent = Math.floor(r * 100) + '%';
-    if (step) step.textContent = steps[Math.min(steps.length - 1, Math.floor(r * steps.length))];
+    if (step) step.textContent = label;
     if (r < 1) { requestAnimationFrame(frame); }
     else { onDone(); }
   }
@@ -1002,6 +1176,8 @@ function startPanicWipe() {
 function startKillswitch() {
   state.panic.stage = 'killing';
   state.panic.killArmed = false;
+  state.panic.progress = 0;      // nicht den vollen Balken der Wipe-Stufe erben
+  state.panic.stepText = null;
   render();
   const req = api().killswitch();
   runPanicProgress(
@@ -1034,7 +1210,7 @@ function applyChrome() {
   root.setAttribute('data-focus', state.focus ? 'on' : 'off');
   applyRail();
   root.style.setProperty('--accent', state.settings.accent || '#d97757');
-  root.style.setProperty('--sidebar-width', (state.sidebarWidth || 256) + 'px');
+  root.style.setProperty('--sidebar-width', (state.sidebarWidth || SIDEBAR_WIDTH_DEFAULT) + 'px');
   syncSidebarAnchor();
 }
 
@@ -1091,7 +1267,11 @@ function render() {
     renderExportPill() +
     renderModal() +
     renderPanic() +
-    renderLock();
+    renderLock() +
+    // Willkommens-Blende (N11.20): liegt ueber allem, gibt es nur im normalen
+    // Layout (beim Weg in die App sind Focus/Mini aus) und liefert sonst einen
+    // leeren String.
+    renderWelcome();
   wireInputs();
 }
 
@@ -1240,9 +1420,14 @@ async function obCreate() {
         : 'Could not create the vault.';
     render(); return;
   }
-  // Angelegt und entsperrt: ins normale App-UI wechseln.
+  // Angelegt und entsperrt: ins normale App-UI wechseln. Die Willkommens-Blende
+  // (N11.20) wird VOR enterUnlockedApp() gesetzt, damit die leere App nicht
+  // kurz nackt aufblitzt: sie liegt beim ersten Rendern schon darueber. Der
+  // gleiche Griff steht in boot() fuer Start und Entsperren.
   state.onboarding = null;
+  state.welcome = { leaving: false };
   await enterUnlockedApp();
+  runWelcome();
 }
 
 async function obOpenExisting() {
@@ -1258,11 +1443,12 @@ async function obOpenExisting() {
 async function enterUnlockedApp() {
   try {
     const st = await api().get_state();
-    if (st && st.locked) { state.locked = true; render(); return; }
+    if (st && st.locked) { cancelWelcome(); state.locked = true; render(); return; }
     Object.assign(state, st);
     normalizeSettings(state.settings);
-    const sw = parseInt(state.settings.sidebarWidth || '256', 10);
-    state.sidebarWidth = (sw >= 180 && sw <= 520) ? sw : 256;
+    const sw = parseInt(state.settings.sidebarWidth, 10);
+    state.sidebarWidth = (sw >= SIDEBAR_WIDTH_MIN && sw <= SIDEBAR_WIDTH_MAX)
+      ? sw : SIDEBAR_WIDTH_DEFAULT;
     // Immer als leere Arbeitsflaeche starten (unabhaengig von den Settings).
     state.settings.sidebar = 'closed';
     state.railPinned = false;
@@ -1271,6 +1457,7 @@ async function enterUnlockedApp() {
     state.locked = false;
     state.onboarding = null;
   } catch (err) {
+    cancelWelcome();
     root.innerHTML = '<pre style="padding:24px">boot error: ' + err + '</pre>';
     return;
   }
@@ -1524,12 +1711,19 @@ async function refreshWifi() {
   try {
     const r = await api().get_wifi_signal();
     if (!r) return;
+    // Laeuft ein Panik-Schirm (Wipe/Endschirm/Killswitch), nichts anfassen:
+    // die Pille ist dort nicht sichtbar, und ein Render wuerde den laufenden
+    // Fortschritt bzw. den entsicherten Killswitch neu aufbauen.
+    if (state.panic && state.panic.stage !== 'panel') return;
     // Rueckfalllinie zu den Radio-Ereignissen (N11.5): hat das Backend beim
     // Abgleich einen abweichenden realen Funk-Zustand gefunden, uebernehmen.
     if (typeof r.online === 'boolean' && r.online !== state.online) {
       state.online = r.online;
       if (!state.online) stopWifiPoll();
-      render();
+      // Waehrend der Willkommens-Blende (N11.20) NICHT rendern: das wuerde den
+      // Schirm neu aufbauen und seine Animationen von vorn starten. Der
+      // Zustand ist uebernommen, gerendert wird am Ende der Blende ohnehin.
+      if (!state.welcome) render();
       return;
     }
     if (typeof r.level === 'number') {
@@ -1645,7 +1839,7 @@ function onSidebarResizeStart(e) {
   e.preventDefault();
   _resizing = true;
   _resizeStartX = e.clientX;
-  _resizeStartW = state.sidebarWidth || 256;
+  _resizeStartW = state.sidebarWidth || SIDEBAR_WIDTH_DEFAULT;
   root.setAttribute('data-resizing', '');
   document.body.style.cursor = 'col-resize';
   document.body.style.userSelect = 'none';
@@ -1655,7 +1849,8 @@ function onSidebarResizeStart(e) {
 
 function onSidebarResizeMove(e) {
   if (!_resizing) return;
-  const w = Math.max(180, Math.min(520, _resizeStartW + (e.clientX - _resizeStartX)));
+  const w = Math.max(SIDEBAR_WIDTH_MIN,
+                     Math.min(SIDEBAR_WIDTH_MAX, _resizeStartW + (e.clientX - _resizeStartX)));
   state.sidebarWidth = w;
   root.style.setProperty('--sidebar-width', w + 'px');
   syncSidebarAnchor();
@@ -1714,6 +1909,7 @@ function clearWorkspace() {
   state.settings.sidebar = 'closed';   // nur in-memory, wie beim Boot
   state.railPinned = false;
   clearToasts();   // kein Undo-Knopf/Toast darf den Lock-Screen ueberlagern
+  cancelWelcome(); // dito die Willkommens-Blende (N11.20), sofort und ohne Blende
 }
 
 async function doLock() {
@@ -1836,7 +2032,7 @@ function pushUndoToast(text, mono, onUndo) {
 // Sidebar, wenn offen, sonst 0. Auf documentElement, weil der Toast-Layer als
 // Kind von <body> die Variable von #root (=.app) nicht erben wuerde.
 function syncSidebarAnchor() {
-  const off = sidebarVisible() ? (state.sidebarWidth || 256) : 0;
+  const off = sidebarVisible() ? (state.sidebarWidth || SIDEBAR_WIDTH_DEFAULT) : 0;
   document.documentElement.style.setProperty('--content-left', off + 'px');
 }
 
@@ -1875,6 +2071,9 @@ function closeMenusIfOutside(e, a) {
 }
 
 async function onClick(e) {
+  // Willkommens-Blende (N11.20): der erste Klick ueberspringt sie und wird
+  // sonst verworfen (darunter liegt die App, dort soll er nichts ausloesen).
+  if (state.welcome) { finishWelcome(); return; }
   // Laeuft eine Inline-Bearbeitung und der Klick geht daneben: speichern
   // (bei leerem Text stattdessen abbrechen), erst dann normal weitermachen.
   if (state.editingId && !e.target.closest('.task.editing')) {
@@ -2018,10 +2217,13 @@ async function onClick(e) {
       // Status-Modal sofort zeigen, die Backend-Daten (u.a. den G29-Fehler-
       // Ringpuffer) asynchron nachladen und nur nachrendern, solange das
       // Modal noch offen ist.
-      state.modal = 'status'; statusData = null; errorsOpen = false; render();
+      state.modal = 'status'; statusData = null; statusFailed = false; errorsOpen = false; render();
       api().get_status().then((d) => {
-        if (!d || d.error) return;
-        statusData = d;
+        if (!d || d.error) { statusFailed = true; }
+        else { statusData = d; }
+        if (state.modal === 'status') render();
+      }).catch(() => {
+        statusFailed = true;
         if (state.modal === 'status') render();
       });
       break;
@@ -2184,6 +2386,9 @@ function onKeyGlobal(e) {
   // ein Boot-Zustand, kein Modal, N11.13): die Onboarding-Eingaben haben ihre
   // eigenen Listener.
   if (state.onboarding) return;
+  // Willkommens-Blende (N11.20): jede Taste ueberspringt sie, loest aber sonst
+  // nichts aus (der Tastendruck gilt nicht schon der App darunter).
+  if (state.welcome) { e.preventDefault(); finishWelcome(); return; }
   if (e.key === 'Escape') {
     if (state.mini) { doMini(false); return; }
     state.modal = null;
@@ -2424,6 +2629,15 @@ window.noa = {
     netNote = null;
     netAnim = true;
     if (state.online) startWifiPoll(); else stopWifiPoll();
+    // Laeuft ein Panik-Schirm, NICHT neu rendern: die Pille ist dort ohnehin
+    // nicht sichtbar, und das Panik-UI (Fortschritt, zweistufiger Killswitch)
+    // soll von einem Funk-Ereignis nicht angefasst werden. Der Panik-Confirm
+    // schaltet selbst echt offline (N11.5), sein eigenes Ereignis kam sonst
+    // genau in den laufenden Balken.
+    if (state.panic && state.panic.stage !== 'panel') return;
+    // Dito waehrend der Willkommens-Blende (N11.20): Zustand ist gesetzt, ein
+    // Render wuerde nur die laufenden Animationen des Schirms zuruecksetzen.
+    if (state.welcome) return;
     render();
   },
 };
@@ -2465,7 +2679,15 @@ async function boot() {
     return;
   }
   // 'unlocked' (oder defensiv anderes): den vollen Zustand laden und rendern.
+  // Die Willkommens-Blende (N11.20) laeuft auch hier, also bei jedem normalen
+  // Start und nach jedem Entsperren: beides landet in genau diesem Zweig, denn
+  // nach dem Unlock im nativen Lock-Fenster baut main.py dieses WebView neu auf
+  // und boot() laeuft erneut. Wieder VOR enterUnlockedApp() setzen, damit die
+  // App nicht kurz nackt aufblitzt; ist der Zustand doch gesperrt, verwirft
+  // enterUnlockedApp() die Blende selbst.
+  state.welcome = { leaving: false, greetingOnly: true };
   await enterUnlockedApp();
+  runWelcome();
 }
 
 if (window.pywebview) boot();

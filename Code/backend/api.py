@@ -977,7 +977,20 @@ class Api:
         # Werten (kein Dev-Key mehr, G9). Die Groesse bezieht sich auf das
         # einzige Ruhe-Artefakt tasks.db.enc, nicht auf eine Klartext-DB.
         enc_path = self._vault_path
-        size = os.path.getsize(enc_path) if enc_path and os.path.exists(enc_path) else 0
+        exists = bool(enc_path and os.path.exists(enc_path))
+        size = os.path.getsize(enc_path) if exists else 0
+        # "Zeitpunkt des letzten Wraps" (G22-Restsatz, Audit 8.4): tasks.db.enc
+        # wird ausschliesslich von wrap_to_file() geschrieben, die Mtime der
+        # Datei IST damit der letzte Wrap. Kein eigener Zaehler noetig, und der
+        # Wert bleibt auch ueber einen Absturz hinweg ehrlich. Nicht lesbar ->
+        # None (das Modal schreibt dann "unknown", nie eine erfundene Zeit).
+        last_wrap = None
+        if exists:
+            try:
+                last_wrap = time.strftime(
+                    "%Y-%m-%d %H:%M", time.localtime(os.path.getmtime(enc_path)))
+            except OSError:
+                last_wrap = None
         params = security_module.KdfParams()
         encryption = {
             "layer1": "SQLCipher · AES-256",
@@ -985,6 +998,7 @@ class Api:
             "kdf": (f"Argon2id · {params.memory_cost // 1024} MiB · "
                     f"t={params.time_cost} · p={params.parallelism}"),
             "pepper": security_module.pepper_exists(),
+            "last_wrap": last_wrap,
             "active": True,
             "dev_key": False,
         }
