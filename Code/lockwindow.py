@@ -41,9 +41,220 @@ from typing import Any
 import wintheme as T
 
 
+# ---------------------------------------------------------------------------
+# Ring des Sperrschirms: EINE Quelle fuer Masse und Bild
+# ---------------------------------------------------------------------------
+# Das Sperrfenster und die Uebergabe-Blende (``Curtain``, N11.25) zeichnen
+# denselben Ring an derselben Stelle. Beide holen sich Lage und Bild hier,
+# damit beim Fensterwechsel nichts springt.
+def _ring_geometry(w: int, h: int, scale: float) -> dict:
+    """Lage des Sperr-Rings in einem Fenster der Groesse ``w`` x ``h``.
+
+    ``next_y`` ist die Oberkante der Titelzeile darunter (das Sperrfenster
+    setzt sein Layout dort fort). Die Blockhoehe zaehlt bewusst die gesamte
+    Sperr-Saeule mit (Titel, Untertitel, Eingabe, Statuszeile), damit der Ring
+    in der Blende genau dort steht wie im fertigen Fenster, obwohl dort noch
+    keine Steuerelemente sichtbar sind.
+    """
+    def s(v: float) -> int:
+        return int(round(v * scale))
+
+    ring_d = s(184)
+    # Abstand zwischen Ring und Titelzeile, absichtlich viel groesser als der
+    # uebrige Zeilenabstand (N11.24): der Schein um den Ring wird von jedem
+    # Steuerelement darunter **hart abgeschnitten**, weil die Labels ihren
+    # eigenen Hintergrund malen und vom Schein nichts wissen. Er reicht rund
+    # 0.42 Durchmesser ueber den Ringrand hinaus (plus die Verschiebung nach
+    # unten); erst ab diesem Abstand ist er ausgelaufen, bevor das erste
+    # Steuerelement anfaengt, und es bleibt keine sichtbare Kante.
+    ring_gap = s(96)
+    gap = s(26)
+    block = (ring_d + ring_gap + s(38) + s(4) + s(26) + gap + s(52)
+             + s(6) + s(20) + s(10) + s(26))
+    y = max(s(24), (h - block) // 2 - s(20))
+    return {"ring_d": ring_d, "ring_x": w // 2 - ring_d // 2, "ring_y": y,
+            "next_y": y + ring_d + ring_gap}
+
+
+def _paint_ring(g, geom: dict, scale: float, t=None) -> None:
+    """Den Ring samt Schein und Schloss zeichnen (style.css ``.lock-ring``).
+
+    ``t`` ist der Fortschritt der Entsperr-Animation (N11.22): ``None`` =
+    geschlossenes Schloss in Akzentfarbe (Normalfall), ``0..1`` = das Schloss
+    geht auf und der Ring wechselt auf die Sicher-Farbe.
+    """
+    d = geom["ring_d"]
+    x, y = geom["ring_x"], geom["ring_y"]
+    if t is None:
+        color, wash, line = T.ACCENT, T.ACCENT_WASH, T.ACCENT_LINE
+        open_t, grow, glow = 0.0, 0.0, 46
+    else:
+        # Farbwechsel und Aufklappen laufen im ersten Teil (weich auslaufend),
+        # dazu ein einmaliger, kleiner Pulsschlag des Rings.
+        e1 = 1.0 - (1.0 - min(1.0, t / 0.55)) ** 3
+        color = T.mix(T.SECURE, T.ACCENT, e1)
+        wash = T.mix(T.SECURE_WASH, T.ACCENT_WASH, e1)
+        line = T.mix(T.SECURE_LINE, T.ACCENT_LINE, e1)
+        open_t = e1
+        grow = 0.05 * math.sin(math.pi * min(1.0, t / 0.7))
+        glow = int(46 + 44 * e1)
+    dd = d * (1.0 + grow)
+    xx, yy = x + (d - dd) / 2.0, y + (d - dd) / 2.0
+    cx, cy = xx + dd / 2.0, yy + dd / 2.0
+    # Schein wie box-shadow: 0 18px 48px accent
+    T.draw_glow(g, cx, cy + dd * 0.10, dd * 0.92, color, glow)
+    T.fill_pill(g, xx, yy, dd, dd, dd / 2.0, wash, line, max(1.0, scale))
+    T.draw_lock_glyph(g, cx, cy, dd * (84.0 / 184.0), color, open_t)
+
+
+def _call(fn, *args) -> None:
+    """Einen optionalen Rueckruf ausfuehren; ein Fehler darf nie das Fenster
+    mitreissen (die Rueckrufe sind reine Kosmetik: Blende auf/zu)."""
+    if fn is None:
+        return
+    try:
+        fn(*args)
+    except Exception:
+        pass
+
+
+class Curtain:
+    """Uebergabe-Blende zwischen zwei Fenstern (N11.25).
+
+    Beim Sperren wird das WebView-Fenster abgebaut, danach raeumt main.py
+    ``PROFILE_DIR`` (G14, kann Sekunden dauern), und erst dann steht das
+    native Sperrfenster. In dieser Luecke gab es **gar kein** Fenster: der
+    Bildschirm fiel auf den Desktop zurueck, es sah aus, als minimiere sich
+    die App. Dasselbe umgekehrt beim Entsperren (WebView2 braucht Anlaufzeit).
+
+    Die Blende ist ein Fenster im App-Design (Grundton + Raster, dunkle
+    Titelleiste, derselbe Ring an derselben Stelle), das **vor** dem Abbau
+    aufgelegt und erst weggenommen wird, wenn das naechste Fenster gemalt
+    ist. Sie zeigt nur feste Formen: keinen Nutzerinhalt, keine Eingabe,
+    keine Bridge, keine Schluessel; sie haelt auch nichts auf (die
+    teardown-Sequenz laeuft unveraendert weiter).
+
+    Sie laeuft in einem **eigenen** UI-Thread (STA) mit eigener
+    Nachrichtenschleife, weil der Hauptthread waehrend der Uebergabe blockiert
+    (``webview.start`` kehrt zurueck, danach der Wisch): ein Fenster ohne
+    laufende Schleife wuerde nicht mehr zeichnen und von Windows als "reagiert
+    nicht" ausgegraut. Eine Notbremse schliesst sie in jedem Fall wieder.
+
+    ``mode``: ``"lock"`` (geschlossenes Schloss, Weg ins Sperrfenster),
+    ``"unlocked"`` (offenes Schloss in der Sicher-Farbe, Weg in die App) oder
+    ``"plain"`` (nur der Hintergrund, z.B. Weg ins Onboarding).
+    """
+
+    #: Notbremse: laenger darf eine Blende nie stehen (Sekunden).
+    GUARD_MS = 15000
+
+    def __init__(self, mode: str = "lock", icon_path: str | None = None):
+        self._mode = mode
+        self._icon = icon_path
+        self._form = None
+        self._ready = threading.Event()
+
+    def show(self) -> None:
+        """Blende auflegen und warten, bis sie wirklich auf dem Schirm ist."""
+        from System.Threading import ApartmentState, Thread as ClrThread, ThreadStart
+        thread = ClrThread(ThreadStart(self._run))
+        thread.IsBackground = True   # darf das Beenden der App nie aufhalten
+        try:
+            thread.SetApartmentState(ApartmentState.STA)
+        except Exception:
+            pass
+        thread.Start()
+        # Ohne dieses Warten schloesse der Aufrufer sein Fenster womoeglich,
+        # bevor die Blende steht: genau die Luecke, die sie schliessen soll.
+        self._ready.wait(2.0)
+
+    def close(self) -> None:
+        """Blende wegnehmen (aus jedem Thread aufrufbar, idempotent)."""
+        form, self._form = self._form, None
+        if form is None:
+            return
+        from System import Action
+        try:
+            form.BeginInvoke(Action(form.Close))
+        except Exception:
+            try:
+                form.Close()
+            except Exception:
+                pass
+
+    def _run(self) -> None:
+        from System import EventHandler
+        from System.Windows.Forms import (
+            Application, Form, FormBorderStyle, FormWindowState,
+            PaintEventHandler, Timer,
+        )
+
+        form = Form()
+        form.Text = "NoaToDo"              # B.4/A7: nie Nutzerinhalt im Titel
+        form.FormBorderStyle = FormBorderStyle.Sizable
+        # Kein Fensterknopf: die Blende ist nicht bedienbar, sie ist nur Bild.
+        form.ControlBox = False
+        form.WindowState = FormWindowState.Maximized
+        # Sichtbar in der Taskleiste (sonst blinkt der Eintrag waehrend der
+        # Uebergabe weg, was genau nach "minimiert" aussieht) und ueber dem
+        # abzubauenden Fenster.
+        form.ShowInTaskbar = True
+        form.TopMost = True
+        T.style_form(form, self._icon)
+
+        def on_paint(_s, e):
+            g = e.Graphics
+            w, h = form.ClientSize.Width, form.ClientSize.Height
+            T.paint_backdrop(g, 0, 0, w, h, T.TITLE_STRIP)
+            if self._mode == "plain":
+                return
+            try:
+                scale = T.dpi_scale(int(form.Handle.ToInt64()))
+            except Exception:
+                scale = 1.0
+            _paint_ring(g, _ring_geometry(w, h, scale), scale,
+                        1.0 if self._mode == "unlocked" else None)
+
+        form.Paint += PaintEventHandler(on_paint)
+        form.Resize += EventHandler(lambda _s, _a: form.Invalidate())
+
+        def on_shown(_s, _a):
+            try:
+                T.apply_titlebar_theme(int(form.Handle.ToInt64()), True)
+            except Exception:
+                pass
+            self._ready.set()
+
+        form.Shown += EventHandler(on_shown)
+
+        guard = Timer()
+        guard.Interval = self.GUARD_MS
+
+        def on_guard(_s, _a):
+            # Sollte der Aufrufer die Blende je vergessen (Fehler im Aufbau des
+            # naechsten Fensters), verschwindet sie hier von selbst.
+            guard.Stop()
+            self._form = None
+            form.Close()
+
+        guard.Tick += EventHandler(on_guard)
+        guard.Start()
+
+        self._form = form
+        try:
+            Application.Run(form)
+        finally:
+            self._ready.set()   # nie einen Wartenden haengen lassen
+            self._form = None
+            try:
+                form.Dispose()
+            except Exception:
+                pass
+
+
 def run_lock_window(api: Any, boot_state: str, boot_reason: str | None,
                     icon_path: str | None, _test_after_shown=None,
-                    on_ready=None) -> str:
+                    on_ready=None, on_painted=None, on_leaving=None) -> str:
     """Baut das native Sperr-/Fehlerfenster und laeuft, bis es sich schliesst.
 
     Rueckgabe: ``"unlocked"`` (Tresor offen, weiter zur WebView-App),
@@ -54,6 +265,13 @@ def run_lock_window(api: Any, boot_state: str, boot_reason: str | None,
     daran die Taskleisten-Identitaet (AppID + App-Icon), damit auch der
     Taskleisten-Eintrag des Sperrfensters das NoaToDo-Logo traegt und nicht das
     generische Python-Symbol.
+
+    ``on_painted`` und ``on_leaving`` bedienen die nahtlose Fensteruebergabe
+    (N11.25): ``on_painted()`` laeuft, sobald dieses Fenster wirklich gemalt
+    ist (main.py nimmt dort die Blende weg), ``on_leaving(mode)`` laeuft
+    unmittelbar bevor das Fenster fuer einen Weiterweg schliesst (main.py legt
+    dort die Blende auf, bevor der Bildschirm leer werden kann). Beim Beenden
+    wird ``on_leaving`` bewusst NICHT gerufen: dann soll nichts stehenbleiben.
 
     ``_test_after_shown`` ist eine reine Test-Naht (production ruft ohne sie):
     ein Callback, der nach dem Anzeigen einmal mit den Steuerelementen
@@ -72,7 +290,11 @@ def run_lock_window(api: Any, boot_state: str, boot_reason: str | None,
     # Wird gesetzt, sobald ein bewusster Ausgang (unlock/quit/reset) das Fenster
     # schliesst; dann darf der FormClosing-Handler NICHT noch einmal quit_app
     # ausloesen.
-    state = {"closing_intent": None, "busy": False, "reset_open": False}
+    state = {"closing_intent": None, "busy": False, "reset_open": False,
+             # Rate-Limit-Sperre (N11.4): laeuft ein Countdown, nimmt do_unlock()
+             # keinen Versuch an. Seit dem Wegfall des Unlock-Knopfes (N11.24)
+             # haengt dieser Zustand hier statt an Button.Enabled.
+             "blocked": False}
     vault_error = boot_state == "vault_error"
 
     # ------------------------------------------------------------------
@@ -111,7 +333,7 @@ def run_lock_window(api: Any, boot_state: str, boot_reason: str | None,
         subtitle.text = reasons.get(boot_reason or "", "The vault could not be opened.")
     else:
         title.text = "NoaToDo is locked"
-        subtitle.text = "Enter your passphrase to unlock."
+        subtitle.text = "Type your passphrase and press Enter."
 
     pw_pill = T.PillInput((380, 52), password=True, cue="Password", font_size=12.0)
     pw = pw_pill.box
@@ -122,7 +344,10 @@ def run_lock_window(api: Any, boot_state: str, boot_reason: str | None,
     pw_pill.control.Controls.Add(show.control)
 
     caps = T.AppLabel("", 9.0, False, T.DANGER, size=(500, 20))
-    unlock = T.PillButton("Unlock", "primary", (380, 50), font_size=11.0)
+    # Bewusst KEIN "Unlock"-Knopf (N11.24): entsperrt wird mit Enter im Feld.
+    # Der Knopf sass direkt unter dem Ring und schnitt dessen Schein hart ab;
+    # ohne ihn hat das Schloss die Flaeche, die es braucht, und die Eingabe
+    # bleibt der einzige Weg (der Untertitel sagt es).
     status = T.AppLabel("", 10.0, False, T.DANGER, size=(700, 26))
 
     forgot = T.TextLink("Reset vault" if vault_error else "Forgot passphrase?",
@@ -144,18 +369,16 @@ def run_lock_window(api: Any, boot_state: str, boot_reason: str | None,
         h = form.ClientSize.Height
         cx = w // 2
 
-        ring_d = s(184)
         gap = s(26)
         title_h, sub_h = s(38), s(26)
-        input_h, caps_h, btn_h, status_h = s(52), s(20), s(50), s(26)
-        block = (ring_d + gap + title_h + s(4) + sub_h + gap + input_h
-                 + s(6) + caps_h + s(10) + btn_h + s(8) + status_h)
-        y = max(s(24), (h - block) // 2 - s(20))
-
-        geom["ring_d"] = ring_d
-        geom["ring_x"] = cx - ring_d // 2
-        geom["ring_y"] = y
-        y += ring_d + gap
+        input_h, caps_h, status_h = s(52), s(20), s(26)
+        # Ring-Lage kommt aus der gemeinsamen Quelle (dieselbe benutzt die
+        # Uebergabe-Blende, N11.25), damit beim Fensterwechsel nichts springt.
+        geo = _ring_geometry(w, h, scale["v"])
+        geom["ring_d"] = geo["ring_d"]
+        geom["ring_x"] = geo["ring_x"]
+        geom["ring_y"] = geo["ring_y"]
+        y = geo["next_y"]
 
         title.control.Size = Size(min(w - s(40), s(700)), title_h)
         title.control.Location = Point(cx - title.control.Width // 2, y)
@@ -177,10 +400,6 @@ def run_lock_window(api: Any, boot_state: str, boot_reason: str | None,
         caps.control.Size = Size(min(w - s(40), s(500)), caps_h)
         caps.control.Location = Point(cx - caps.control.Width // 2, y)
         y += caps_h + s(10)
-
-        unlock.control.Size = Size(pill_w, btn_h)
-        unlock.control.Location = Point(cx - pill_w // 2, y)
-        y += btn_h + s(8)
 
         status.control.Size = Size(min(w - s(40), s(760)), status_h)
         status.control.Location = Point(cx - status.control.Width // 2, y)
@@ -218,30 +437,7 @@ def run_lock_window(api: Any, boot_state: str, boot_reason: str | None,
         g = e.Graphics
         w, h = form.ClientSize.Width, form.ClientSize.Height
         T.paint_backdrop(g, 0, 0, w, h, T.TITLE_STRIP)
-        d = geom["ring_d"]
-        x, y = geom["ring_x"], geom["ring_y"]
-        t = anim["t"]
-        if t is None:
-            color, wash, line = T.ACCENT, T.ACCENT_WASH, T.ACCENT_LINE
-            open_t, grow, glow = 0.0, 0.0, 46
-        else:
-            # Farbwechsel und Aufklappen laufen im ersten Teil (weich
-            # auslaufend), dazu ein einmaliger, kleiner Pulsschlag des Rings.
-            e1 = 1.0 - (1.0 - min(1.0, t / 0.55)) ** 3
-            color = T.mix(T.SECURE, T.ACCENT, e1)
-            wash = T.mix(T.SECURE_WASH, T.ACCENT_WASH, e1)
-            line = T.mix(T.SECURE_LINE, T.ACCENT_LINE, e1)
-            open_t = e1
-            grow = 0.05 * math.sin(math.pi * min(1.0, t / 0.7))
-            glow = int(46 + 44 * e1)
-        dd = d * (1.0 + grow)
-        xx, yy = x + (d - dd) / 2.0, y + (d - dd) / 2.0
-        cx, cy = xx + dd / 2.0, yy + dd / 2.0
-        # Schein wie box-shadow: 0 18px 48px accent
-        T.draw_glow(g, cx, cy + dd * 0.10, dd * 0.92, color, glow)
-        T.fill_pill(g, xx, yy, dd, dd, dd / 2.0, wash, line,
-                    max(1.0, scale["v"]))
-        T.draw_lock_glyph(g, cx, cy, dd * (84.0 / 184.0), color, open_t)
+        _paint_ring(g, geom, scale["v"], anim["t"])
 
     form.Paint += PaintEventHandler(on_form_paint)
     form.Resize += EventHandler(lambda _s, _a: layout())
@@ -278,12 +474,15 @@ def run_lock_window(api: Any, boot_state: str, boot_reason: str | None,
     countdown = {"remaining": 0}
 
     def tick_countdown():
-        # Wird per Timer aufgerufen: zeigt "try again in Ns" und schaltet den
-        # Unlock-Knopf frei, wenn die Sperrzeit abgelaufen ist.
+        # Wird per Timer aufgerufen: zeigt "try again in Ns" und gibt die
+        # Eingabe wieder frei, wenn die Sperrzeit abgelaufen ist. Ohne
+        # Unlock-Knopf (N11.24) haengt die Sperre an ``state["blocked"]``, das
+        # do_unlock() prueft; das Feld selbst bleibt bedienbar, damit die
+        # Passphrase waehrend der Wartezeit schon getippt werden kann.
         if countdown["remaining"] > 0:
             countdown["remaining"] -= 1
             if countdown["remaining"] <= 0:
-                unlock.set_enabled(True)
+                state["blocked"] = False
                 set_status("", danger=False)
             else:
                 set_status(f"Too many attempts. Try again in {countdown['remaining']}s.")
@@ -324,6 +523,10 @@ def run_lock_window(api: Any, boot_state: str, boot_reason: str | None,
             anim_timer.Stop()
             state["closing_intent"] = "unlocked"
             result["value"] = "unlocked"
+            # Nahtlos weiter (N11.25): erst die Blende mit genau diesem Bild
+            # (offenes Schloss) auflegen, dann schliessen. Sonst steht bis zum
+            # Aufbau des WebView-Fensters gar kein Fenster da.
+            _call(on_leaving, "unlocked")
             form.Close()
     anim_timer.Tick += EventHandler(on_anim_tick)
 
@@ -335,7 +538,7 @@ def run_lock_window(api: Any, boot_state: str, boot_reason: str | None,
         set_status("", danger=False)
         # Alles, was jetzt nur noch ablenkt, verschwindet: der Blick soll auf
         # dem aufgehenden Schloss liegen.
-        for ctl in (pw_pill.control, unlock.control, forgot.control,
+        for ctl in (pw_pill.control, forgot.control,
                     reset_pill.control, reset_btn.control, off.control):
             ctl.Visible = False
         anim["t"] = 0.0
@@ -344,11 +547,11 @@ def run_lock_window(api: Any, boot_state: str, boot_reason: str | None,
         anim_timer.Start()
 
     def do_unlock():
-        if state["busy"] or not unlock.control.Enabled:
+        # Ausgeloest wird nur noch ueber Enter im Passwortfeld (N11.24).
+        if state["busy"] or state["blocked"]:
             return
         passphrase = pw.Text or ""
         state["busy"] = True
-        unlock.set_enabled(False)
         set_status("Unlocking…", danger=False)
 
         def worker():
@@ -361,7 +564,7 @@ def run_lock_window(api: Any, boot_state: str, boot_reason: str | None,
                     # den Ausgang und ruft form.Close()).
                     play_unlock_anim()
                     return
-                unlock.set_enabled(True)
+                state["blocked"] = False
                 pw.Text = ""
                 pw.Focus()
                 code = res.get("error") if isinstance(res, dict) else "internal"
@@ -370,10 +573,10 @@ def run_lock_window(api: Any, boot_state: str, boot_reason: str | None,
                     retry = int(res.get("retry_in") or 0)
                     if retry > 1:
                         countdown["remaining"] = retry
-                        unlock.set_enabled(False)
+                        state["blocked"] = True
                 elif code == "rate_limited":
                     countdown["remaining"] = int(res.get("retry_in") or 0)
-                    unlock.set_enabled(False)
+                    state["blocked"] = True
                     set_status(f"Too many attempts. Try again in {countdown['remaining']}s.")
                 elif code == "memory":
                     set_status("Not enough memory. Close other apps and try again.")
@@ -384,8 +587,6 @@ def run_lock_window(api: Any, boot_state: str, boot_reason: str | None,
             ui(apply)
 
         threading.Thread(target=worker, daemon=True).start()
-
-    unlock.control.Click += EventHandler(lambda _s, _a: do_unlock())
 
     def on_pw_key(_s, args):
         if args.KeyCode == Keys.Enter:
@@ -428,6 +629,7 @@ def run_lock_window(api: Any, boot_state: str, boot_reason: str | None,
             return
         state["closing_intent"] = "onboarding"
         result["value"] = "onboarding"
+        _call(on_leaving, "plain")   # nahtlos ins Onboarding-Fenster (N11.25)
         try:
             api.reset_vault()   # teardown('reset'); request_teardown schliesst
         except Exception:
@@ -451,7 +653,7 @@ def run_lock_window(api: Any, boot_state: str, boot_reason: str | None,
 
     def on_form_keypress(_s, args):
         # B.8-Regel (Spike-Frage 9): jede druckbare Taste landet im Passwortfeld,
-        # auch wenn der Fokus gerade auf einem Knopf steht (Klick auf "Unlock").
+        # auch wenn der Fokus gerade auf einem Knopf oder Link steht.
         ch = args.KeyChar
         if ord(ch) < 32 or pw.Focused or reset_pill.box.Focused:
             return
@@ -484,6 +686,13 @@ def run_lock_window(api: Any, boot_state: str, boot_reason: str | None,
             except Exception:
                 pass
         layout()
+        # Erst malen, dann die Uebergabe-Blende wegnehmen (N11.25): sonst
+        # blitzt zwischen Blende und fertigem Bild ein leeres Fenster auf.
+        try:
+            form.Refresh()
+        except Exception:
+            pass
+        _call(on_painted)
         pw.Focus()
         timer.Start()
         if _test_after_shown is not None:
@@ -493,7 +702,9 @@ def run_lock_window(api: Any, boot_state: str, boot_reason: str | None,
             def fire(_s2, _a2):
                 probe.Stop()
                 try:
-                    _test_after_shown({"pw": pw, "unlock": unlock.control,
+                    # "submit" ist der Ersatz fuer den frueheren Unlock-Knopf
+                    # (N11.24): der Test loest den Entsperr-Versuch direkt aus.
+                    _test_after_shown({"pw": pw, "submit": do_unlock,
                                        "off": off.control, "form": form})
                 except Exception as exc:
                     print("test_after_shown error:", exc, flush=True)
@@ -506,7 +717,7 @@ def run_lock_window(api: Any, boot_state: str, boot_reason: str | None,
             rem = 0
         if rem > 0:
             countdown["remaining"] = rem
-            unlock.set_enabled(False)
+            state["blocked"] = True
             set_status(f"Too many attempts. Try again in {rem}s.")
     form.Shown += EventHandler(on_shown)
 
@@ -516,7 +727,7 @@ def run_lock_window(api: Any, boot_state: str, boot_reason: str | None,
     api._request_teardown = lambda: ui(form.Close)
 
     for ctl in (off.control, title.control, subtitle.control, pw_pill.control,
-                caps.control, unlock.control, status.control, forgot.control,
+                caps.control, status.control, forgot.control,
                 reset_pill.control, reset_btn.control):
         form.Controls.Add(ctl)
 

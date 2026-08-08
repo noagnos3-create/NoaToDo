@@ -856,6 +856,43 @@ dazukommt. Verbindlich sind vier Punkte:
   die Theme-Einstellung liegt in ihm (`config.json` hält nur Nicht-Geheimes, B.11).
   Bewusste Vereinfachung, kein Versehen.
 
+#### Der Fensterwechsel ist nahtlos: nie ein leerer Bildschirm (verbindlich, Etikett N11.25, 2026-08-08)
+
+*(Nutzerwunsch 2026-08-08: „beim Sperren minimiert sich die App". Real war das kein
+Minimieren, sondern eine **Lücke ohne Fenster**: das WebView-Fenster ist zu, das
+native Sperrfenster noch nicht da, und dazwischen läuft der `PROFILE_DIR`-Wisch aus
+Gate G14, der Sekunden dauern kann. In dieser Zeit stand der Desktop auf dem Schirm.
+Umgekehrt genauso beim Entsperren, wo WebView2 seine Anlaufzeit braucht.)*
+
+**Regel:** Zwischen zwei Fenstern der App darf der Bildschirm **nie** leer werden.
+Jeder Wechsel, der weitergeht (Sperren, Entsperren, Reset ins Onboarding), wird von
+einer **Übergabe-Blende** überdeckt: einem Fenster im App-Design, das **vor** dem
+Abbau des alten aufgelegt und erst weggenommen wird, wenn das neue wirklich gemalt
+ist. Verbindlich daran:
+
+1. **Gleiches Bild, keine zweite Optik.** Die Blende zeigt denselben Hintergrund
+   (Grundton + 28px-Raster), dieselbe DWM-Titelleiste, dieselbe Fenstergrösse
+   (maximiert) und **denselben Ring an derselben Stelle** wie der Sperrschirm. Ring-
+   Lage und Ring-Bild kommen deshalb aus **einer** Quelle in `lockwindow.py`, die
+   sich Fenster und Blende teilen; zwei Rechnungen dürfen es nie werden.
+   Drei Zustände: geschlossenes Schloss (Weg **ins** Sperrfenster), offenes Schloss
+   in der Sicher-Farbe (Weg **aus** dem Sperrfenster in die App, schliesst nahtlos an
+   die Entsperr-Animation N11.22 an) und nur Hintergrund (Weg ins Onboarding).
+2. **Auflegen vor dem Abbau, Wegnehmen nach dem ersten Bild.** Das Sperrfenster
+   meldet, wenn es gemalt ist; das WebView-Fenster meldet sein geladenes Dokument.
+   Erst dann verschwindet die Blende. Zusätzlich bekommt das WebView-Fenster den
+   App-Grundton als Hintergrundfarbe, damit es beim Aufbau nicht weiss aufblitzt.
+3. **Beim Beenden gibt es keine Blende.** Quit, Killswitch und Panik-Finish sollen
+   nichts stehen lassen; eine Blende dort wäre eine Lüge über einen noch laufenden
+   Prozess.
+4. **Reine Kosmetik, mit Notbremse.** Die Blende zeigt **keinen Nutzerinhalt**, hat
+   keine Eingabe, keine Bridge und keine Schlüssel, und sie hält die
+   teardown-Sequenz (N11.11, G35) in keinem Schritt auf. Sie läuft in einem eigenen
+   UI-Thread mit eigener Nachrichtenschleife (der Hauptthread blockiert während der
+   Übergabe, ein Fenster ohne Schleife würde nicht mehr zeichnen und von Windows
+   ausgegraut). Ein Zeitwächter schliesst sie in jedem Fall wieder: eine
+   hängengebliebene Blende darf es nicht geben.
+
 ### B.4 UI-Aufbau: die Abschnitte (genau so wie im Konzept und in der Skizze)
 
 Die Oberfläche ist ein CSS-Grid: **Header** über die volle Breite, darunter drei
@@ -1105,6 +1142,19 @@ App soll nicht abrupt „da" sein). Verbindlich daran:
   gespeichert. Feuert in dieser Zeit eine Sperre (Auto-Sperre, `Ctrl+L`, Panik), wird die
   Blende **sofort und ohne Ausblenden** verworfen, damit sie nie über dem Lock-Cover
   hängt.
+- **Der Lichtwisch läuft flüssig oder gar nicht (Ergänzung 2026-08-08, Nutzerwunsch).**
+  Zwei Fehler sind damit ausdrücklich verboten, beide sahen wie ein „stehenbleibender
+  Lichtschein" aus: (a) Der Wisch darf in der **Ruhephase** seines Takts nicht als
+  halbheller Streifen am Rand der Marke stehen bleiben; seine Endlagen liegen
+  vollständig **ausserhalb** der Marke. (b) Bewegt wird **nicht die Maske**
+  (`mask-position` zwingt zu einem Neuzeichnen der ganzen Marke pro Bild und ruckt unter
+  Last sichtbar), sondern es laufen zwei **gegenläufige Transformationen**: die
+  maskierte Aussenschicht wandert, die Innenschicht fährt gleich weit zurück, die Marke
+  steht dadurch still und beide Bewegungen liegen im Compositor. Ebenso hält sich in
+  dieser Zeit alles zurück, was das Bild anfassen würde: kein `render()` aus einem
+  Hintergrund-Ereignis (Funk-Zustand, N11.5) und **kein Start des WLAN-Takts** (er
+  feuert sofort ein `netsh` und ruckt in den Einflug); der Takt beginnt erst nach dem
+  Abblenden.
 - **Kein Nutzerinhalt.** Auf dem Schirm stehen ausschliesslich feste Texte (Fenstertitel
   bleibt „NoaToDo", B.4-Regel A7). Die Marke ist **Inline-SVG**, kein Bild-Asset: keine
   CSP-Ausnahme (B.9 Regel 2), keine externe Datei.
@@ -1155,8 +1205,21 @@ Eingabefeld mit folgenden **Pflicht-Eigenschaften**:
   lassen (gleiche Grösse, gleiche Farben, kein Fenstersprung). Gezeigt wird der
   entworfene Sperrschirm: App-Hintergrund mit Raster, grosser Akzent-Ring mit dem
   Schloss-Zeichen aus Anhang 4, Titelzeile, **Pillen**-Passwortfeld mit Show/Hide,
-  Akzent-Pille „Unlock", Off-Knopf oben rechts (N10.2) und der Reset-Einstieg als
-  Fusszeile (N11.3). Bausteine und Grenzen: B.3, „Das Design gilt auch nativ".
+  Off-Knopf oben rechts (N10.2) und der Reset-Einstieg als Fusszeile (N11.3).
+  Bausteine und Grenzen: B.3, „Das Design gilt auch nativ".
+- **Kein „Unlock"-Knopf, und Luft um den Ring (verbindlich, Etikett N11.24,
+  2026-08-08).** Entsperrt wird **allein mit Enter** im Passwortfeld; der Untertitel
+  sagt es genau so („Type your passphrase and press Enter."). Grund ist nicht
+  Sparsamkeit, sondern eine harte Eigenschaft der nativen Zeichnung: der weiche
+  Schein um den Ring wird von **jedem** Steuerelement darunter abgeschnitten (die
+  Bausteine malen ihren eigenen Hintergrund und wissen vom Schein nichts), und der
+  Knopf sass genau dort. Verbindlich sind daher beide Haelften: der Knopf bleibt weg,
+  **und** zwischen Ring und Titelzeile steht ein deutlich groesserer Abstand als
+  zwischen den uebrigen Zeilen (rund die halbe Ringbreite), damit der Schein
+  ausgelaufen ist, bevor das erste Steuerelement anfaengt. Wer dort etwas einfuegt,
+  bringt die harte Kante zurueck. Die Rate-Limit-Sperre (N11.4) haengt seitdem an
+  einem eigenen Zustand statt am Knopf: waehrend des Countdowns nimmt das Fenster
+  keinen Versuch an, das Feld bleibt aber bedienbar.
 - **Das Schloss geht auf (verbindlich, Etikett N11.22, 2026-08-08).** Eine richtige
   Passphrase schliesst das Fenster **nicht** wortlos: der Ring wechselt von der
   Akzent- in die Sicher-Farbe (`--secure`), der Bügel des Schloss-Zeichens klappt um
@@ -4012,8 +4075,10 @@ liegen durchgestrichen in Anhang 3, Umbau-Etappe 5.)
 | N11.19 | 2026-07-25 | Sidebar-Startbreite von 256 auf **300 px** angehoben (Nutzerwunsch, reine Optik). Gilt nur als Erststart-Default: `_DEFAULT_SETTINGS` in `db.py` schreibt `sidebarWidth = "300"` einmalig in einen frisch angelegten Tresor, ein bereits gespeicherter Nutzerwert bleibt unangetastet. Frontend haelt denselben Wert als `SIDEBAR_WIDTH_DEFAULT` (Rueckfall, wenn kein/ein unplausibler Wert gespeichert ist), CSS als `var(--sidebar-width, 300px)`. Spanne 180 bis 520 unveraendert (G20/V5) | B.6 (+ B.4 Layout-Schema) |
 | N11.20 | 2026-07-25 | **Willkommens-Schirm vor der entsperrten App** (Nutzerwunsch; noch am selben Tag vom urspruenglichen „nur nach dem Anlegen" auf **jeden** Weg hinein erweitert): laeuft nach erfolgreichem `create_vault()` **und bei jedem normalen Start und jedem Entsperren** (beides derselbe Weg: Boot-Zustand `unlocked`), Logo-Marke glimmt gedaempft im Hintergrund (Ring zeichnet sich, Lichtwisch, Akzent-Schein), Gruss „Welcome to NoaToDo" zeichenweise (Unterzeile „Your vault is ready…" nur nach dem Anlegen; bei Start/Entsperren steht der Gruss allein und damit mittig im Logo), ca. 3 s Standzeit (nach dem Anlegen ca. 5 s, damit die Unterzeile lesbar bleibt), dann Abblenden auf die darunter schon fertig gerenderte App; per Klick/Taste ueberspringbar, haelt nichts auf (Auto-Sperr-Timer laeuft weiter), wird beim Sperren/Panik sofort verworfen, kein Nutzerinhalt, Marke als Inline-SVG (keine CSP-Ausnahme) | B.4 (Onboarding-Kapitel) |
 | N11.23 | 2026-08-08 | **Migrationsweg beim Bau von N11.6:** ein vorhandener `dark`-Wert wird NICHT auf ein festes Theme abgebildet; jeder Bestands-Tresor ohne `theme`-Zeile bekommt einmalig `theme = auto`, die Zeilen `dark` und `toolbar` werden geloescht (`db._migrate_settings()`, laeuft beim Oeffnen). Sonst kaeme ein Bestandsnutzer nie in den Automatik-Zustand, ohne ihn von Hand zu waehlen, und die Migration wuerde genau das Feature aushebeln, das sie einfuehrt. Beide Alt-Keys sind aus der G20-Whitelist entfernt (Schreibversuch -> `invalid`) | B.6 (+ G20 Whitelist) |
-| N11.21 | 2026-07-25 | **Das Design gilt auch nativ** (Nutzerwunsch): kein Fenster der App darf nach Windows aussehen. Titelleiste jedes Fensters per DWM in `--surface` (nie weiss), native Fenster mit denselben Dark-Tokens, Hintergrund samt 28px-Raster und Pillenformen statt eckiger Standard-Steuerelemente; eine Umsetzung in `Code/wintheme.py` (auch `main.py` faerbt seine Titelleiste darueber), Zweitinstanz-Meldung (G19) statt MessageBox als Hinweisfenster im App-Design. Das native Sperrfenster (N11.18) startet **maximiert** und zeigt den entworfenen Sperrschirm (Ring + Schloss, Pillen-Passwortfeld, Akzent-Pille, Off-Knopf, Reset-Fusszeile). Ehrliche Grenzen: Windows-Systemdialoge (Datei/Ordner) bleiben Windows, Fensterknoepfe zeichnet Windows, native Fenster nutzen `system-ui` (woff2 laedt GDI+ nicht) und sind immer dunkel (Theme liegt im geschlossenen Tresor) | B.3 (+ B.4 N4-Ergaenzung) |
+| N11.21 | 2026-07-25 | **Das Design gilt auch nativ** (Nutzerwunsch): kein Fenster der App darf nach Windows aussehen. Titelleiste jedes Fensters per DWM in `--surface` (nie weiss), native Fenster mit denselben Dark-Tokens, Hintergrund samt 28px-Raster und Pillenformen statt eckiger Standard-Steuerelemente; eine Umsetzung in `Code/wintheme.py` (auch `main.py` faerbt seine Titelleiste darueber), Zweitinstanz-Meldung (G19) statt MessageBox als Hinweisfenster im App-Design. Das native Sperrfenster (N11.18) startet **maximiert** und zeigt den entworfenen Sperrschirm (Ring + Schloss, Pillen-Passwortfeld, Off-Knopf, Reset-Fusszeile; die Akzent-Pille „Unlock" ist seit N11.24 raus). Ehrliche Grenzen: Windows-Systemdialoge (Datei/Ordner) bleiben Windows, Fensterknoepfe zeichnet Windows, native Fenster nutzen `system-ui` (woff2 laedt GDI+ nicht) und sind immer dunkel (Theme liegt im geschlossenen Tresor) | B.3 (+ B.4 N4-Ergaenzung) |
 | N11.22 | 2026-08-08 | **Entsperren zeigt das aufgehende Schloss statt der Willkommens-Blende** (Nutzerwunsch): eine richtige Passphrase faerbt den Ring im nativen Sperrfenster von der Akzent- in die Sicher-Farbe, klappt den Buegel des Schloss-Zeichens auf und schliesst das Fenster nach rund 0,6 s; die Willkommens-Blende (N11.20) laeuft dafuer nur noch beim echten Programmstart und nach dem Anlegen des Tresors. `get_boot_state()` bekommt dafuer das Feld `resumed` (Start vs. Rueckkehr aus der Sperre) | B.4 (Sperrschirm + Onboarding-Kapitel) + B.2 (`get_boot_state`) |
+| N11.25 | 2026-08-08 | **Nahtloser Fensterwechsel** (Nutzerwunsch „beim Sperren minimiert sich die App"): zwischen zwei Fenstern darf der Bildschirm nie leer werden. Eine Uebergabe-Blende im App-Design (gleicher Hintergrund, gleiche Titelleiste, maximiert, derselbe Ring an derselben Stelle aus **einer** geteilten Quelle) wird VOR dem Abbau des alten Fensters aufgelegt und erst weggenommen, wenn das neue gemalt bzw. geladen ist; drei Zustaende (geschlossenes Schloss ins Sperrfenster, offenes Schloss heraus, nur Hintergrund ins Onboarding). Das WebView-Fenster bekommt zusaetzlich den App-Grundton als Hintergrundfarbe (kein weisses Aufblitzen). Beim Beenden bewusst KEINE Blende. Rein kosmetisch: kein Nutzerinhalt, keine Bridge, haelt die teardown-Sequenz (G35) nicht auf, eigener UI-Thread (der Hauptthread blockiert waehrend des G14-Wischs) und ein Zeitwaechter, der sie in jedem Fall wieder schliesst. Dazu die Flüssigkeits-Pflicht des Willkommens-Lichtwischs (Endlagen ausserhalb der Marke, gegenlaeufige Transformationen statt `mask-position`, kein WLAN-Takt waehrend der Blende) | B.3 (+ B.4 N11.20) |
+| N11.24 | 2026-08-08 | **Kein „Unlock"-Knopf im Sperrfenster, mehr Luft um den Ring** (Nutzerwunsch): der Knopf sass unter dem Ring und schnitt dessen Schein als harte Kante ab (native Steuerelemente malen ihren eigenen Hintergrund). Entsperrt wird nur noch mit Enter im Passwortfeld (Untertitel sagt es), der Abstand Ring zu Titelzeile waechst auf rund die halbe Ringbreite; die Rate-Limit-Sperre haengt jetzt an einem eigenen Zustand statt an `Button.Enabled` | B.4 (Sperrschirm) |
 
 
 
