@@ -604,13 +604,19 @@ def _show_curtain(mode: str, icon: str) -> None:
         _curtain = None
 
 
-def _close_curtain() -> None:
-    """Blende wegnehmen (idempotent, aus jedem Thread)."""
+def _close_curtain(next_hwnd: int = 0) -> None:
+    """Blende wegnehmen (idempotent, aus jedem Thread).
+
+    ``next_hwnd`` ist das Fenster, das danach bedient wird; die Blende gibt ihm
+    den Vordergrund, bevor sie sich schliesst (sonst liegt die Tastatur nach
+    dem Wechsel womoeglich in einer fremden App, und die Passphrase laesst sich
+    nicht eintippen).
+    """
     global _curtain
     curtain, _curtain = _curtain, None
     if curtain is not None:
         try:
-            curtain.close()
+            curtain.close(next_hwnd)
         except Exception:
             pass
 
@@ -761,7 +767,10 @@ def run_webview(api: Api, icon: str) -> None:
     # des Frontends ab. Der Hintergrund des Fensters ist ohnehin der App-Grundton
     # (background_color), es kann also nichts hell aufblitzen.
     def _on_loaded():
-        threading.Timer(0.25, _close_curtain).start()
+        # Mit dem Fensterhandle: die Blende uebergibt dem Hauptfenster den
+        # Vordergrund, bevor sie geht (sonst kann man nach dem Entsperren
+        # nicht sofort tippen).
+        threading.Timer(0.25, lambda: _close_curtain(_get_hwnd(window))).start()
 
     window.events.loaded += _on_loaded
 

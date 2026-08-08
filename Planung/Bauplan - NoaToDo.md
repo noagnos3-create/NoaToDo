@@ -894,6 +894,30 @@ ist. Verbindlich daran:
    Übergabe, ein Fenster ohne Schleife würde nicht mehr zeichnen und von Windows
    ausgegraut). Ein Zeitwächter schliesst sie in jedem Fall wieder: eine
    hängengebliebene Blende darf es nicht geben.
+
+   **Verschärfung 2026-08-08** (Fehlerbild: „man sieht nur noch das Schloss und
+   kann das Passwort gar nicht mehr eingeben"). Die Blende zeigt genau den Ring
+   und sonst nichts; bleibt sie stehen, sieht das aus wie ein Sperrschirm, der
+   keine Eingabe annimmt. Sie darf deshalb **nie** das letzte sichtbare Fenster
+   sein, und das hängt an mehr als dem Zeitwächter:
+   - Das Wegnehmen darf nicht an **einem** Rückruf hängen. Das Sperrfenster
+     ruft ihn ein zweites Mal (das Wegnehmen ist ausdrücklich idempotent), und
+     Layout plus erstes Bild sind so gekapselt, dass ein Fehler dort das
+     Wegnehmen nicht verhindert.
+   - Ein verschluckter Fehler in einem dieser Rückrufe wird im Debug-Modus
+     gemeldet. Stilles Verschlucken war genau der Weg, auf dem eine stehende
+     Blende unsichtbar werden konnte.
+   - Die Fensterknöpfe der Blende **funktionieren**. Sie abzufangen wäre
+     hübscher (ein Klick mitten in der Übergabe reisst kurz ein Loch ins Bild),
+     macht aus einer stehengebliebenen Blende aber eine Falle, die den Nutzer
+     aus seinem eigenen Tresor aussperrt. Kosmetik verliert hier gegen
+     Erreichbarkeit. Das Minimieren bleibt gedreht, ein minimiertes
+     Blendenfenster wäre genau das, was diese Regel verhindern soll.
+   - Die Blende übergibt den **Vordergrund** an das nächste Fenster, bevor sie
+     verschwindet, und macht sich erst unsichtbar und dann zu. Ein sterbendes,
+     noch sichtbares (und obendrein immer obenauf liegendes) Fenster lässt
+     Windows die Aktivierung neu verteilen, und die muss nicht beim Fenster
+     darunter landen.
 5. **Der Wechsel selbst ist unsichtbar** (Nutzerwunsch 2026-08-08: „das sieht immer
    ziemlich hässlich aus, der Wechsel soll nicht zu sehen sein"). Die Blende allein
    genügt dafür nicht: sie schliesst die Lücke, aber der Wechsel blieb an vier

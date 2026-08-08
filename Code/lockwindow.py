@@ -113,13 +113,21 @@ def _paint_ring(g, geom: dict, scale: float, t=None) -> None:
 
 def _call(fn, *args) -> None:
     """Einen optionalen Rueckruf ausfuehren; ein Fehler darf nie das Fenster
-    mitreissen (die Rueckrufe sind reine Kosmetik: Blende auf/zu)."""
+    mitreissen (die Rueckrufe sind reine Kosmetik: Blende auf/zu).
+
+    Der Fehler wird aber im Debug-Modus gemeldet: ein verschluckter Fehler in
+    ``on_painted`` liesse die Blende stehen, und dann sieht man nur noch den
+    Ring und kann nichts eingeben (Fehler vom 2026-08-08). Deshalb ruft das
+    Sperrfenster ``on_painted`` zusaetzlich ein zweites Mal auf.
+    """
     if fn is None:
         return
     try:
         fn(*args)
-    except Exception:
-        pass
+    except Exception as exc:
+        import os
+        if os.environ.get("NOATODO_DEBUG", "").lower() in ("1", "true", "yes"):
+            print("[NoaToDo] Rueckruf fehlgeschlagen: %r" % (exc,), flush=True)
 
 
 class Curtain:
@@ -179,8 +187,12 @@ class Curtain:
         # bevor die Blende steht: genau die Luecke, die sie schliessen soll.
         self._ready.wait(2.0)
 
-    def close(self) -> None:
+    def close(self, next_hwnd: int = 0) -> None:
         """Blende wegnehmen (aus jedem Thread aufrufbar, idempotent).
+
+        ``next_hwnd`` ist das Fenster, das danach bedient werden soll (das
+        frisch gebaute Sperrfenster bzw. das WebView-Fenster). Es bekommt den
+        Vordergrund **von der Blende selbst**, siehe ``_fade_out``.
 
         Kehrt sofort zurueck: das Ausblenden laeuft auf dem eigenen UI-Thread
         der Blende und haelt weder teardown noch Boot-Schleife auf (G35).
@@ -190,7 +202,7 @@ class Curtain:
             return
         from System import Action
         try:
-            form.BeginInvoke(Action(lambda: self._fade_out(form)))
+            form.BeginInvoke(Action(lambda: self._fade_out(form, int(next_hwnd or 0))))
         except Exception:
             self._closing = True
             try:
@@ -198,12 +210,44 @@ class Curtain:
             except Exception:
                 pass
 
-    def _fade_out(self, form) -> None:
-        """Weich ausblenden, dann schliessen (laeuft auf dem Blenden-Thread)."""
+    def _fade_out(self, form, next_hwnd: int = 0) -> None:
+        """Weich ausblenden, dann schliessen (laeuft auf dem Blenden-Thread).
+
+        Zwei Dinge halten dabei die Tastatur beim naechsten Fenster (Fehler vom
+        2026-08-08: "man kann das Passwort gar nicht mehr eingeben"):
+
+        1. Der Vordergrund wird **zuerst** an ``next_hwnd`` uebergeben, und
+           zwar von hier aus, denn nur der Vordergrund-Prozess darf
+           ``SetForegroundWindow`` benutzen.
+        2. Die Blende wird **erst unsichtbar gemacht und dann geschlossen**.
+           Ein sterbendes Fenster, das noch sichtbar (und obendrein TopMost)
+           ist, laesst Windows die Aktivierung neu verteilen, und die landet
+           dann gern bei einer ganz fremden App statt bei dem Fenster darunter:
+           der Sperrschirm stand sichtbar da, aber jeder Tastendruck ging
+           woandershin. Ein bereits verstecktes Fenster hat beim Schliessen
+           nichts mehr zu vergeben.
+        """
+        import ctypes
+
         from System import EventHandler
         from System.Windows.Forms import Timer
 
         self._closing = True
+        if next_hwnd:
+            try:
+                ctypes.windll.user32.SetForegroundWindow(next_hwnd)
+            except Exception:
+                pass
+
+        def vanish():
+            # Reihenfolge zaehlt: TopMost weg, verstecken, dann schliessen.
+            try:
+                form.TopMost = False
+                form.Hide()
+            except Exception:
+                pass
+            form.Close()
+
         try:
             steps = max(1, int(self.FADE_MS / 16))
             left = {"n": steps}
@@ -214,23 +258,23 @@ class Curtain:
                 left["n"] -= 1
                 if left["n"] <= 0:
                     fade.Stop()
-                    form.Close()
+                    vanish()
                     return
                 try:
                     form.Opacity = float(left["n"]) / float(steps)
                 except Exception:
                     fade.Stop()
-                    form.Close()
+                    vanish()
 
             fade.Tick += EventHandler(on_fade)
             fade.Start()
         except Exception:
-            form.Close()
+            vanish()
 
     def _run(self) -> None:
         from System import EventHandler
         from System.Windows.Forms import (
-            Application, Form, FormBorderStyle, FormClosingEventHandler,
+            Application, Form, FormBorderStyle,
             FormWindowState, PaintEventHandler, Timer,
         )
 
@@ -239,9 +283,10 @@ class Curtain:
         form.FormBorderStyle = FormBorderStyle.Sizable
         # Die Titelleiste sieht aus wie die der beiden echten Fenster, samt
         # ihren drei Knoepfen: mit ControlBox=False verschwaende und kaeme das
-        # Knopftrio bei jedem Wechsel sichtbar zurueck. Bedienbar ist die
-        # Blende trotzdem nicht (on_closing/on_resize weiter unten fangen
-        # Schliessen und Minimieren ab), sie ist nur Bild.
+        # Knopftrio bei jedem Wechsel sichtbar zurueck. Die Knoepfe sind nicht
+        # nur Zierde, sie funktionieren auch (siehe die Begruendung bei
+        # FormClosing weiter unten): eine Blende, die sich nicht wegklicken
+        # laesst, waere im Fehlerfall eine Falle.
         form.ControlBox = True
         form.WindowState = FormWindowState.Maximized
         # Sichtbar in der Taskleiste (sonst blinkt der Eintrag waehrend der
@@ -277,14 +322,14 @@ class Curtain:
 
         form.Resize += EventHandler(on_resize)
 
-        def on_closing(_s, args):
-            # Nur der Aufrufer nimmt die Blende weg (close()/Notbremse). Ein
-            # Klick auf das X oder Alt+F4 wuerde sonst mitten in der Uebergabe
-            # ein Loch reissen.
-            if not self._closing:
-                args.Cancel = True
-
-        form.FormClosing += FormClosingEventHandler(on_closing)
+        # Bewusst KEIN Abfangen von FormClosing: die Blende darf sich vom
+        # Nutzer schliessen lassen. Ein Klick auf das X mitten in der (unter
+        # einer halben Sekunde langen) Uebergabe reisst hoechstens ein kurzes
+        # Loch ins Bild; eine Blende, die sich nicht schliessen laesst, wuerde
+        # dagegen im Fehlerfall den Sperrschirm verdecken und den Nutzer aus
+        # seinem eigenen Tresor aussperren (Fehler vom 2026-08-08). Das
+        # Minimieren bleibt gedreht (on_resize), weil ein minimiertes
+        # Blendenfenster genau das waere, was N11.25 verhindern soll.
 
         def on_shown(_s, _a):
             hwnd = 0
@@ -360,8 +405,9 @@ def run_lock_window(api: Any, boot_state: str, boot_reason: str | None,
     nie zwei hintereinander.
 
     ``on_painted`` und ``on_leaving`` bedienen die nahtlose Fensteruebergabe
-    (N11.25): ``on_painted()`` laeuft, sobald dieses Fenster wirklich gemalt
-    ist (main.py nimmt dort die Blende weg), ``on_leaving(mode)`` laeuft
+    (N11.25): ``on_painted(hwnd)`` laeuft, sobald dieses Fenster wirklich
+    gemalt ist (main.py nimmt dort die Blende weg und reicht ihr ``hwnd``, an
+    das sie den Vordergrund uebergibt), ``on_leaving(mode)`` laeuft
     unmittelbar bevor das Fenster fuer einen Weiterweg schliesst (main.py legt
     dort die Blende auf, bevor der Bildschirm leer werden kann). Beim Beenden
     wird ``on_leaving`` bewusst NICHT gerufen: dann soll nichts stehenbleiben.
@@ -564,6 +610,30 @@ def run_lock_window(api: Any, boot_state: str, boot_reason: str | None,
 
     def set_status(text, danger=True):
         status.set(text, T.DANGER if danger else T.TEXT_DIM)
+
+    def claim_focus():
+        """Vordergrund und Eingabefokus wirklich holen (N11.25).
+
+        ``pw.Focus()`` allein genuegt nach einer Fenster-Uebergabe nicht: der
+        Fokus liegt dann zwar auf dem Feld, das Fenster ist aber nicht das
+        Vordergrundfenster, und Tastendruecke gehen woandershin. Beides muss
+        gesetzt werden, und zwar solange die Blende (derselbe Prozess) noch
+        vorne ist, denn nur dann laesst Windows ``SetForegroundWindow`` zu.
+        """
+        import ctypes
+        try:
+            form.Activate()
+        except Exception:
+            pass
+        try:
+            ctypes.windll.user32.SetForegroundWindow(int(form.Handle.ToInt64()))
+        except Exception:
+            pass
+        try:
+            if pw.Visible:
+                pw.Focus()
+        except Exception:
+            pass
 
     def on_show_click(_s, _a):
         visible = pw.UseSystemPasswordChar
@@ -813,15 +883,44 @@ def run_lock_window(api: Any, boot_state: str, boot_reason: str | None,
                 on_ready(hwnd)
             except Exception:
                 pass
-        layout()
-        # Erst malen, dann die Uebergabe-Blende wegnehmen (N11.25): sonst
-        # blitzt zwischen Blende und fertigem Bild ein leeres Fenster auf.
+        # Layout und erstes Bild duerfen die Blende nicht mit sich reissen:
+        # scheitert hier etwas, wird das Fenster zwar unfertig aussehen, aber
+        # die Blende MUSS trotzdem weggehen. Sonst steht nur der Ring da und
+        # es laesst sich nichts eingeben (Fehler vom 2026-08-08).
         try:
+            layout()
+            # Erst malen, dann die Uebergabe-Blende wegnehmen (N11.25): sonst
+            # blitzt zwischen Blende und fertigem Bild ein leeres Fenster auf.
             form.Refresh()
         except Exception:
             pass
-        _call(on_painted)
-        pw.Focus()
+        # Tastatur holen, BEVOR die Blende geht (N11.25): sie ist in diesem
+        # Moment das Vordergrundfenster, und wenn sie verschwindet, gibt
+        # Windows den Vordergrund NICHT von sich aus an das Fenster darunter
+        # weiter. Ohne das steht der Sperrschirm zwar sichtbar da, aber jeder
+        # Tastendruck geht ins Leere und die Passphrase laesst sich nicht
+        # eingeben. Weil unser eigener Prozess gerade den Vordergrund haelt,
+        # darf er ihn auch setzen (Windows erlaubt SetForegroundWindow nur
+        # dann); nach dem Ausblenden wird es einmal wiederholt, falls der
+        # Wechsel dazwischen doch woanders landete.
+        claim_focus()
+        # Das eigene Fensterhandle mitgeben: die Blende uebergibt den
+        # Vordergrund an genau dieses Fenster, bevor sie sich schliesst.
+        _call(on_painted, hwnd)
+        again = Timer()
+        again.Interval = 320          # nach dem Ausblenden der Blende
+
+        def on_again(_s2, _a2):
+            again.Stop()
+            # Beides bewusst ein zweites Mal: Wegnehmen der Blende ist
+            # idempotent (main.py merkt sich genau eine), und ein einzelner
+            # verschluckter Fehler im ersten Anlauf darf nicht dazu fuehren,
+            # dass die Blende stehenbleibt und die Eingabe verdeckt.
+            _call(on_painted, hwnd)
+            claim_focus()
+
+        again.Tick += EventHandler(on_again)
+        again.Start()
         timer.Start()
         if _test_after_shown is not None:
             probe = Timer()
