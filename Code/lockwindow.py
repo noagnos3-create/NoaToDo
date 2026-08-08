@@ -405,11 +405,13 @@ def run_lock_window(api: Any, boot_state: str, boot_reason: str | None,
         status.control.Location = Point(cx - status.control.Width // 2, y)
         y += status_h
 
-        # Fusszeile: Reset-Weg. Mit Abstand unter dem Block, aber nie unter den
-        # Fensterrand (kleine Fenster: direkt anschliessen).
+        # Fusszeile: Reset-Weg. Sie sitzt wirklich unten am Fensterrand
+        # (Nutzerwunsch 2026-08-08) und nicht dicht unter der Statuszeile: der
+        # Reset ist der Nebenausgang und soll der Eingabe nicht ins Bild
+        # ruecken. Nur bei niedrigen Fenstern rutscht sie so weit hoch wie
+        # noetig, aber nie in den Block hinein.
         foot_h = s(44)
-        foot_y = min(h - foot_h - s(30), y + s(52))
-        foot_y = max(foot_y, y + s(16))
+        foot_y = max(y + s(24), h - foot_h - s(48))
 
         forgot.control.Size = Size(s(300), s(26))
         forgot.control.Location = Point(cx - s(150), foot_y + (foot_h - s(26)) // 2)
