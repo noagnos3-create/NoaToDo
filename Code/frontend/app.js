@@ -847,7 +847,9 @@ function syncSettingsUi() {
 // interaktive Blende, die die Aufgaben verdeckt, bis das Fenster verschwindet
 // (und der Sonderfall N11.11.5: Auto-Sperre bei offenem Dialog, wo das WebView
 // noch kurz lebt). Kein Passwortfeld, kein Off-Knopf, keine Reset-Wege mehr,
-// die sind alle im nativen Lock-Fenster.
+// die sind alle im nativen Lock-Fenster. Auch kein Text mehr (2026-08-08,
+// Nutzerwunsch): der Sperrschirm zeigt nur noch den Ring, hier wie nativ, sonst
+// blitzte beim Uebergang eine Zeile auf, die drueben nicht mehr steht.
 function renderLock() {
   if (!state.locked) return '';
   const I = Icons;
@@ -855,7 +857,6 @@ function renderLock() {
     <div class="lock-screen">
       <div class="lock-card">
         <div class="lock-ring">${I.Lock}</div>
-        <h2>NoaToDo is locked</h2>
       </div>
     </div>`;
 }

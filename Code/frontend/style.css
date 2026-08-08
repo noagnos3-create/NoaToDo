@@ -1060,12 +1060,31 @@ input { font: inherit; }
     linear-gradient(var(--bg-grid) 1px, transparent 1px) 0 0/100% 28px,
     linear-gradient(90deg, var(--bg-grid) 1px, transparent 1px) 0 0/28px 100%,
     var(--bg);
-  display: grid; place-items: center; animation: fade .2s;
+  animation: fade .2s;
 }
-.lock-card { text-align: center; display: flex; flex-direction: column; align-items: center; gap: 26px; }
+/* Titelleisten-Streifen wie in .app (und wie ihn die nativen Fenster malen):
+   das Cover liegt ueber der ganzen Seite, ohne ihn faellt der Streifen genau
+   im Moment des Sperrens weg. */
+.lock-screen::before {
+  content: ''; position: absolute; left: 0; right: 0; top: 0;
+  height: 6px; background: var(--surface);
+}
+/* Nahtloser Fensterwechsel (N11.25): Der Ring steht hier an GENAU derselben
+   Stelle wie im nativen Sperrfenster und in der Uebergabe-Blende, sonst
+   springt er beim Wechsel. Die Zahl kommt aus lockwindow._ring_geometry():
+   Blockhoehe 388 = Ring 184 + Ringabstand 96 + Eingabe 46 + 6 + Caps 20 + 10 +
+   Status 26, oben verankert bei (100vh - 388)/2 - 20, also 50vh - 214px, und
+   nie hoeher als 24px vom Rand. Wer eines der beiden Masse aendert, aendert
+   das andere mit (lockwindow.py und diese Regel sind ein Paar). */
+.lock-card {
+  position: absolute; left: 0; right: 0;
+  top: max(24px, calc(50vh - 214px));
+  text-align: center; display: flex; flex-direction: column; align-items: center;
+}
 .lock-ring { width: 184px; height: 184px; border-radius: 50%; display: grid; place-items: center; background: var(--accent-wash); border: 1px solid var(--accent-line); color: var(--accent); box-shadow: 0 18px 48px color-mix(in oklab, var(--accent) 22%, transparent); }
 .lock-ring svg { width: 84px; height: 84px; }
-.lock-card h2 { margin: 0; font-size: 22px; font-weight: 700; }
+/* Der Sperrschirm traegt keine Textzeile mehr (2026-08-08), die frueher hier
+   stehende Regel .lock-card h2 ist damit weg. */
 
 /* Passwort-Eingabepille: gleiche Optik wie .dock-input, aber im Fluss statt
    absolut positioniert. Sie ist von Anfang an die Eingabe (kein Aufklappen);

@@ -81,6 +81,28 @@ GRID_STEP = 28
 #: Hoehe des Farbstreifens unter der Titelleiste (style.css: .app border-top).
 TITLE_STRIP = 6
 
+# Bildschirmskalierung fuer die gemalten Design-Masse (N11.25).
+# GRID_STEP und TITLE_STRIP sind Design-Pixel wie in style.css. WinForms malt
+# aber in physischen Pixeln: auf einem 150%-Bildschirm waere das native Raster
+# nur 28 physische Punkte weit, das WebView-Raster dagegen 42. Beim Fenster-
+# wechsel aenderte sich dadurch sichtbar die Rasterdichte. Der Wert wird von
+# dem Fenster gesetzt, das gerade malt (Sperrfenster/Blende, aus dpi_scale).
+_ui_scale = 1.0
+
+
+def set_ui_scale(scale: float) -> None:
+    """Skalierung fuer gemalte Design-Masse setzen (Raster, Titelstreifen)."""
+    global _ui_scale
+    try:
+        _ui_scale = max(1.0, float(scale))
+    except Exception:
+        _ui_scale = 1.0
+
+
+def grid_step() -> int:
+    """Rasterabstand in physischen Pixeln (Design-28px mal Bildschirmskalierung)."""
+    return max(6, int(round(GRID_STEP * _ui_scale)))
+
 
 def rgb(hex_color: str) -> tuple[int, int, int]:
     h = hex_color.lstrip("#")
@@ -159,9 +181,10 @@ def font(size: float, bold: bool = False, display: bool = False) -> Font:
 # ---------------------------------------------------------------------------
 # Titelleiste (DWM) und Fenstergrundlagen
 # ---------------------------------------------------------------------------
-_DWMWA_USE_IMMERSIVE_DARK_MODE = 20  # Windows 10 1903+
-_DWMWA_CAPTION_COLOR           = 35  # Windows 11 22000+
-_DWMWA_TEXT_COLOR              = 36  # Windows 11 22000+
+_DWMWA_USE_IMMERSIVE_DARK_MODE   = 20  # Windows 10 1903+
+_DWMWA_TRANSITIONS_FORCEDISABLED = 3   # Windows Vista+
+_DWMWA_CAPTION_COLOR             = 35  # Windows 11 22000+
+_DWMWA_TEXT_COLOR                = 36  # Windows 11 22000+
 
 _TB_DARK       = SURFACE     # Titelleiste = --surface (dark), wie das WebView-Fenster
 _TB_LIGHT      = "#faf6ee"   # --surface (light)
@@ -196,6 +219,29 @@ def apply_titlebar_theme(hwnd: int, dark: bool = True) -> None:
             hwnd, 0, 0, 0, 0, 0,
             0x0001 | 0x0002 | 0x0004 | 0x0200 | 0x0020,  # NOSIZE|NOMOVE|NOZORDER|NOOWNERZORDER|FRAMECHANGED
         )
+    except Exception:
+        pass
+
+
+def disable_window_transitions(hwnd: int) -> None:
+    """Windows' eigene Fenster-Animationen fuer dieses Fenster abschalten (N11.25).
+
+    DWM blendet ein Fenster beim Oeffnen ein und beim Schliessen aus (kurzes
+    Auf-/Zuziehen). Genau das machte den Fensterwechsel beim Sperren und
+    Entsperren sichtbar: das abzubauende Fenster zog sich vor der Blende
+    zusammen, das neue schob sich danach auf. Mit
+    ``DWMWA_TRANSITIONS_FORCEDISABLED`` erscheint und verschwindet ein Fenster
+    schlagartig, sodass unter der Blende nichts mehr zu sehen ist. Betrifft nur
+    die eigenen Fenster (WebView, Sperrfenster, Blende), nie systemweite
+    Einstellungen. Best effort.
+    """
+    if not hwnd:
+        return
+    try:
+        on = ctypes.c_int(1)
+        ctypes.windll.dwmapi.DwmSetWindowAttribute(
+            hwnd, _DWMWA_TRANSITIONS_FORCEDISABLED,
+            ctypes.byref(on), ctypes.sizeof(on))
     except Exception:
         pass
 
@@ -240,10 +286,15 @@ def style_form(form, icon_path: str | None = None) -> None:
             pass
 
     def on_handle(_s, _a):
+        # Beides NOCH BEVOR das Fenster sichtbar wird (HandleCreated laeuft vor
+        # dem ersten Anzeigen): sonst blitzt eine Windows-helle Titelleiste auf
+        # und Windows spielt seine Oeffnen-Animation (N11.25).
         try:
-            apply_titlebar_theme(int(form.Handle.ToInt64()), True)
+            hwnd = int(form.Handle.ToInt64())
         except Exception:
-            pass
+            return
+        apply_titlebar_theme(hwnd, True)
+        disable_window_transitions(hwnd)
 
     form.HandleCreated += EventHandler(on_handle)
 
@@ -282,24 +333,25 @@ def paint_backdrop(g, off_x: int, off_y: int, w: int, h: int,
         g.FillRectangle(brush, 0, 0, w, h)
     finally:
         brush.Dispose()
+    step = grid_step()
     pen = Pen(col(BG_GRID), 1.0)
     try:
-        x = -(off_x % GRID_STEP)
+        x = -(off_x % step)
         while x < w:
             if x >= 0:
                 g.DrawLine(pen, x, 0, x, h)
-            x += GRID_STEP
-        y = -(off_y % GRID_STEP)
+            x += step
+        y = -(off_y % step)
         while y < h:
             if y >= 0:
                 g.DrawLine(pen, 0, y, w, y)
-            y += GRID_STEP
+            y += step
     finally:
         pen.Dispose()
     if strip > 0 and off_y == 0:
         sb = SolidBrush(col(SURFACE))
         try:
-            g.FillRectangle(sb, 0, 0, w, strip)
+            g.FillRectangle(sb, 0, 0, w, int(round(strip * _ui_scale)))
         finally:
             sb.Dispose()
 

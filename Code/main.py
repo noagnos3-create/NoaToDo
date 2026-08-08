@@ -590,7 +590,14 @@ def _show_curtain(mode: str, icon: str) -> None:
     _close_curtain()
     try:
         import lockwindow
-        curtain = lockwindow.Curtain(mode, icon)
+        curtain = lockwindow.Curtain(
+            mode, icon,
+            # Taskleisten-Identitaet wie bei den echten Fenstern: sonst
+            # erscheint bei jedem Wechsel kurz ein zweiter Eintrag mit dem
+            # generischen Python-Symbol statt des NoaToDo-Logos.
+            on_ready=lambda hwnd: _apply_taskbar_identity(
+                hwnd, _APP_USER_MODEL_ID, icon),
+        )
         curtain.show()
         _curtain = curtain
     except Exception:
@@ -769,6 +776,15 @@ def run_webview(api: Api, icon: str) -> None:
             _apply_taskbar_identity(hwnd, _APP_USER_MODEL_ID, icon_path)
             _apply_titlebar_theme(hwnd, _current_dark(api))
             if hwnd:
+                # N11.25: Windows' Oeffnen-/Schliessen-Animation fuer dieses
+                # Fenster abschalten. Sonst zieht sich das Hauptfenster beim
+                # Sperren sichtbar unter der Blende zusammen und schiebt sich
+                # beim Entsperren darunter wieder auf.
+                try:
+                    import wintheme
+                    wintheme.disable_window_transitions(hwnd)
+                except Exception:
+                    pass
                 ctypes.windll.user32.SetWindowPos(
                     hwnd, 0, 0, 0, 0, 0,
                     _SWP_NOSIZE | _SWP_NOMOVE | _SWP_NOZORDER | _SWP_NOOWNERZORDER | _SWP_FRAMECHANGED,
@@ -829,6 +845,16 @@ def run_webview(api: Api, icon: str) -> None:
         api._on_frame_changed = _on_frame_changed
 
     os.makedirs(PROFILE_DIR, exist_ok=True)
+    # N11.25: WebView2 (Chromium) haelt ein Fenster, das vollstaendig von einem
+    # anderen verdeckt ist, fuer unsichtbar und hoert auf, Bilder zu liefern.
+    # Genau das ist beim Entsperren der Fall: die Uebergabe-Blende liegt
+    # darueber, waehrend die App laedt. Ohne diesen Schalter stand nach dem
+    # Wegnehmen der Blende fuer einen Moment eine leere Flaeche da, statt der
+    # fertigen App. Reiner Darstellungsschalter, keine Sicherheitswirkung.
+    _extra_args = os.environ.get("WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS", "")
+    if "CalculateNativeWindowOcclusion" not in _extra_args:
+        os.environ["WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS"] = (
+            _extra_args + " --disable-features=CalculateNativeWindowOcclusion").strip()
     webview.settings["OPEN_EXTERNAL_LINKS_IN_BROWSER"] = False
     webview.start(
         on_start,
@@ -913,6 +939,10 @@ def main() -> None:
                     # den Weiterweg (Entsperren/Reset) schliesst.
                     on_painted=_close_curtain,
                     on_leaving=lambda mode: _show_curtain(mode, icon),
+                    # Nur die Rueckkehr in eine laufende Sitzung laesst das
+                    # Schloss aufgehen (N11.22); beim normalen Start uebernimmt
+                    # die Willkommens-Blende mit dem Logo (N11.20).
+                    resumed=bool(api._resumed),
                 )
                 if res == "quit":
                     _close_curtain()

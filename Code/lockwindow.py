@@ -47,14 +47,19 @@ import wintheme as T
 # Das Sperrfenster und die Uebergabe-Blende (``Curtain``, N11.25) zeichnen
 # denselben Ring an derselben Stelle. Beide holen sich Lage und Bild hier,
 # damit beim Fensterwechsel nichts springt.
-def _ring_geometry(w: int, h: int, scale: float) -> dict:
+def _ring_geometry(w: int, h: int, scale: float, extra: int = 0) -> dict:
     """Lage des Sperr-Rings in einem Fenster der Groesse ``w`` x ``h``.
 
-    ``next_y`` ist die Oberkante der Titelzeile darunter (das Sperrfenster
+    ``next_y`` ist die Oberkante der ersten Zeile darunter (das Sperrfenster
     setzt sein Layout dort fort). Die Blockhoehe zaehlt bewusst die gesamte
-    Sperr-Saeule mit (Titel, Untertitel, Eingabe, Statuszeile), damit der Ring
-    in der Blende genau dort steht wie im fertigen Fenster, obwohl dort noch
+    Sperr-Saeule mit (Eingabe, Caps-Warnung, Statuszeile), damit der Ring in
+    der Blende genau dort steht wie im fertigen Fenster, obwohl dort noch
     keine Steuerelemente sichtbar sind.
+
+    ``extra`` sind zusaetzliche Zeilen, die nur ein bestimmter Zustand hat:
+    der Fehlerfall (Tresor nicht zu oeffnen) zeigt Titel und Untertitel, der
+    normale Sperrschirm zeigt seit 2026-08-08 gar keinen Text mehr. Die Blende
+    (``Curtain``) ruft ohne ``extra``, also mit dem Normalfall.
     """
     def s(v: float) -> int:
         return int(round(v * scale))
@@ -68,8 +73,7 @@ def _ring_geometry(w: int, h: int, scale: float) -> dict:
     # unten); erst ab diesem Abstand ist er ausgelaufen, bevor das erste
     # Steuerelement anfaengt, und es bleibt keine sichtbare Kante.
     ring_gap = s(96)
-    gap = s(26)
-    block = (ring_d + ring_gap + s(38) + s(4) + s(26) + gap + s(52)
+    block = (ring_d + ring_gap + extra + s(46)
              + s(6) + s(20) + s(10) + s(26))
     y = max(s(24), (h - block) // 2 - s(20))
     return {"ring_d": ring_d, "ring_x": w // 2 - ring_d // 2, "ring_y": y,
@@ -147,11 +151,18 @@ class Curtain:
 
     #: Notbremse: laenger darf eine Blende nie stehen (Sekunden).
     GUARD_MS = 15000
+    #: Ausblendzeit beim Wegnehmen. Das naechste Fenster steht zu diesem
+    #: Zeitpunkt fertig gemalt darunter; die Blende loest sich darueber auf,
+    #: statt schlagartig zu verschwinden (harter Schnitt = sichtbarer Wechsel).
+    FADE_MS = 160
 
-    def __init__(self, mode: str = "lock", icon_path: str | None = None):
+    def __init__(self, mode: str = "lock", icon_path: str | None = None,
+                 on_ready=None):
         self._mode = mode
         self._icon = icon_path
+        self._on_ready = on_ready
         self._form = None
+        self._closing = False
         self._ready = threading.Event()
 
     def show(self) -> None:
@@ -169,31 +180,69 @@ class Curtain:
         self._ready.wait(2.0)
 
     def close(self) -> None:
-        """Blende wegnehmen (aus jedem Thread aufrufbar, idempotent)."""
+        """Blende wegnehmen (aus jedem Thread aufrufbar, idempotent).
+
+        Kehrt sofort zurueck: das Ausblenden laeuft auf dem eigenen UI-Thread
+        der Blende und haelt weder teardown noch Boot-Schleife auf (G35).
+        """
         form, self._form = self._form, None
         if form is None:
             return
         from System import Action
         try:
-            form.BeginInvoke(Action(form.Close))
+            form.BeginInvoke(Action(lambda: self._fade_out(form)))
         except Exception:
+            self._closing = True
             try:
                 form.Close()
             except Exception:
                 pass
 
+    def _fade_out(self, form) -> None:
+        """Weich ausblenden, dann schliessen (laeuft auf dem Blenden-Thread)."""
+        from System import EventHandler
+        from System.Windows.Forms import Timer
+
+        self._closing = True
+        try:
+            steps = max(1, int(self.FADE_MS / 16))
+            left = {"n": steps}
+            fade = Timer()
+            fade.Interval = 16
+
+            def on_fade(_s, _a):
+                left["n"] -= 1
+                if left["n"] <= 0:
+                    fade.Stop()
+                    form.Close()
+                    return
+                try:
+                    form.Opacity = float(left["n"]) / float(steps)
+                except Exception:
+                    fade.Stop()
+                    form.Close()
+
+            fade.Tick += EventHandler(on_fade)
+            fade.Start()
+        except Exception:
+            form.Close()
+
     def _run(self) -> None:
         from System import EventHandler
         from System.Windows.Forms import (
-            Application, Form, FormBorderStyle, FormWindowState,
-            PaintEventHandler, Timer,
+            Application, Form, FormBorderStyle, FormClosingEventHandler,
+            FormWindowState, PaintEventHandler, Timer,
         )
 
         form = Form()
         form.Text = "NoaToDo"              # B.4/A7: nie Nutzerinhalt im Titel
         form.FormBorderStyle = FormBorderStyle.Sizable
-        # Kein Fensterknopf: die Blende ist nicht bedienbar, sie ist nur Bild.
-        form.ControlBox = False
+        # Die Titelleiste sieht aus wie die der beiden echten Fenster, samt
+        # ihren drei Knoepfen: mit ControlBox=False verschwaende und kaeme das
+        # Knopftrio bei jedem Wechsel sichtbar zurueck. Bedienbar ist die
+        # Blende trotzdem nicht (on_closing/on_resize weiter unten fangen
+        # Schliessen und Minimieren ab), sie ist nur Bild.
+        form.ControlBox = True
         form.WindowState = FormWindowState.Maximized
         # Sichtbar in der Taskleiste (sonst blinkt der Eintrag waehrend der
         # Uebergabe weg, was genau nach "minimiert" aussieht) und ueber dem
@@ -205,22 +254,56 @@ class Curtain:
         def on_paint(_s, e):
             g = e.Graphics
             w, h = form.ClientSize.Width, form.ClientSize.Height
-            T.paint_backdrop(g, 0, 0, w, h, T.TITLE_STRIP)
-            if self._mode == "plain":
-                return
             try:
                 scale = T.dpi_scale(int(form.Handle.ToInt64()))
             except Exception:
                 scale = 1.0
+            # Rastermass wie im Sperrfenster (sonst aendert sich auf einem
+            # skalierten Bildschirm sichtbar die Rasterdichte, N11.25).
+            T.set_ui_scale(scale)
+            T.paint_backdrop(g, 0, 0, w, h, T.TITLE_STRIP)
+            if self._mode == "plain":
+                return
             _paint_ring(g, _ring_geometry(w, h, scale), scale,
                         1.0 if self._mode == "unlocked" else None)
 
         form.Paint += PaintEventHandler(on_paint)
-        form.Resize += EventHandler(lambda _s, _a: form.Invalidate())
+
+        def on_resize(_s, _a):
+            # Minimieren waere ein Loch im Bild: sofort zurueck auf maximiert.
+            if form.WindowState == FormWindowState.Minimized:
+                form.WindowState = FormWindowState.Maximized
+            form.Invalidate()
+
+        form.Resize += EventHandler(on_resize)
+
+        def on_closing(_s, args):
+            # Nur der Aufrufer nimmt die Blende weg (close()/Notbremse). Ein
+            # Klick auf das X oder Alt+F4 wuerde sonst mitten in der Uebergabe
+            # ein Loch reissen.
+            if not self._closing:
+                args.Cancel = True
+
+        form.FormClosing += FormClosingEventHandler(on_closing)
 
         def on_shown(_s, _a):
+            hwnd = 0
             try:
-                T.apply_titlebar_theme(int(form.Handle.ToInt64()), True)
+                hwnd = int(form.Handle.ToInt64())
+            except Exception:
+                pass
+            if hwnd:
+                T.apply_titlebar_theme(hwnd, True)
+                T.disable_window_transitions(hwnd)
+                # Taskleisten-Identitaet wie bei den echten Fenstern (AppID +
+                # Logo): ohne sie taucht waehrend jeder Uebergabe kurz ein
+                # zweiter Eintrag mit dem generischen Python-Symbol auf.
+                _call(self._on_ready, hwnd)
+            # Erst wirklich malen, dann den Aufrufer weiterlaufen lassen: er
+            # schliesst unmittelbar danach sein Fenster, und ein noch leeres
+            # Blendenfenster waere genau die Luecke, die sie schliessen soll.
+            try:
+                form.Refresh()
             except Exception:
                 pass
             self._ready.set()
@@ -235,6 +318,7 @@ class Curtain:
             # naechsten Fensters), verschwindet sie hier von selbst.
             guard.Stop()
             self._form = None
+            self._closing = True
             form.Close()
 
         guard.Tick += EventHandler(on_guard)
@@ -254,7 +338,8 @@ class Curtain:
 
 def run_lock_window(api: Any, boot_state: str, boot_reason: str | None,
                     icon_path: str | None, _test_after_shown=None,
-                    on_ready=None, on_painted=None, on_leaving=None) -> str:
+                    on_ready=None, on_painted=None, on_leaving=None,
+                    resumed: bool = False) -> str:
     """Baut das native Sperr-/Fehlerfenster und laeuft, bis es sich schliesst.
 
     Rueckgabe: ``"unlocked"`` (Tresor offen, weiter zur WebView-App),
@@ -265,6 +350,14 @@ def run_lock_window(api: Any, boot_state: str, boot_reason: str | None,
     daran die Taskleisten-Identitaet (AppID + App-Icon), damit auch der
     Taskleisten-Eintrag des Sperrfensters das NoaToDo-Logo traegt und nicht das
     generische Python-Symbol.
+
+    ``resumed`` sagt, ob dieses Fenster eine **laufende, zwischendurch
+    gesperrte** Sitzung bewacht (``True``) oder einen normalen Programmstart
+    (``False``; main.py fuehrt den Merker als ``api._resumed``, N11.22). Davon
+    haengt die Rueckmeldung beim Entsperren ab: nur bei ``True`` geht das
+    Schloss auf (N11.22), beim normalen Start uebernimmt die Willkommens-Blende
+    der App mit dem Logo (N11.20). Es gibt also immer genau **eine** Feier,
+    nie zwei hintereinander.
 
     ``on_painted`` und ``on_leaving`` bedienen die nahtlose Fensteruebergabe
     (N11.25): ``on_painted()`` laeuft, sobald dieses Fenster wirklich gemalt
@@ -332,14 +425,20 @@ def run_lock_window(api: Any, boot_state: str, boot_reason: str | None,
         }
         subtitle.text = reasons.get(boot_reason or "", "The vault could not be opened.")
     else:
-        title.text = "NoaToDo is locked"
-        subtitle.text = "Type your passphrase and press Enter."
+        # Der normale Sperrschirm traegt seit 2026-08-08 (Nutzerwunsch) gar
+        # keinen Text mehr: nur Ring und Eingabepille. Das Schloss sagt, was
+        # los ist, und der Platzhalter "Password" sagt, was zu tun ist; die
+        # frueheren Zeilen "NoaToDo is locked" / "Type your passphrase and
+        # press Enter." erklaerten beides ein zweites Mal. Die beiden Labels
+        # bleiben angelegt, aber unsichtbar: der Fehlerfall benutzt sie.
+        title.control.Visible = False
+        subtitle.control.Visible = False
 
-    pw_pill = T.PillInput((380, 52), password=True, cue="Password", font_size=12.0)
+    pw_pill = T.PillInput((320, 46), password=True, cue="Password", font_size=11.0)
     pw = pw_pill.box
 
     # Show/Hide sitzt IN der Pille (Fuellfarbe der Pille als Hintergrund).
-    show = T.PillButton("Show", "ghost", (62, 32), font_size=8.5, bold=False,
+    show = T.PillButton("Show", "ghost", (54, 28), font_size=8.0, bold=False,
                         backdrop=T.SURFACE)
     pw_pill.control.Controls.Add(show.control)
 
@@ -347,7 +446,8 @@ def run_lock_window(api: Any, boot_state: str, boot_reason: str | None,
     # Bewusst KEIN "Unlock"-Knopf (N11.24): entsperrt wird mit Enter im Feld.
     # Der Knopf sass direkt unter dem Ring und schnitt dessen Schein hart ab;
     # ohne ihn hat das Schloss die Flaeche, die es braucht, und die Eingabe
-    # bleibt der einzige Weg (der Untertitel sagt es).
+    # bleibt der einzige Weg (Enter ist die gelernte Geste in einem
+    # Passwortfeld; die Zeile, die das frueher aussprach, ist weg).
     status = T.AppLabel("", 10.0, False, T.DANGER, size=(700, 26))
 
     forgot = T.TextLink("Reset vault" if vault_error else "Forgot passphrase?",
@@ -365,36 +465,45 @@ def run_lock_window(api: Any, boot_state: str, boot_reason: str | None,
             scale["v"] = T.dpi_scale(int(form.Handle.ToInt64()))
         except Exception:
             scale["v"] = 1.0
+        # Rastermass fuer alle gemalten Flaechen dieses Fensters (Formular und
+        # Steuerelemente holen es sich aus wintheme), damit das Raster auf
+        # skalierten Bildschirmen dieselbe Weite hat wie im WebView.
+        T.set_ui_scale(scale["v"])
         w = form.ClientSize.Width
         h = form.ClientSize.Height
         cx = w // 2
 
         gap = s(26)
         title_h, sub_h = s(38), s(26)
-        input_h, caps_h, status_h = s(52), s(20), s(26)
+        input_h, caps_h, status_h = s(46), s(20), s(26)
         # Ring-Lage kommt aus der gemeinsamen Quelle (dieselbe benutzt die
         # Uebergabe-Blende, N11.25), damit beim Fensterwechsel nichts springt.
-        geo = _ring_geometry(w, h, scale["v"])
+        # Nur der Fehlerfall meldet die zwei Textzeilen als Zusatzhoehe an; der
+        # normale Sperrschirm hat sie nicht mehr (siehe oben) und rechnet
+        # deshalb genau wie die Blende.
+        extra = (title_h + s(4) + sub_h + gap) if vault_error else 0
+        geo = _ring_geometry(w, h, scale["v"], extra)
         geom["ring_d"] = geo["ring_d"]
         geom["ring_x"] = geo["ring_x"]
         geom["ring_y"] = geo["ring_y"]
         y = geo["next_y"]
 
-        title.control.Size = Size(min(w - s(40), s(700)), title_h)
-        title.control.Location = Point(cx - title.control.Width // 2, y)
-        y += title_h + s(4)
+        if vault_error:
+            title.control.Size = Size(min(w - s(40), s(700)), title_h)
+            title.control.Location = Point(cx - title.control.Width // 2, y)
+            y += title_h + s(4)
 
-        subtitle.control.Size = Size(min(w - s(40), s(760)), sub_h)
-        subtitle.control.Location = Point(cx - subtitle.control.Width // 2, y)
-        y += sub_h + gap
+            subtitle.control.Size = Size(min(w - s(40), s(760)), sub_h)
+            subtitle.control.Location = Point(cx - subtitle.control.Width // 2, y)
+            y += sub_h + gap
 
-        pill_w = min(w - s(60), s(380))
+        pill_w = min(w - s(60), s(320))
         pw_pill.control.Size = Size(pill_w, input_h)
         pw_pill.control.Location = Point(cx - pill_w // 2, y)
-        show.control.Size = Size(s(62), s(32))
-        show.control.Location = Point(pill_w - s(62) - s(10),
-                                      (input_h - s(32)) // 2)
-        pw_pill.layout_box(right_reserve=s(62) + s(18), scale=scale["v"])
+        show.control.Size = Size(s(54), s(28))
+        show.control.Location = Point(pill_w - s(54) - s(9),
+                                      (input_h - s(28)) // 2)
+        pw_pill.layout_box(right_reserve=s(54) + s(16), scale=scale["v"])
         y += input_h + s(6)
 
         caps.control.Size = Size(min(w - s(40), s(500)), caps_h)
@@ -518,22 +627,28 @@ def run_lock_window(api: Any, boot_state: str, boot_reason: str | None,
         except Exception:
             form.Invalidate()
 
+    def leave_unlocked(mode):
+        # Nahtlos weiter (N11.25): erst die Blende mit dem passenden Bild
+        # auflegen, dann schliessen. Sonst steht bis zum Aufbau des
+        # WebView-Fensters gar kein Fenster da.
+        state["closing_intent"] = "unlocked"
+        result["value"] = "unlocked"
+        _call(on_leaving, mode)
+        form.Close()
+
     def on_anim_tick(_s, _a):
         anim["t"] = min(1.0, (time.monotonic() - anim["start"]) * 1000.0 / UNLOCK_ANIM_MS)
         invalidate_ring()
         if anim["t"] >= 1.0:
             anim_timer.Stop()
-            state["closing_intent"] = "unlocked"
-            result["value"] = "unlocked"
-            # Nahtlos weiter (N11.25): erst die Blende mit genau diesem Bild
-            # (offenes Schloss) auflegen, dann schliessen. Sonst steht bis zum
-            # Aufbau des WebView-Fensters gar kein Fenster da.
-            _call(on_leaving, "unlocked")
-            form.Close()
+            leave_unlocked("unlocked")   # Blende zeigt das offene Schloss weiter
     anim_timer.Tick += EventHandler(on_anim_tick)
 
     def play_unlock_anim():
         timer.Stop()                  # Caps-/Countdown-Takt wird nicht mehr gebraucht
+        # Im Normalfall sind beide Labels unsichtbar (der Sperrschirm traegt
+        # keinen Text mehr), das aufgehende Schloss ist die Rueckmeldung. Nur
+        # im Fehlerfall, wo sie stehen, ersetzt "Unlocked" die Fehlerzeilen.
         title.set("Unlocked")
         subtitle.set("")
         caps.set("")
@@ -562,9 +677,20 @@ def run_lock_window(api: Any, boot_state: str, boot_reason: str | None,
             def apply():
                 state["busy"] = False
                 if isinstance(res, dict) and res.get("ok"):
-                    # Erst aufgehen lassen, dann schliessen (on_anim_tick setzt
-                    # den Ausgang und ruft form.Close()).
-                    play_unlock_anim()
+                    if resumed:
+                        # Rueckkehr in eine laufende Sitzung: erst aufgehen
+                        # lassen, dann schliessen (on_anim_tick setzt den
+                        # Ausgang und ruft form.Close()). Die App zeigt danach
+                        # keine Willkommens-Blende (N11.22).
+                        play_unlock_anim()
+                    else:
+                        # Normaler Programmstart (2026-08-08, Nutzerwunsch):
+                        # das Schloss geht NICHT auf, die Feier ist drueben die
+                        # Logo-Animation der App (N11.20). Zwei Animationen
+                        # hintereinander waren eine zuviel; die Blende bleibt
+                        # deshalb schmucklos ("plain") und traegt nur den
+                        # Hintergrund bis zum ersten Bild des WebViews.
+                        leave_unlocked("plain")
                     return
                 state["blocked"] = False
                 pw.Text = ""
