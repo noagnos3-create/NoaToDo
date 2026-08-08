@@ -1635,19 +1635,39 @@ input { font: inherit; }
 .wl-n { transform-origin: 60px 60px; animation: wl-n-in .7s ease-out .5s both; }
 @keyframes wl-n-in { from { opacity: 0; transform: translateY(7px) scale(.9); } to { opacity: 1; transform: none; } }
 /* Das Glimmern: eine zweite, hellere Kopie der Marke, durch ein wanderndes
-   Gradienten-Fenster (Maske) sichtbar. Laeuft als Endlos-Lichtwisch. */
+   Gradienten-Fenster (Maske) sichtbar. Laeuft als Endlos-Lichtwisch.
+
+   Bewegt wird bewusst NICHT die Maske (`mask-position` ist keine
+   Compositor-Eigenschaft: jedes Bild erzwingt ein Neuzeichnen der ganzen
+   Marke, das unter Last sichtbar ruckelt). Stattdessen wandert die
+   Aussenschicht samt ihrer fest sitzenden Maske per `transform`, und die
+   Innenschicht faehrt exakt gegenlaeufig zurueck. Damit steht die Marke
+   still, das Lichtfenster wandert, und beide Bewegungen laufen als reine
+   Transformationen im Compositor.
+
+   Die Endlagen liegen ausserhalb der Marke (Bandbreite 70%, also alles ab
+   -70% bzw. +100% ist vollstaendig daneben): waehrend der Ruhephase des
+   Takts (55% bis 100%) ist das Band dadurch WEG und bleibt nicht als
+   halbheller Streifen am Rand stehen. Genau das sah vorher wie ein
+   ploetzlich stehenbleibender Lichtschein aus. */
+.wl-sheen, .wl-sheen-in { position: absolute; inset: 0; will-change: transform; }
 .wl-sheen {
-  position: absolute; inset: 0;
   opacity: .34;                   /* heller als die Basis-Kopie, aber kein Blitz */
   -webkit-mask-image: linear-gradient(100deg, transparent 6%, #000 50%, transparent 94%);
           mask-image: linear-gradient(100deg, transparent 6%, #000 50%, transparent 94%);
   -webkit-mask-size: 70% 100%;  mask-size: 70% 100%;
+  -webkit-mask-position: 0 0;   mask-position: 0 0;
   -webkit-mask-repeat: no-repeat; mask-repeat: no-repeat;
   animation: wl-sheen-sweep 3.4s ease-in-out .6s infinite;
 }
+.wl-sheen-in { animation: wl-sheen-hold 3.4s ease-in-out .6s infinite; }
 @keyframes wl-sheen-sweep {
-  0%        { -webkit-mask-position: -140% 0; mask-position: -140% 0; }
-  55%, 100% { -webkit-mask-position: 260% 0;  mask-position: 260% 0; }
+  0%        { transform: translate3d(-85%, 0, 0); }
+  55%, 100% { transform: translate3d(115%, 0, 0); }
+}
+@keyframes wl-sheen-hold {
+  0%        { transform: translate3d(85%, 0, 0); }
+  55%, 100% { transform: translate3d(-115%, 0, 0); }
 }
 /* Der Gruss: pro Wort ein inline-block (kein Umbruch mitten im Wort),
    pro Zeichen ein gestaffelter Einflug (Verzoegerung inline aus app.js). */

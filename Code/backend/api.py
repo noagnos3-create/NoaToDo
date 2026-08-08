@@ -1314,6 +1314,11 @@ class Api:
             "path": path,
             "has_vault": has_vault,
             "warning": _path_risk_warning(path),
+            # G31 (a)/B.10.4 Punkt 1: die Einrichtungs-UI empfiehlt die
+            # Geraeteverschluesselung, und zwar mit dem REALEN Status des
+            # gewaehlten Laufwerks. "unknown" bleibt "unknown" (G22), nie ein
+            # ungeprueftes "geschuetzt".
+            "bitlocker": _bitlocker_status(os.path.join(path, "tasks.db.enc")),
         }
 
     @bridge(schema={"path": v_id, "passphrase": v_id})
@@ -1340,13 +1345,15 @@ class Api:
         except security_module.VaultError:
             return _err("vault")
         # G33: alte Dev-DB (data/tasks.db samt Journalen) sicher wegraeumen.
-        _cleanup_dev_legacy_db()
+        # Ob wirklich etwas da war, entscheidet ueber den Einmal-Hinweis mit der
+        # ehrlichen SSD-Restgrenze im Onboarding (G33, `legacy_removed`).
+        legacy_removed = _cleanup_dev_legacy_db()
         cfg = config_module.new_config(enc_path)
         config_module.save_config(cfg)
         self._config_cache = cfg
         self._vault_path = enc_path
         self._attach_vault(vault)
-        return {"ok": True}
+        return {"ok": True, "legacy_removed": legacy_removed}
 
     @bridge(schema={"path": v_id})
     def open_existing_vault(self, path: str) -> dict[str, Any]:
@@ -1793,19 +1800,30 @@ def _path_risk_warning(path: str) -> str | None:
 # Alte Dev-DB entsorgen (Gate G33): beim ersten create_vault
 # ---------------------------------------------------------------------------
 
-def _cleanup_dev_legacy_db() -> None:
+def _cleanup_dev_legacy_db() -> bool:
     """Alte Klartext-lesbare Dev-DB ``data/tasks.db`` sicher wegraeumen (G33).
 
     Die frueheren Phasen oeffneten ``data/tasks.db`` mit einem oeffentlichen
     Schluessel. Beim ersten echten ``create_vault()`` wird sie samt
     ``-journal``/``-wal``/``-shm`` ueber den Secure-Delete-Pfad entsorgt (nie
-    blankes ``os.remove``). Ehrliche Restgrenze (SSD-Wear-Leveling) nennt das
-    Onboarding als Einmal-Hinweis.
+    blankes ``os.remove``).
+
+    Liefert ``True``, wenn wirklich etwas gefunden und entsorgt wurde. Genau
+    dann (und nur dann) zeigt das Onboarding den Einmal-Hinweis mit der
+    ehrlichen SSD-Restgrenze, den G33 verlangt: ohne Fund gaebe es nichts zu
+    warnen, und ein Hinweis auf Vorrat waere eine Behauptung ins Blaue.
     """
     base = os.path.join(
         os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "data", "tasks.db")
+    removed = False
     for suffix in ("", "-journal", "-wal", "-shm"):
-        security_module.secure_delete(base + suffix)
+        target = base + suffix
+        # Vor dem Loeschen pruefen: secure_delete meldet nicht, ob es etwas gab.
+        existed = os.path.exists(target)
+        security_module.secure_delete(target)
+        if existed and not os.path.exists(target):
+            removed = True
+    return removed
 
 
 # ---------------------------------------------------------------------------

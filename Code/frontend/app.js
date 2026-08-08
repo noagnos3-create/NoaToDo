@@ -108,9 +108,11 @@ let state = {
   editingId: null,   // Aufgabe, die gerade inline bearbeitet wird (Doppelklick)
   selectedId: null,  // per Klick ausgewaehlte Aufgabe (Ziel fuer Copy/Edit der Rail)
   panic: null,       // Panik-Flow (N10): { armed:bool, stage:'panel'|'wiping'|'done'|'killing', killArmed:bool } | null
-  // Onboarding (Phase 8, N11.13): Boot-Zustand, KEIN Modal. Drei Schritte:
-  // 1 Ort waehlen, 2 Passphrase + Verlust-Warnung, 3 fertig/anlegen.
-  // { step, path, hasVault, warning, busy, error } | null.
+  // Onboarding (Phase 8, N11.13): Boot-Zustand, KEIN Modal. Schritte:
+  // 1 Ort waehlen (inkl. G32-Warnung + G31-BitLocker-Empfehlung), 2 Passphrase
+  // + Verlust-Warnung, 3 anlegen/Fehler, 4 nur bei Bedarf der quittierpflichtige
+  // G33-Einmalhinweis (alte Dev-DB wurde entsorgt).
+  // { step, path, hasVault, warning, bitlocker, busy, error } | null.
   onboarding: null,
   // Willkommens-Schirm (N11.20): Blende ueber der schon fertig gerenderten App,
   // beim Anlegen des Tresors und beim normalen Programmstart. NICHT mehr nach
@@ -867,6 +869,27 @@ function renderLock() {
 // Staerkemesser), und die Verlust-Warnung ist Pflichttext mit aktiver
 // Bestaetigung.
 // ===========================================================================
+// BitLocker-Empfehlung in der Einrichtungs-UI (Gate G31 (a), B.10.4 Punkt 1).
+// Zeigt den REALEN Status des gewaehlten Laufwerks, den das Backend per WMI
+// liest; ist er nicht lesbar, steht hier ehrlich "unknown" und keine
+// Behauptung (G22). Empfehlung, nie eine Sperre: die App erzwingt nichts.
+// Ohne gewaehlten Ort (noch kein Laufwerk bekannt) bleibt die Box weg.
+function renderBitlockerNote(bl) {
+  if (!bl) return '';
+  const drive = bl.drive ? esc(bl.drive) : 'this drive';
+  if (bl.state === 'protected') {
+    return `<div class="ob-note">Device encryption is on for ${drive}. That covers the leftovers NoaToDo cannot reach by itself (pagefile, hibernation file, crash dumps).</div>`;
+  }
+  // Im Fall "unknown" darf hier NICHTS behauptet werden (G22): die Abfrage
+  // braucht ohne Adminrechte oft mehr Rechte, als die App hat, und "aus" waere
+  // dann geraten. Deshalb ein anderer Satz als bei einem gemessenen "off":
+  // pruefen statt einschalten.
+  const head = bl.state === 'off'
+    ? `Device encryption (BitLocker) is <b>off</b> for ${drive}. We strongly recommend turning it on.`
+    : `Device encryption (BitLocker) for ${drive} could not be read, so NoaToDo does not know whether it is on (that usually needs administrator rights). Please check it yourself in Windows settings, and turn it on if it is off.`;
+  return `<div class="ob-warn">${head} Your vault stays encrypted either way, but Windows writes RAM to disk in the pagefile, the hibernation file and crash dumps, and only device encryption covers those. It also protects the key material this vault is bound to if the whole disk is ever stolen.</div>`;
+}
+
 function renderOnboarding() {
   const o = state.onboarding;
   if (!o) return '';
@@ -894,7 +917,7 @@ function renderOnboarding() {
           <p class="ob-lead">A local, encrypted vault for your lists. No cloud, no account, no sync: everything stays on this PC.</p>
           <p class="ob-sub">Choose where the encrypted vault file should live.</p>
           <button class="btn" data-act="ob-choose">${I.Download} Choose location</button>
-          ${chosen}${hint}${warn}
+          ${chosen}${hint}${warn}${renderBitlockerNote(o.bitlocker)}
           <div class="ob-actions">${next}</div>
         </div>
       </div>`;
@@ -917,6 +940,31 @@ function renderOnboarding() {
           <div class="ob-actions">
             <button class="btn" data-act="ob-back">Back</button>
             <button class="btn btn-primary" data-act="ob-create" id="ob-create-btn" disabled>Create vault</button>
+          </div>
+        </div>
+      </div>`;
+  }
+  // Schritt 4 (Gate G33): der Einmal-Hinweis mit der ehrlichen forensischen
+  // Restgrenze. Erscheint NUR, wenn beim Anlegen wirklich eine alte Dev-DB
+  // gefunden und ueber den Secure-Delete-Pfad entsorgt wurde
+  // (`create_vault().legacy_removed`), und genau dieses eine Mal. Er ist
+  // quittierpflichtig ("damit der Nutzer ihn bewusst gelesen hat", B.9/G33)
+  // und nennt beide Restkanaele: die SSD-Restgrenze durch Wear-Leveling und
+  // die alten Export-Dateien, die die App bewusst nicht sucht und nicht loescht.
+  if (o.step === 4) {
+    return `
+      <div class="onboarding">
+        <div class="ob-card">
+          <div class="ob-icon">${I.Shield}</div>
+          <h1>One thing before you start</h1>
+          <p class="ob-sub">Your vault is ready. This notice appears once.</p>
+          <div class="ob-lossbox">
+            NoaToDo found an old development database from earlier versions and overwrote it before deleting it. <b>That is best effort, not a guarantee.</b> On an SSD, wear leveling means the overwrite may never reach the physical blocks, so remnants can survive forensically. The same goes for any export files you created back then: they are your own files, and the app neither looks for them nor deletes them.
+            <br /><br />
+            If you must rule that out, you need a fresh, fully encrypted system (device encryption / BitLocker). Everything from here on is written only into the encrypted vault.
+          </div>
+          <div class="ob-actions">
+            <button class="btn btn-primary" data-act="ob-legacy-ack">I have read this</button>
           </div>
         </div>
       </div>`;
@@ -989,7 +1037,7 @@ function renderWelcome() {
       <div class="wl-glow"></div>
       <div class="wl-mark">
         ${WelcomeMark}
-        <div class="wl-sheen">${WelcomeMark}</div>
+        <div class="wl-sheen"><div class="wl-sheen-in">${WelcomeMark}</div></div>
       </div>
       <div class="wl-text">
         <h1 class="wl-title">${title}</h1>
@@ -1023,6 +1071,10 @@ function finishWelcome() {
     state.welcome = null;
     welcomeTimer = null;
     render();
+    // Erst jetzt den WLAN-Takt anwerfen: waehrend der Blende ist er bewusst
+    // aus (siehe enterUnlockedApp), weil jeder Bridge-Aufruf dort in die
+    // laufenden Animationen ruckt.
+    if (state.online && !state.locked) startWifiPoll();
   }, WELCOME_FADE_MS);
 }
 
@@ -1414,6 +1466,9 @@ async function obChoose() {
   state.onboarding.path = res.path;
   state.onboarding.hasVault = !!res.has_vault;
   state.onboarding.warning = res.warning || null;
+  // G31 (a): realer BitLocker-Status des gewaehlten Laufwerks fuer die
+  // Empfehlung auf diesem Schritt.
+  state.onboarding.bitlocker = res.bitlocker || null;
   state.onboarding.error = null;
   render();
 }
@@ -1439,10 +1494,24 @@ async function obCreate() {
         : 'Could not create the vault.';
     render(); return;
   }
-  // Angelegt und entsperrt: ins normale App-UI wechseln. Die Willkommens-Blende
-  // (N11.20) wird VOR enterUnlockedApp() gesetzt, damit die leere App nicht
-  // kurz nackt aufblitzt: sie liegt beim ersten Rendern schon darueber. Der
-  // gleiche Griff steht in boot() fuer Start und Entsperren.
+  // Gate G33: wurde beim Anlegen wirklich eine alte Dev-DB entsorgt, kommt
+  // zuerst der quittierpflichtige Einmal-Hinweis mit der ehrlichen
+  // forensischen Restgrenze. Er steht VOR der Willkommens-Blende, sonst
+  // laege die Blende ueber ihm.
+  if (res && res.legacy_removed) {
+    o.busy = false;
+    o.step = 4;
+    render();
+    return;
+  }
+  enterAppAfterOnboarding();
+}
+
+// Gemeinsamer Abschluss des Onboardings: ins normale App-UI wechseln. Die
+// Willkommens-Blende (N11.20) wird VOR enterUnlockedApp() gesetzt, damit die
+// leere App nicht kurz nackt aufblitzt: sie liegt beim ersten Rendern schon
+// darueber. Der gleiche Griff steht in boot() fuer den Start.
+async function enterAppAfterOnboarding() {
   state.onboarding = null;
   state.welcome = { leaving: false };
   await enterUnlockedApp();
@@ -1484,7 +1553,11 @@ async function enterUnlockedApp() {
     return;
   }
   render();
-  if (state.online) startWifiPoll();
+  // Laeuft die Willkommens-Blende (N11.20), startet der WLAN-Takt erst nach
+  // ihr (finishWelcome): sein erster Aufruf feuert sofort und laesst im
+  // Hintergrund `netsh` laufen, was mitten in den Einflug-Animationen als
+  // kurzes Stocken sichtbar wird. Er zeigt ohnehin nur das Rail-Symbol.
+  if (state.online && !state.welcome) startWifiPoll();
 }
 
 // Auto-Sperre-Aktivitaet (N11.4.2): gedrosselt melden (fuehrende Flanke, danach
@@ -2346,6 +2419,8 @@ async function onClick(e) {
     case 'ob-back': if (state.onboarding) { state.onboarding.step = 1; state.onboarding.error = null; render(); } break;
     case 'ob-back-2': if (state.onboarding) { state.onboarding.step = 2; state.onboarding.error = null; state.onboarding.busy = false; render(); } break;
     case 'ob-create': await obCreate(); break;
+    // G33: der Einmal-Hinweis ist quittiert, jetzt in die App.
+    case 'ob-legacy-ack': await enterAppAfterOnboarding(); break;
     case 'ob-open-existing': await obOpenExisting(); break;
     case 'open-change-pass': changePassError = null; state.modal = 'change'; render(); break;
     case 'do-change-pass': await doChangePass(); break;
@@ -2722,7 +2797,7 @@ async function boot() {
     return;
   }
   if (bs && bs.state === 'onboarding') {
-    state.onboarding = { step: 1, path: null, hasVault: false, warning: null, busy: false, error: null };
+    state.onboarding = { step: 1, path: null, hasVault: false, warning: null, bitlocker: null, busy: false, error: null };
     render();
     return;
   }

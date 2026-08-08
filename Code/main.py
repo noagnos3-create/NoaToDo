@@ -13,6 +13,7 @@ import os
 import shutil
 import subprocess
 import tempfile
+import threading
 import time
 
 import webview
@@ -570,6 +571,43 @@ def _wipe_profile_dir() -> None:
         pass
 
 
+# ---------------------------------------------------------------------------
+# Nahtloser Fensterwechsel (N11.25)
+# ---------------------------------------------------------------------------
+# Zwischen zwei Fenstern (WebView <-> natives Sperrfenster) lag bisher eine
+# Luecke ohne jedes Fenster: das alte war zu, das neue noch nicht da, dazwischen
+# lief der PROFILE_DIR-Wisch (G14) bzw. der WebView2-Anlauf. Auf dem Schirm sah
+# das aus, als minimiere sich die App. Die Blende (lockwindow.Curtain) haelt in
+# dieser Zeit das App-Bild stehen. Sie ist reine Kosmetik: sie zeigt keinen
+# Nutzerinhalt, haelt die teardown-Sequenz nicht auf und schliesst sich zur Not
+# selbst (Notbremse im Curtain).
+_curtain = None
+
+
+def _show_curtain(mode: str, icon: str) -> None:
+    """Blende auflegen, BEVOR das aktuelle Fenster verschwindet."""
+    global _curtain
+    _close_curtain()
+    try:
+        import lockwindow
+        curtain = lockwindow.Curtain(mode, icon)
+        curtain.show()
+        _curtain = curtain
+    except Exception:
+        _curtain = None
+
+
+def _close_curtain() -> None:
+    """Blende wegnehmen (idempotent, aus jedem Thread)."""
+    global _curtain
+    curtain, _curtain = _curtain, None
+    if curtain is not None:
+        try:
+            curtain.close()
+        except Exception:
+            pass
+
+
 def _finish_native_teardown() -> None:
     """teardown-Schritt 9 nach dem Fenster-Abbau: PROFILE_DIR wischen (G14),
     danach Schritt 10 (Funk-Ausgangszustand wiederherstellen, N11.5/N11.10)."""
@@ -654,6 +692,10 @@ def run_webview(api: Api, icon: str) -> None:
     api._mini = False
     _purge_webview_cache()
 
+    # Lokaler Import wie ueberall in dieser Datei: wintheme laedt WinForms nach,
+    # das erst nach der DPI-/setup_app-Vorbereitung in main() geladen werden soll.
+    import wintheme
+
     window = webview.create_window(
         "NoaToDo",
         INDEX,
@@ -665,6 +707,11 @@ def run_webview(api: Api, icon: str) -> None:
         min_size=(340, 480),
         # Gate G34 (b): Task-/Listentext ist NICHT selektierbar (bewusst gesetzt).
         text_select=False,
+        # N11.25: PyWebView reicht das an WebView2 als DefaultBackgroundColor
+        # durch. Ohne das steht das Fenster bis zum ersten Bild auf Weiss und
+        # blitzt beim Aufbau hell auf; mit dem App-Grundton geht es nahtlos aus
+        # der Blende in die App ueber.
+        background_color=wintheme.BG,
     )
     api._window = window
 
@@ -672,6 +719,20 @@ def run_webview(api: Api, icon: str) -> None:
     # Fenster-Abbau in der Boot-Schleife): das Fenster ueber den UI-Thread
     # schliessen, damit webview.start() zurueckkehrt.
     def request_teardown():
+        # Nahtloser Wechsel (N11.25): geht es nach dem Abbau weiter (Sperre
+        # oder Onboarding), legt sich die Blende ZUERST ueber das Fenster, so
+        # dass der Bildschirm zwischen den Fenstern nie leer wird. Beim
+        # Beenden (quit/killswitch/panic-finish) gibt es bewusst keine Blende:
+        # dort soll nichts stehenbleiben.
+        try:
+            nxt = api._session.next_state
+        except Exception:
+            nxt = "exit"
+        if nxt == "locked":
+            _show_curtain("lock", icon)
+        elif nxt == "onboarding":
+            _show_curtain("plain", icon)
+
         form = getattr(window, "native", None)
         if form is not None:
             try:
@@ -686,6 +747,16 @@ def run_webview(api: Api, icon: str) -> None:
             pass
 
     api._request_teardown = request_teardown
+
+    # Kam die App aus einer Blende (Entsperren, Onboarding nach Reset), wird sie
+    # erst weggenommen, wenn im Fenster wirklich etwas steht: `loaded` feuert bei
+    # geladenem Dokument, die kurze Nachlaufzeit deckt den ersten render()-Lauf
+    # des Frontends ab. Der Hintergrund des Fensters ist ohnehin der App-Grundton
+    # (background_color), es kann also nichts hell aufblitzen.
+    def _on_loaded():
+        threading.Timer(0.25, _close_curtain).start()
+
+    window.events.loaded += _on_loaded
 
     def on_start():
         # Gate G12: externe Navigation abriegeln.
@@ -837,8 +908,14 @@ def main() -> None:
                     # verknuepfen (sonst zeigt die Leiste das Python-Symbol).
                     on_ready=lambda hwnd: _apply_taskbar_identity(
                         hwnd, _APP_USER_MODEL_ID, icon),
+                    # Nahtloser Wechsel (N11.25): Blende weg, sobald das
+                    # Sperrfenster gemalt ist; und wieder auf, bevor es fuer
+                    # den Weiterweg (Entsperren/Reset) schliesst.
+                    on_painted=_close_curtain,
+                    on_leaving=lambda mode: _show_curtain(mode, icon),
                 )
                 if res == "quit":
+                    _close_curtain()
                     _finish_native_teardown()
                     break
                 if res == "onboarding":
@@ -860,6 +937,7 @@ def main() -> None:
             _finish_native_teardown()
             ns = session.next_state
             if ns == "exit":
+                _close_curtain()   # beim Beenden bleibt nichts stehen (N11.25)
                 break
             if ns == "locked":
                 api.locked = True
@@ -881,6 +959,7 @@ def main() -> None:
             # Kein teardown gelaufen (unerwartet): sicherheitshalber beenden.
             break
     finally:
+        _close_curtain()
         _release_single_instance()
     print("[NoaToDo] Beendet.", flush=True)
 
