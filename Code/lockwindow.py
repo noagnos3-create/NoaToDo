@@ -33,7 +33,9 @@ Nicht-Geheimes, B.11). Dark ist die Vorgabe der App.
 """
 from __future__ import annotations
 
+import math
 import threading
+import time
 from typing import Any
 
 import wintheme as T
@@ -60,7 +62,7 @@ def run_lock_window(api: Any, boot_state: str, boot_reason: str | None,
     in einer nicht-interaktiven Session angewiesen zu sein.
     """
     from System import Action, EventHandler
-    from System.Drawing import Point, Size
+    from System.Drawing import Point, Rectangle, Size
     from System.Windows.Forms import (
         Application, FormBorderStyle, FormWindowState, Form, KeyEventHandler,
         KeyPressEventHandler, Keys, PaintEventHandler, Timer,
@@ -208,18 +210,38 @@ def run_lock_window(api: Any, boot_state: str, boot_reason: str | None,
     # ------------------------------------------------------------------
     # Hintergrund + Ring zeichnen (style.css .lock-screen / .lock-ring)
     # ------------------------------------------------------------------
+    # Fortschritt der Entsperr-Animation (N11.22): None = geschlossenes Schloss
+    # in Akzentfarbe (Normalfall), 0..1 = das Schloss geht auf.
+    anim = {"t": None, "start": 0.0}
+
     def on_form_paint(_s, e):
         g = e.Graphics
         w, h = form.ClientSize.Width, form.ClientSize.Height
         T.paint_backdrop(g, 0, 0, w, h, T.TITLE_STRIP)
         d = geom["ring_d"]
         x, y = geom["ring_x"], geom["ring_y"]
-        cx, cy = x + d / 2.0, y + d / 2.0
+        t = anim["t"]
+        if t is None:
+            color, wash, line = T.ACCENT, T.ACCENT_WASH, T.ACCENT_LINE
+            open_t, grow, glow = 0.0, 0.0, 46
+        else:
+            # Farbwechsel und Aufklappen laufen im ersten Teil (weich
+            # auslaufend), dazu ein einmaliger, kleiner Pulsschlag des Rings.
+            e1 = 1.0 - (1.0 - min(1.0, t / 0.55)) ** 3
+            color = T.mix(T.SECURE, T.ACCENT, e1)
+            wash = T.mix(T.SECURE_WASH, T.ACCENT_WASH, e1)
+            line = T.mix(T.SECURE_LINE, T.ACCENT_LINE, e1)
+            open_t = e1
+            grow = 0.05 * math.sin(math.pi * min(1.0, t / 0.7))
+            glow = int(46 + 44 * e1)
+        dd = d * (1.0 + grow)
+        xx, yy = x + (d - dd) / 2.0, y + (d - dd) / 2.0
+        cx, cy = xx + dd / 2.0, yy + dd / 2.0
         # Schein wie box-shadow: 0 18px 48px accent
-        T.draw_glow(g, cx, cy + d * 0.10, d * 0.92, T.ACCENT, 46)
-        T.fill_pill(g, x, y, d, d, d / 2.0, T.ACCENT_WASH, T.ACCENT_LINE,
+        T.draw_glow(g, cx, cy + dd * 0.10, dd * 0.92, color, glow)
+        T.fill_pill(g, xx, yy, dd, dd, dd / 2.0, wash, line,
                     max(1.0, scale["v"]))
-        T.draw_lock_glyph(g, cx, cy, d * (84.0 / 184.0), T.ACCENT)
+        T.draw_lock_glyph(g, cx, cy, dd * (84.0 / 184.0), color, open_t)
 
     form.Paint += PaintEventHandler(on_form_paint)
     form.Resize += EventHandler(lambda _s, _a: layout())
@@ -274,6 +296,53 @@ def run_lock_window(api: Any, boot_state: str, boot_reason: str | None,
         tick_countdown()
     timer.Tick += EventHandler(on_tick)
 
+    # ------------------------------------------------------------------
+    # Entsperr-Animation (N11.22): das Schloss geht auf, dann schliesst das
+    # Fenster. Sie ersetzt die Willkommens-Blende des WebViews beim Entsperren
+    # (die laeuft nur noch beim echten Start), gibt die Rueckmeldung also genau
+    # dort, wo die Passphrase eingegeben wurde. Bewusst kurz: sie haelt den
+    # Uebergang in die App nur um Bruchteile einer Sekunde auf.
+    UNLOCK_ANIM_MS = 620.0
+    anim_timer = Timer()
+    anim_timer.Interval = 16          # ~60 Bilder/s
+
+    def invalidate_ring():
+        # Nur den Ring samt Schein neu zeichnen (nicht das ganze Fenster): der
+        # Rest des Bildes steht still, und das Formular ist doppelt gepuffert.
+        d = geom["ring_d"]
+        pad = int(d * 0.6) + 4
+        try:
+            form.Invalidate(Rectangle(geom["ring_x"] - pad, geom["ring_y"] - pad,
+                                      d + 2 * pad, d + 2 * pad))
+        except Exception:
+            form.Invalidate()
+
+    def on_anim_tick(_s, _a):
+        anim["t"] = min(1.0, (time.monotonic() - anim["start"]) * 1000.0 / UNLOCK_ANIM_MS)
+        invalidate_ring()
+        if anim["t"] >= 1.0:
+            anim_timer.Stop()
+            state["closing_intent"] = "unlocked"
+            result["value"] = "unlocked"
+            form.Close()
+    anim_timer.Tick += EventHandler(on_anim_tick)
+
+    def play_unlock_anim():
+        timer.Stop()                  # Caps-/Countdown-Takt wird nicht mehr gebraucht
+        title.set("Unlocked")
+        subtitle.set("")
+        caps.set("")
+        set_status("", danger=False)
+        # Alles, was jetzt nur noch ablenkt, verschwindet: der Blick soll auf
+        # dem aufgehenden Schloss liegen.
+        for ctl in (pw_pill.control, unlock.control, forgot.control,
+                    reset_pill.control, reset_btn.control, off.control):
+            ctl.Visible = False
+        anim["t"] = 0.0
+        anim["start"] = time.monotonic()
+        form.Invalidate()
+        anim_timer.Start()
+
     def do_unlock():
         if state["busy"] or not unlock.control.Enabled:
             return
@@ -288,9 +357,9 @@ def run_lock_window(api: Any, boot_state: str, boot_reason: str | None,
             def apply():
                 state["busy"] = False
                 if isinstance(res, dict) and res.get("ok"):
-                    state["closing_intent"] = "unlocked"
-                    result["value"] = "unlocked"
-                    form.Close()
+                    # Erst aufgehen lassen, dann schliessen (on_anim_tick setzt
+                    # den Ausgang und ruft form.Close()).
+                    play_unlock_anim()
                     return
                 unlock.set_enabled(True)
                 pw.Text = ""

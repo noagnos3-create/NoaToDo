@@ -93,6 +93,7 @@ class Database:
         self.conn.executescript(SCHEMA)
         self.conn.commit()
         self._drop_legacy_columns()
+        self._migrate_settings()
 
     def rekey(self, new_key: bytes) -> None:
         """Schicht-1-Schluessel wechseln (Passphrase-Wechsel, N11.3).
@@ -123,6 +124,33 @@ class Database:
             for col in legacy:
                 if col in cols:
                     self.conn.execute(f"ALTER TABLE tasks DROP COLUMN {col}")
+            self.conn.commit()
+        except Exception:
+            pass
+
+    def _migrate_settings(self) -> None:
+        """Einmal-Migration der Settings-Keys auf den Stand von B.6 (N11.6/N11.7).
+
+        ``dark`` (Bool) ist durch ``theme`` (``auto``|``light``|``dark``)
+        ersetzt, ``toolbar`` ist ersatzlos entfallen (die Rail ist immer
+        ``floating``). Bestands-Tresore bekommen genau einmal ``theme = auto``
+        gesetzt, danach gilt allein der vom Nutzer gewaehlte Wert.
+
+        Der alte ``dark``-Wert wird bewusst NICHT auf ein festes Theme
+        abgebildet: der Default von N11.6 ist ``auto``, und ein aus ``dark=true``
+        abgeleitetes festes Dunkel wuerde genau das Feature aushebeln, das die
+        Migration einfuehrt (der Nutzer kaeme nie in den Automatik-Zustand,
+        ohne ihn von Hand zu waehlen). Die Wahl bleibt ueber das
+        Appearance-Segment jederzeit erreichbar.
+        """
+        try:
+            rows = {r["key"] for r in self.conn.execute("SELECT key FROM settings")}
+            if "theme" not in rows:
+                self.conn.execute(
+                    "INSERT INTO settings (key, value) VALUES ('theme', 'auto')")
+            for dead in ("dark", "toolbar"):
+                if dead in rows:
+                    self.conn.execute("DELETE FROM settings WHERE key = ?", (dead,))
             self.conn.commit()
         except Exception:
             pass
@@ -510,7 +538,9 @@ class Database:
 # angelegten (leeren) Tresor.
 _DEFAULT_SETTINGS = {
     "accent": "#d97757",
-    "dark": "true",
+    # Theme folgt per Default dem Windows-Hell/Dunkel-Zustand (N11.6, B.6);
+    # der frühere Bool-Key `dark` ist damit ersatzlos entfallen.
+    "theme": "auto",
     "density": "comfortable",
     "sidebar": "open",
     # Sidebar-Startbreite. Wird NUR beim Erststart-Seed geschrieben; sobald der

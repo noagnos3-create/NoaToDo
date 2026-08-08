@@ -113,10 +113,16 @@ let state = {
   // { step, path, hasVault, warning, busy, error } | null.
   onboarding: null,
   // Willkommens-Schirm (N11.20): Blende ueber der schon fertig gerenderten App,
-  // bei jedem Weg hinein (Anlegen, normaler Start, Entsperren).
+  // beim Anlegen des Tresors und beim normalen Programmstart. NICHT mehr nach
+  // einem Entsperren aus der laufenden Sitzung (N11.22): dort geht stattdessen
+  // das Schloss im nativen Sperrfenster auf.
   // { leaving:bool, greetingOnly:bool } | null (greetingOnly: ohne Unterzeile,
-  // also nur der Gruss, mittig im Logo; gilt fuer Start und Entsperren).
+  // also nur der Gruss, mittig im Logo; gilt fuer den normalen Start).
   welcome: null,
+  // Windows-Hell/Dunkel-Zustand (N11.6): 'dark' | 'light' | 'unknown'. Kommt
+  // mit get_state() und danach ereignisbasiert ueber window.noa.onSystemTheme.
+  // Wirkt NUR bei settings.theme === 'auto'.
+  systemTheme: 'unknown',
 };
 
 const root = document.getElementById('root');
@@ -731,6 +737,7 @@ function renderModal() {
             <div class="sc-head">Mouse</div>
             ${mouse.map(row).join('')}
             <div class="sc-note">Panic, copy and mini mode are toolbar buttons only, on purpose.</div>
+            <div class="sc-note">Ctrl+J always sets a fixed theme. Back to Auto only in Settings.</div>
           </div>
         </div>`);
     }
@@ -770,9 +777,11 @@ function renderSettings() {
         <div class="settings-grid">
           <div class="settings-col">
             ${head('Appearance')}
-            ${row('Theme', seg('dark', [['true', 'Dark'], ['false', 'Light']], String(!!s.dark)))}
+            ${row('Theme', seg('theme', [['auto', 'Auto'], ['light', 'Light'], ['dark', 'Dark']], s.theme || 'auto'), 'Auto follows the Windows light/dark setting')}
             ${row('Density', seg('density', [['comfortable', 'Comfortable'], ['compact', 'Compact']], s.density))}
             ${row('Accent', `<div class="swatches">${sw}</div>`)}
+            ${head('Sound')}
+            ${row('Completion blip', seg('sound', [['true', 'On'], ['false', 'Off']], String(s.sound !== false)), 'Short sound when you check a task off')}
           </div>
           <div class="settings-col">
             ${head('Workspace')}
@@ -939,7 +948,7 @@ function renderOnboarding() {
 // ===========================================================================
 // Standzeit bis zum Ausblenden. Nach dem Anlegen laenger: dort steht unter dem
 // Gruss noch die Unterzeile, die erst nach ~2,6 s vollstaendig da ist und in
-// Ruhe lesbar bleiben soll. Bei Start/Entsperren steht nur der Gruss, da genuegt
+// Ruhe lesbar bleiben soll. Beim normalen Start steht nur der Gruss, da genuegt
 // die kurze Standzeit.
 const WELCOME_HOLD_MS = 2900;
 const WELCOME_HOLD_VAULT_MS = 4800;
@@ -970,8 +979,8 @@ function renderWelcome() {
   // vollflaechig auferstehen.
   const leaving = state.welcome.leaving ? ' leaving' : '';
   // Die Unterzeile gibt es NUR direkt nach dem Anlegen des Tresors (da ist sie
-  // die eigentliche Nachricht). Beim normalen Start und nach dem Entsperren
-  // steht allein der Gruss, und der sitzt dadurch genau in der Logo-Mitte.
+  // die eigentliche Nachricht). Beim normalen Start steht allein der Gruss, und
+  // der sitzt dadurch genau in der Logo-Mitte.
   const sub = state.welcome.greetingOnly
     ? ''
     : `<p class="wl-sub">Your vault is ready. Everything stays on this PC.</p>`;
@@ -1199,8 +1208,18 @@ function startKillswitch() {
 // ===========================================================================
 // Haupt-Render
 // ===========================================================================
+// Das effektiv angezeigte Theme (N11.6, B.6): 'dark' | 'light'.
+// `theme` ist 'auto' | 'light' | 'dark'; bei 'auto' zaehlt der Windows-Zustand.
+// Ist der nicht lesbar ('unknown'), bleibt es beim App-Default Dunkel: nie eine
+// Umschaltung raten.
+function effectiveTheme() {
+  const t = state.settings.theme;
+  if (t === 'light' || t === 'dark') return t;
+  return state.systemTheme === 'light' ? 'light' : 'dark';
+}
+
 function applyChrome() {
-  root.setAttribute('data-theme', state.settings.dark ? 'dark' : 'light');
+  root.setAttribute('data-theme', effectiveTheme());
   root.setAttribute('data-density', state.settings.density || 'comfortable');
   // Die Tool-Rail ist immer "floating"; die frühere Floating/Flush-Einstellung
   // wurde aus den Settings entfernt (ein evtl. gespeicherter Wert wird ignoriert).
@@ -1445,6 +1464,9 @@ async function enterUnlockedApp() {
     const st = await api().get_state();
     if (st && st.locked) { cancelWelcome(); state.locked = true; render(); return; }
     Object.assign(state, st);
+    // N11.6: der Windows-Zustand faehrt in get_state() mit, damit `theme=auto`
+    // schon beim ersten Rendern richtig steht (kein Nachziehen, B.6).
+    state.systemTheme = st && st.system_theme ? st.system_theme : 'unknown';
     normalizeSettings(state.settings);
     const sw = parseInt(state.settings.sidebarWidth, 10);
     state.sidebarWidth = (sw >= SIDEBAR_WIDTH_MIN && sw <= SIDEBAR_WIDTH_MAX)
@@ -1537,6 +1559,8 @@ function _blip(ctx, freq, at, dur, gain) {
 // Aufwecken schon (nicht blockierend) angestossen und die geplanten Toene kommen,
 // sobald er laeuft.
 function playDoneSound() {
+  // Abschaltbar ueber das Setting `sound` (N11.6, Default an).
+  if (state.settings.sound === false) return;
   const ctx = _ac();
   if (!ctx) return;
   [1046, 1318, 1568, 2093].forEach((hz, i) => _blip(ctx, hz, i * 0.045, 0.05, 0.10));
@@ -1744,13 +1768,18 @@ function stopWifiPoll() {
 
 // Settings, die als Bool in state.settings liegen (Backend liefert sie via
 // _BOOL_SETTINGS als echten Bool; die Seg-Buttons tragen 'true'/'false').
-const BOOL_SETTINGS = new Set(['dark', 'exportDone']);
+const BOOL_SETTINGS = new Set(['exportDone', 'sound']);
 
 // Fehlende Bool-Settings auf ihren Default ziehen (als echten Bool), damit
 // renderSettings und syncSettingsUi denselben Zustand zeigen. `exportDone`
 // kann bei alten DBs fehlen (kein Re-Seed nach dem seeded-Marker); Default an.
 function normalizeSettings(s) {
   s.exportDone = s.exportDone !== false;
+  // Erledigt-Ton (N11.6): Default an, wenn nicht gesetzt (alte DBs).
+  s.sound = s.sound !== false;
+  // Theme (N11.6): Default 'auto'; ein alter/unbekannter Wert faellt auf
+  // 'auto' zurueck, damit das Segment nie ohne Auswahl dasteht.
+  if (['auto', 'light', 'dark'].indexOf(s.theme) < 0) s.theme = 'auto';
   // autoLock (Minuten, N11.4): Default 15, wenn nicht gesetzt (alte DBs).
   if (s.autoLock == null || s.autoLock === '') s.autoLock = '15';
   return s;
@@ -1761,7 +1790,7 @@ async function setSetting(key, value) {
   let applied = value;
   if (BOOL_SETTINGS.has(key)) applied = (value === true || value === 'true');
   state.settings[key] = applied;
-  if (key === 'dark') flashThemeSwitch();
+  if (key === 'theme') flashThemeSwitch();
   // Bewusst KEIN render(): Theme/Density/Sidebar wirken ueber die Attribute
   // in applyChrome (CSS uebernimmt), die Settings-Controls werden in-place
   // nachgezogen. Ein Voll-Render wuerde bei jedem Umschalten kurz flackern.
@@ -2408,7 +2437,11 @@ function onKeyGlobal(e) {
   // Buchstaben-Kuerzel bleiben waehrend des Tippens blockiert.
   if (typing && !(meta && k === 'n')) return;
   if (meta && k === 'b') { e.preventDefault(); const wasFocus = state.focus; state.focus = false; state.settings.sidebar = sidebarVisible() ? 'closed' : 'open'; api().set_setting('sidebar', state.settings.sidebar); if (wasFocus) render(); else applyChrome(); }
-  else if (meta && k === 'j') { e.preventDefault(); setSetting('dark', !state.settings.dark); }
+  // Ctrl+J (B.5/N11.6, U16-Entscheid): setzt IMMER ein festes Theme, naemlich
+  // das Gegenteil des gerade angezeigten. Aus 'auto' heraus ist das der
+  // manuelle Override, aus einem festen Theme der Wechsel zum anderen festen.
+  // Zurueck nach 'auto' geht bewusst NUR ueber das Appearance-Segment.
+  else if (meta && k === 'j') { e.preventDefault(); setSetting('theme', effectiveTheme() === 'dark' ? 'light' : 'dark'); }
   else if (meta && k === 'l') { e.preventDefault(); doLock(); }
   else if (meta && k === 'e') { e.preventDefault(); toggleExportPill(); }
   else if (meta && (e.key === 'ArrowUp' || e.key === 'ArrowDown')) {
@@ -2640,6 +2673,21 @@ window.noa = {
     if (state.welcome) return;
     render();
   },
+  // Backend -> Frontend (N11.6): Windows hat hell/dunkel gewechselt. Wirkt nur
+  // bei theme='auto' (das Backend prueft das bereits, hier bleibt es
+  // trotzdem stehen, weil applyChrome() ohnehin ueber effectiveTheme() geht).
+  // Bewusst KEIN render(): das Theme haengt allein am data-theme-Attribut,
+  // ein Voll-Render wuerde nur laufende Animationen zerreissen (dieselbe
+  // Ueberlegung wie bei onNetChange und in setSetting).
+  onSystemTheme(dark) {
+    const next = dark ? 'dark' : 'light';
+    if (next === state.systemTheme) return;
+    state.systemTheme = next;
+    if ((state.settings.theme || 'auto') !== 'auto') return;
+    flashThemeSwitch();
+    applyChrome();
+    syncSettingsUi();
+  },
 };
 
 // ===========================================================================
@@ -2679,13 +2727,18 @@ async function boot() {
     return;
   }
   // 'unlocked' (oder defensiv anderes): den vollen Zustand laden und rendern.
-  // Die Willkommens-Blende (N11.20) laeuft auch hier, also bei jedem normalen
-  // Start und nach jedem Entsperren: beides landet in genau diesem Zweig, denn
-  // nach dem Unlock im nativen Lock-Fenster baut main.py dieses WebView neu auf
-  // und boot() laeuft erneut. Wieder VOR enterUnlockedApp() setzen, damit die
-  // App nicht kurz nackt aufblitzt; ist der Zustand doch gesperrt, verwirft
+  // Die Willkommens-Blende (N11.20) laeuft hier nur beim echten Programmstart.
+  // Nach einem Entsperren aus der laufenden Sitzung bleibt sie weg (N11.22):
+  // Start und Entsperren landen zwar in genau diesem Zweig (nach dem Unlock im
+  // nativen Lock-Fenster baut main.py dieses WebView neu auf, boot() laeuft
+  // erneut), aber `bs.resumed` unterscheidet die beiden Faelle. Beim Entsperren
+  // hat das aufgehende Schloss im Sperrfenster die Rueckmeldung schon gegeben.
+  // Wo sie laeuft, wird sie VOR enterUnlockedApp() gesetzt, damit die App nicht
+  // kurz nackt aufblitzt; ist der Zustand doch gesperrt, verwirft
   // enterUnlockedApp() die Blende selbst.
-  state.welcome = { leaving: false, greetingOnly: true };
+  if (!(bs && bs.resumed)) {
+    state.welcome = { leaving: false, greetingOnly: true };
+  }
   await enterUnlockedApp();
   runWelcome();
 }

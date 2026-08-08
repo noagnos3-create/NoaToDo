@@ -260,8 +260,8 @@ Das ist die **vollständige Methodenliste**, die `backend/api.py` bereitstellt u
 
 | Methode | Argumente | Rückgabe | Zweck |
 |---|---|---|---|
-| `get_boot_state()` | (keine) | `{ state:'onboarding'\|'locked'\|'unlocked'\|'vault_error', vault_path:str\|null, reason:str\|null }` | **Die Start-Weiche (N11.8.2, U1-Entscheid; vierter Zustand aus dem U2-Entscheid, N11.15.3).** Der einzige Aufruf, den das Frontend beim Boot macht, bevor es irgendetwas rendert. `onboarding` = kein Tresor da und **`config.json` fehlt ganz** (frischer Rechner, nach Reset, nach Killswitch), `locked` = Tresor da, Passphrase nötig, `unlocked` = Schlüssel im RAM, **`vault_error`** = Konfig oder Tresor da, aber unbrauchbar; `reason` ist dann `config_damaged`, `vault_unreachable` oder `vault_damaged` und führt in den Fehlerbildschirm N6 (N11.15.2/N11.15.3), **nie** stillschweigend ins Onboarding. `vault_path` dient nur der Anzeige (Ort im Lock-Screen/Status), nie als Geheimnis. Gesperrt und im Onboarding erlaubt (G13-Allowlist) |
-| `get_state()` | (keine) | `{ lists:[…], settings:{…}, online:bool, locked:bool }` | Initialer Gesamtzustand **nach** dem Entsperren. Gesperrt liefert er nur `{ locked:true }` (G13); den dritten Zustand (`onboarding`) kann er nicht ausdrücken, dafür ist `get_boot_state()` da |
+| `get_boot_state()` | (keine) | `{ state:'onboarding'\|'locked'\|'unlocked'\|'vault_error', vault_path:str\|null, reason:str\|null, resumed:bool }` | **Die Start-Weiche (N11.8.2, U1-Entscheid; vierter Zustand aus dem U2-Entscheid, N11.15.3).** Der einzige Aufruf, den das Frontend beim Boot macht, bevor es irgendetwas rendert. `onboarding` = kein Tresor da und **`config.json` fehlt ganz** (frischer Rechner, nach Reset, nach Killswitch), `locked` = Tresor da, Passphrase nötig, `unlocked` = Schlüssel im RAM, **`vault_error`** = Konfig oder Tresor da, aber unbrauchbar; `reason` ist dann `config_damaged`, `vault_unreachable` oder `vault_damaged` und führt in den Fehlerbildschirm N6 (N11.15.2/N11.15.3), **nie** stillschweigend ins Onboarding. `vault_path` dient nur der Anzeige (Ort im Lock-Screen/Status), nie als Geheimnis. **`resumed`** (N11.22, 2026-08-08) unterscheidet die beiden Wege, die beide als `unlocked` ankommen: `false` = echter Programmstart, `true` = die laufende Sitzung war zwischendurch gesperrt (Sperrknopf, `Ctrl+L`, Auto-Sperre) und wurde wieder entsperrt. Rein praesentationsbezogen (das Frontend laesst dann die Willkommens-Blende N11.20 weg), verraet nichts ueber den Inhalt; gesetzt wird es von der Boot-Schleife in `main.py`, ein Reset setzt es zurueck. Gesperrt und im Onboarding erlaubt (G13-Allowlist) |
+| `get_state()` | (keine) | `{ lists:[…], settings:{…}, online:bool, locked:bool, system_theme:'dark'\|'light'\|'unknown' }` | Initialer Gesamtzustand **nach** dem Entsperren. Gesperrt liefert er nur `{ locked:true }` (G13); den dritten Zustand (`onboarding`) kann er nicht ausdrücken, dafür ist `get_boot_state()` da. `system_theme` ist der Windows-Hell/Dunkel-Zustand (N11.6): er fährt hier mit, damit `theme=auto` schon beim ERSTEN Rendern stimmt (kein Nachziehen, B.6) und kein eigener Bridge-Aufruf nötig ist; `unknown` heisst ehrlich „nicht lesbar", das Frontend behält dann sein Theme |
 | `get_lists()` | (keine) | `[ { id, name, open:[task], done:[task] } ]` | Alle Listen mit eingebetteten Aufgaben |
 | `add_list(name)` | `str` | `{ id, name, … }` | Neue lokale Liste |
 | `rename_list(id, name)` | `str,str` | `{ ok:true }` | Liste umbenennen |
@@ -293,7 +293,9 @@ Das ist die **vollständige Methodenliste**, die `backend/api.py` bereitstellt u
 | `killswitch()` | (keine) | `{ ok:true }` | Unwiderruflich alle Nutzerdaten aus der Datenbank löschen (nur vom Panik-Endschirm aus erreichbar, N10); das Programm selbst bleibt installiert |
 
 **Ereignisse Backend → Frontend** (PyWebView kann JS auswärts aufrufen, z.B.
-`window.evaluate_js` oder ein Event-Bus): `on_locked()`.
+`window.evaluate_js` oder ein Event-Bus): `on_locked()`, `onNetChange(online)`
+(N11.5: eine externe Funk-Änderung wurde gespiegelt) und `onSystemTheme(dark)`
+(N11.6: Windows hat hell/dunkel gewechselt; wirkt nur bei `theme=auto`).
 Das Frontend registriert dafür globale Funktionen wie `window.noa.onLocked`.
 
 **Fehlerkonvention (verbindlich, Fassung nach N11.12 / Gate G29):** Jede Methode kann statt
@@ -825,7 +827,8 @@ dazukommt. Verbindlich sind vier Punkte:
 1. **Dieselben Tokens, keine zweite Palette.** Native Fenster nehmen die
    Dark-Werte aus der Tabelle oben (`--bg` `#15120d` mit dem 28px-Raster
    `--bg-grid`, `--surface`, `--border`, `--text`/`--text-dim`/`--text-faint`,
-   Akzent `#d97757`). Neue Farben werden nicht erfunden.
+   Akzent `#d97757`, dazu `--secure` `#6fb87f` für „entsperrt/sicher" und
+   `--danger`). Neue Farben werden nicht erfunden.
 2. **Titelleiste in App-Farbe, nie weiss.** Für **jedes** Fenster werden die
    DWM-Attribute gesetzt (`DWMWA_USE_IMMERSIVE_DARK_MODE`, `DWMWA_CAPTION_COLOR`
    = `--surface`, `DWMWA_TEXT_COLOR`), dazu der 6px-Streifen in Titelleistenfarbe
@@ -835,7 +838,8 @@ dazukommt. Verbindlich sind vier Punkte:
    CSS-Regeln der App. WinForms kann das nicht von Haus aus, die Bausteine
    zeichnen ihre Pille daher selbst (GDI+, kantengeglättet).
 4. **Eine Umsetzung: `Code/wintheme.py`.** Dort liegen Tokens, DWM-Titelleiste,
-   Hintergrund-/Rasterzeichnung, Pillen-Knopf, Pillen-Eingabe, Textlink und das
+   Hintergrund-/Rasterzeichnung, Pillen-Knopf, Pillen-Eingabe, Textlink, die
+   gezeichneten Zeichen (Schloss samt Aufklapp-Zustand für N11.22, Power) und das
    Hinweisfenster; `main.py` und `lockwindow.py` benutzen sie, niemand baut eine
    zweite native Optik daneben.
 
@@ -1071,12 +1075,15 @@ Sequenz aus B.8.5, N11.11).
 Vor der Listen-Ansicht liegt eine kurze Willkommens-Blende (Nutzerwunsch 2026-07-25: die
 App soll nicht abrupt „da" sein). Verbindlich daran:
 
-- **Wann.** Bei **jedem** Weg in die entsperrte App: nach einem erfolgreichen
-  `create_vault()` (Onboarding-Schritt 3), bei **jedem normalen Start** und nach **jedem
-  Entsperren**. Die letzten beiden sind derselbe Code-Weg: nach dem Unlock im nativen
-  Lock-Fenster baut `main.py` das WebView neu auf, der Boot läuft erneut und liefert
-  `get_boot_state() = 'unlocked'`. **Nicht** im Lock-Screen, **nicht** im
-  Fehlerbildschirm (N6) und **nicht** im Onboarding selbst.
+- **Wann.** Nach einem erfolgreichen `create_vault()` (Onboarding-Schritt 3) und bei
+  **jedem normalen Programmstart**. **Nicht** nach dem Entsperren aus einer laufenden
+  Sitzung (Änderung 2026-08-08, N11.22): dort gibt das aufgehende Schloss im nativen
+  Sperrfenster die Rückmeldung, eine zweite Begrüssung wäre eine Wiederholung. Start und
+  Entsperren sind derselbe Code-Weg (nach dem Unlock im nativen Lock-Fenster baut
+  `main.py` das WebView neu auf, der Boot läuft erneut und liefert
+  `get_boot_state() = 'unlocked'`), deshalb **muss** die Boot-Antwort die beiden Fälle
+  unterscheiden: `get_boot_state()` führt dafür das Feld `resumed` (siehe B.2). **Nicht**
+  im Lock-Screen, **nicht** im Fehlerbildschirm (N6) und **nicht** im Onboarding selbst.
 - **Was.** Die Logo-Marke (Kreisring + „N") glimmt gedämpft im **Hintergrund**: Der Ring
   zeichnet sich einmal rundherum, ein Lichtwisch läuft darüber (Akzentfarbe, deutlich
   unter voller Deckkraft, damit der Text lesbar bleibt), dazu ein weicher Akzent-Schein.
@@ -1084,9 +1091,9 @@ App soll nicht abrupt „da" sein). Verbindlich daran:
   der Marke** stehend.
 - **Unterzeile nur nach dem Anlegen.** Die ehrliche Zeile „Your vault is ready.
   Everything stays on this PC." gehört zum Onboarding-Abschluss, wo sie die eigentliche
-  Nachricht ist. Beim **normalen Start und nach dem Entsperren steht allein der Gruss**
-  (Nutzerwunsch 2026-07-25); dadurch sitzt er dort exakt im Mittelpunkt des Logos.
-- **Wie lange.** Rund **3 Sekunden** Standzeit bei Start und Entsperren; **nach dem
+  Nachricht ist. Beim **normalen Start steht allein der Gruss** (Nutzerwunsch
+  2026-07-25); dadurch sitzt er dort exakt im Mittelpunkt des Logos.
+- **Wie lange.** Rund **3 Sekunden** Standzeit beim normalen Start; **nach dem
   Anlegen rund 5 Sekunden**, weil die Unterzeile dort erst nach etwa 2,6 s vollständig
   steht und danach noch in Ruhe lesbar sein soll. Danach blendet der ganze Schirm in etwa
   einer halben Sekunde auf die darunter **schon fertig gerenderte** App ab (kein zweiter
@@ -1150,6 +1157,17 @@ Eingabefeld mit folgenden **Pflicht-Eigenschaften**:
   Schloss-Zeichen aus Anhang 4, Titelzeile, **Pillen**-Passwortfeld mit Show/Hide,
   Akzent-Pille „Unlock", Off-Knopf oben rechts (N10.2) und der Reset-Einstieg als
   Fusszeile (N11.3). Bausteine und Grenzen: B.3, „Das Design gilt auch nativ".
+- **Das Schloss geht auf (verbindlich, Etikett N11.22, 2026-08-08).** Eine richtige
+  Passphrase schliesst das Fenster **nicht** wortlos: der Ring wechselt von der
+  Akzent- in die Sicher-Farbe (`--secure`), der Bügel des Schloss-Zeichens klappt um
+  sein rechtes Standbein nach oben weg, der Ring gibt einen kleinen Pulsschlag, die
+  Titelzeile sagt „Unlocked", und alles andere (Passwortfeld, Unlock-Pille, Off-Knopf,
+  Reset-Fusszeile) wird ausgeblendet. Verbindlich daran: **kurz** (rund 0,6 Sekunden,
+  danach schliesst das Fenster von selbst und die App baut sich auf), **nur bei Erfolg**
+  (jeder Fehlerfall bleibt bei der neutralen Meldung aus N6) und **rein
+  präsentationsbezogen** (der Tresor ist zu diesem Zeitpunkt schon offen, es wartet
+  nichts auf die Animation). Sie ersetzt die Willkommens-Blende beim Entsperren
+  (N11.20): die Rückmeldung steht dort, wo die Passphrase eingegeben wurde.
 
 #### Entsperr-/Boot-Fehlerbildschirm (Etikett N6, UX 6.3, Phase 8) [Sec]
 
@@ -1304,7 +1322,12 @@ immer `floating`). Bei `theme=auto` folgt die App live dem Windows-Hell/Dunkel-Z
 (ereignisbasiert), `Ctrl+J` setzt einen manuellen Override, bis wieder `auto` gewählt
 wird.
 
-**Detail-Festlegungen zu Theme und Ton (Etikett N11.6, U16-Entscheid 2026-07-15; wortgleich umgezogen in Umbau-Etappe 3; Register: Anhang 1):**
+**Detail-Festlegungen zu Theme und Ton (Etikett N11.6, U16-Entscheid 2026-07-15; wortgleich umgezogen in Umbau-Etappe 3; Register: Anhang 1). Gebaut 2026-08-08**, Umsetzung: `backend/ostheme.py` (Registry-Beobachter auf
+`HKCU\Software\Microsoft\Windows\CurrentVersion\Themes\Personalize\AppsUseLightTheme`,
+ereignisbasiert per `RegNotifyChangeKeyValue` plus 60-s-Gegenpruefung im selben Wait),
+`Api._effective_dark()` als die eine Aufloesung fuer Frontend und native Titelleiste,
+`effectiveTheme()`/`onSystemTheme` in `app.js`, Migration der Bestands-Tresore in
+`db._migrate_settings()`:
 
 - **Theme folgt automatisch Windows** (hell/dunkel), mit **sofortiger** Reaktion auf die
   Windows-Theme-Aenderung (ereignisbasiert ueber `WM_SETTINGCHANGE` bzw. den Registry-
@@ -1325,6 +1348,14 @@ wird.
 
   Der Settings-Key `dark` wird dazu durch `theme` mit den Werten
   `auto`|`light`|`dark` ersetzt (Default `auto`); in die G20-Whitelist aufnehmen.
+  **Migration der Bestands-Tresore (festgelegt beim Bau, 2026-08-08, Register N11.23):** ein
+  vorhandener `dark`-Wert wird **nicht** auf ein festes Theme abgebildet, sondern
+  jeder Tresor ohne `theme`-Zeile bekommt einmalig `theme = auto`; die Zeilen
+  `dark` und `toolbar` werden dabei geloescht (`db._migrate_settings()`, laeuft
+  beim Oeffnen). Grund: ein aus `dark=true` abgeleitetes festes Dunkel wuerde
+  genau das Feature aushebeln, das die Migration einfuehrt (der Nutzer kaeme nie
+  in den Automatik-Zustand, ohne ihn von Hand zu waehlen). Beide Alt-Keys sind
+  aus der G20-Whitelist entfernt, ein Schreibversuch liefert `invalid`.
 
 - **Erledigt-Ton abschaltbar.** Der synthetisierte Blip beim Abhaken bleibt Default an,
   ist aber in den Einstellungen abschaltbar. Neuer Settings-Key `sound` (bool, Default
@@ -3189,8 +3220,10 @@ u.a. wurde der G12-DevTools-Prüfweg mit dieser Abnahme verifiziert.)*
 > N11-Features):** N11.5 echter Windows-Flugmodus ist inzwischen gebaut (erledigt
 > 2026-07-21, `backend/radio.py`: `set_online` schaltet ueber die WinRT-Radio-APIs die
 > echten Funkgeraete, `teardown` Schritt 10 stellt den Ausgangszustand real wieder her);
-> offen bleibt N11.6 Theme-folgt-Windows + Ton-UI (heute noch das
-> `dark`-Setting; `sound`/`autoLock` sind in der Whitelist, `autoLock` hat schon UI).
+> N11.6 Theme-folgt-Windows + Ton-UI ist ebenfalls gebaut (erledigt 2026-08-08,
+> `backend/ostheme.py`: `theme` = `auto|light|dark` ersetzt das frühere `dark`-Setting,
+> `Ctrl+J` setzt den Override nach U16, das Appearance-Segment führt zurück nach `auto`,
+> der Erledigt-Ton hat seinen Schalter; `autoLock` hatte schon UI).
 > Kleine offene UX-Ergänzungen: BitLocker-Empfehlung und der SSD-Restgrenzen-Einmalhinweis
 > in der Setup-UI (die realen Werte/Löschungen dahinter existieren). Real verifiziert
 > (echte GUI + CDP/UIA + `tools/verify_crypto.py`): Onboarding -> `create_vault` ->
@@ -3978,7 +4011,9 @@ liegen durchgestrichen in Anhang 3, Umbau-Etappe 5.)
 | N11.18 / U3-Ergebnis | 2026-07-21 | Zweitprofil-Spike ausgefuehrt (`Code/tools/spike_u3_lockwindow.py`): kein Zwei-Profil-Beweis moeglich, **nativer Lock-Fenster-Fallback verbindlich** (kein `LOCK_PROFILE_DIR`); WebView-Abbau/Neuaufbau im selben Prozess samt G14-Wischbarkeit bewiesen; `setup_app()`-Vorbedingung dokumentiert; G6-Nebenbefund: `sqlcipher3` ohne `serialize` -> N11.9-Arbeitsdatei-Fallback (Schnappschuss via `VACUUM INTO`) verbindlich | Phase 8 (Spike-Ergebnis) |
 | N11.19 | 2026-07-25 | Sidebar-Startbreite von 256 auf **300 px** angehoben (Nutzerwunsch, reine Optik). Gilt nur als Erststart-Default: `_DEFAULT_SETTINGS` in `db.py` schreibt `sidebarWidth = "300"` einmalig in einen frisch angelegten Tresor, ein bereits gespeicherter Nutzerwert bleibt unangetastet. Frontend haelt denselben Wert als `SIDEBAR_WIDTH_DEFAULT` (Rueckfall, wenn kein/ein unplausibler Wert gespeichert ist), CSS als `var(--sidebar-width, 300px)`. Spanne 180 bis 520 unveraendert (G20/V5) | B.6 (+ B.4 Layout-Schema) |
 | N11.20 | 2026-07-25 | **Willkommens-Schirm vor der entsperrten App** (Nutzerwunsch; noch am selben Tag vom urspruenglichen „nur nach dem Anlegen" auf **jeden** Weg hinein erweitert): laeuft nach erfolgreichem `create_vault()` **und bei jedem normalen Start und jedem Entsperren** (beides derselbe Weg: Boot-Zustand `unlocked`), Logo-Marke glimmt gedaempft im Hintergrund (Ring zeichnet sich, Lichtwisch, Akzent-Schein), Gruss „Welcome to NoaToDo" zeichenweise (Unterzeile „Your vault is ready…" nur nach dem Anlegen; bei Start/Entsperren steht der Gruss allein und damit mittig im Logo), ca. 3 s Standzeit (nach dem Anlegen ca. 5 s, damit die Unterzeile lesbar bleibt), dann Abblenden auf die darunter schon fertig gerenderte App; per Klick/Taste ueberspringbar, haelt nichts auf (Auto-Sperr-Timer laeuft weiter), wird beim Sperren/Panik sofort verworfen, kein Nutzerinhalt, Marke als Inline-SVG (keine CSP-Ausnahme) | B.4 (Onboarding-Kapitel) |
+| N11.23 | 2026-08-08 | **Migrationsweg beim Bau von N11.6:** ein vorhandener `dark`-Wert wird NICHT auf ein festes Theme abgebildet; jeder Bestands-Tresor ohne `theme`-Zeile bekommt einmalig `theme = auto`, die Zeilen `dark` und `toolbar` werden geloescht (`db._migrate_settings()`, laeuft beim Oeffnen). Sonst kaeme ein Bestandsnutzer nie in den Automatik-Zustand, ohne ihn von Hand zu waehlen, und die Migration wuerde genau das Feature aushebeln, das sie einfuehrt. Beide Alt-Keys sind aus der G20-Whitelist entfernt (Schreibversuch -> `invalid`) | B.6 (+ G20 Whitelist) |
 | N11.21 | 2026-07-25 | **Das Design gilt auch nativ** (Nutzerwunsch): kein Fenster der App darf nach Windows aussehen. Titelleiste jedes Fensters per DWM in `--surface` (nie weiss), native Fenster mit denselben Dark-Tokens, Hintergrund samt 28px-Raster und Pillenformen statt eckiger Standard-Steuerelemente; eine Umsetzung in `Code/wintheme.py` (auch `main.py` faerbt seine Titelleiste darueber), Zweitinstanz-Meldung (G19) statt MessageBox als Hinweisfenster im App-Design. Das native Sperrfenster (N11.18) startet **maximiert** und zeigt den entworfenen Sperrschirm (Ring + Schloss, Pillen-Passwortfeld, Akzent-Pille, Off-Knopf, Reset-Fusszeile). Ehrliche Grenzen: Windows-Systemdialoge (Datei/Ordner) bleiben Windows, Fensterknoepfe zeichnet Windows, native Fenster nutzen `system-ui` (woff2 laedt GDI+ nicht) und sind immer dunkel (Theme liegt im geschlossenen Tresor) | B.3 (+ B.4 N4-Ergaenzung) |
+| N11.22 | 2026-08-08 | **Entsperren zeigt das aufgehende Schloss statt der Willkommens-Blende** (Nutzerwunsch): eine richtige Passphrase faerbt den Ring im nativen Sperrfenster von der Akzent- in die Sicher-Farbe, klappt den Buegel des Schloss-Zeichens auf und schliesst das Fenster nach rund 0,6 s; die Willkommens-Blende (N11.20) laeuft dafuer nur noch beim echten Programmstart und nach dem Anlegen des Tresors. `get_boot_state()` bekommt dafuer das Feld `resumed` (Start vs. Rueckkehr aus der Sperre) | B.4 (Sperrschirm + Onboarding-Kapitel) + B.2 (`get_boot_state`) |
 
 
 
@@ -4377,10 +4412,12 @@ Icon verwenden.
 
 ## Schnell-Checkliste (für die ausführende KI)
 
-*(Stand 2026-07-21: Phasen 0 bis 8 sind abgeschlossen, die App laeuft lokal mit echter
-Doppel-Verschluesselung, Onboarding, Sperre/Entsperre, Auto-Sperre, Killswitch/Reset. Der
-echte Flugmodus (N11.5) ist ebenfalls gebaut. Es fehlt nur noch Phase 9 (Build/Packaging)
-sowie das eigenstaendige N11-Feature N11.6 (Theme-folgt-Windows + Ton-UI). Die Haken fuer 0 bis 5
+*(Stand 2026-08-08: Phasen 0 bis 8 sind abgeschlossen, die App laeuft lokal mit echter
+Doppel-Verschluesselung, Onboarding, Sperre/Entsperre, Auto-Sperre, Killswitch/Reset. Die
+eigenstaendigen N11-Features sind gebaut: echter Flugmodus (N11.5, 2026-07-21) und
+Theme-folgt-Windows + Ton-UI (N11.6, 2026-08-08). Es fehlt nur noch Phase 9
+(Build/Packaging); offen bleiben dort ausserdem die zwei kleinen UX-Ergaenzungen aus
+G31/G33 (BitLocker-Empfehlung, SSD-Restgrenzen-Hinweis in der Setup-UI). Die Haken fuer 0 bis 5
 wurden am 2026-07-13 nachgetragen. Pflege-Regel: Diese Liste wird bei **jedem**
 Phasenabschluss sofort mit Datum abgehakt. Ein offener Haken bei einer laengst fertigen
 Phase ist eine Einladung, von vorne zu bauen.)*
@@ -4395,7 +4432,7 @@ Phase ist eine Einladung, von vorne zu bauen.)*
 - [x] Phase 6.5, UX-Nacharbeiten (Inline-Edit, Task-Löschen, Task-Auswahl, gehärtete Einzel-Task-Kopie ✅G23, Strg+C entfernt, Mini-on-top, Screenshot-Schutz ❌G26 verworfen); Rest-Pflichten in 7 verplant
 - [x] Phase 7, zweistufiger Export (nur md/txt, N11.2) + Undo (nur Listen-Löschen) + `move_task`/`reorder_lists` **+ 🔒 G20 (lokale Eingabe-Validierung), G21 (Export-Härtung + Save-Dialog), G22 (ehrlicher Status), G29 (Fehler-Hygiene + Fehlercode-Katalog B.2 + Logging-Politik, N11.12), G12 vorgezogen: alle ✅** (erledigt 2026-07-17; G23 schon 2026-06-10)
 - [x] 🔒 G30 (Doku, **vor** Phase 8): Bedrohungsmodell **B.10** gelesen und beim Bauen zugrunde gelegt (Angreiferklassen K1-K6, Nicht-Ziele, Voraussetzungen; Abschnitt ergänzt 2026-07-13 aus Plananalyse S4). Jedes neue Gate trägt seine Klasse in B.10.6 nach (gelesen 2026-07-21 als erster Handgriff der Phase 8)
-- [x] Phase 8, Lock / Emergency / Doppel-Kaskade AES-256 + ChaCha20 (B.7) **+ 🔒 G6 (In-Memory-DB, N11.18-Ausnahme: verschlüsselte Arbeitsdatei per Fallback, da `sqlcipher3` kein `serialize` bietet), G7 (Hex-Raw-Key), G8 (Argon2id-Kosten; Passphrase nur Mindestlänge 12, kein Stärkemesser, N11.3), 🔴 G9 (`DEV_AES_KEY` entfernt), 🔴 G13 (Lock serverseitig als Allowlist), G14 (PROFILE_DIR sicher gewischt bei lock/autolock/panic/quit inkl. Fenster-X, verwaiste `msedgewebview2.exe` beendet), G15 (HKDF/kein Hash), G16 (.enc-Format), G17 (Write-back), G18 (DPAPI-Pepper), G19-Rest (V3: Mutex auf `Global\NoaToDo-<SID>`), G25 (RAM-Hygiene), G28 (Verschlüsselungs-Beweis, `tools/verify_crypto.py`), G31 (BitLocker-Status, `VirtualLock`), G32 (Tresor-Ort + Cloud-Warnung), G33 (Dev-Altdaten entsorgt), 🔴 G35 (eine `teardown(reason)`-Sequenz): alle ✅** (erledigt 2026-07-21). **Eigene N11-Features:** N11.5 echter Windows-Flugmodus ist gebaut (erledigt 2026-07-21, `backend/radio.py` ueber die WinRT-Radio-APIs; `teardown` Schritt 10 stellt real wieder her). **Offen:** N11.6 Theme-folgt-Windows + Ton-UI (heute noch `dark`-Setting; `sound`/`autoLock` sind schon in der Whitelist, `autoLock` hat UI). **Native Lock-Fenster-Entscheidung (Spike N11.18):** kein Zwei-Profil-WebView, natives WinForms-Lock-Fenster ohne `LOCK_PROFILE_DIR`
+- [x] Phase 8, Lock / Emergency / Doppel-Kaskade AES-256 + ChaCha20 (B.7) **+ 🔒 G6 (In-Memory-DB, N11.18-Ausnahme: verschlüsselte Arbeitsdatei per Fallback, da `sqlcipher3` kein `serialize` bietet), G7 (Hex-Raw-Key), G8 (Argon2id-Kosten; Passphrase nur Mindestlänge 12, kein Stärkemesser, N11.3), 🔴 G9 (`DEV_AES_KEY` entfernt), 🔴 G13 (Lock serverseitig als Allowlist), G14 (PROFILE_DIR sicher gewischt bei lock/autolock/panic/quit inkl. Fenster-X, verwaiste `msedgewebview2.exe` beendet), G15 (HKDF/kein Hash), G16 (.enc-Format), G17 (Write-back), G18 (DPAPI-Pepper), G19-Rest (V3: Mutex auf `Global\NoaToDo-<SID>`), G25 (RAM-Hygiene), G28 (Verschlüsselungs-Beweis, `tools/verify_crypto.py`), G31 (BitLocker-Status, `VirtualLock`), G32 (Tresor-Ort + Cloud-Warnung), G33 (Dev-Altdaten entsorgt), 🔴 G35 (eine `teardown(reason)`-Sequenz): alle ✅** (erledigt 2026-07-21). **Eigene N11-Features:** N11.5 echter Windows-Flugmodus ist gebaut (erledigt 2026-07-21, `backend/radio.py` ueber die WinRT-Radio-APIs; `teardown` Schritt 10 stellt real wieder her). N11.6 Theme-folgt-Windows + Ton-UI ist gebaut (erledigt 2026-08-08, `backend/ostheme.py`: `theme` = `auto|light|dark` loest `dark` ab, Registry-Beobachter ereignisbasiert + 60-s-Gegenpruefung, `Ctrl+J`-Override nach U16, Appearance-Segment `Auto|Light|Dark`, Schalter fuer den Erledigt-Ton; die native Titelleiste folgt dem effektiven Theme mit). **Native Lock-Fenster-Entscheidung (Spike N11.18):** kein Zwei-Profil-WebView, natives WinForms-Lock-Fenster ohne `LOCK_PROFILE_DIR`
 - [ ] Phase 9, Auslieferung + Tests + Build (portable `NoaToDo.exe`, PyInstaller/Nuitka, WebView2-Runtime, Erststart auf fremdem Rechner) **+ 🔒 G27 (Binary-Härtung + Frontend-Integritäts-Manifest, A5 2026-07-15), G34 (Release-Härtung: `NOATODO_DEBUG` wirkungslos, DevTools/Accelerator-Keys/Kontextmenü aus; Sofort-Teil `text_select=False` mit Termin 2026-07-20; A4/A6, 2026-07-15), G11 (Hash-gepinnter Build), G29-Buildprüfung (kein Debug-Modus, kein Logfile, N11.12.2)**
 - [ ] UX-Nachtrag 2026-06-13 (Normen in den Verträgen; Protokoll: Anhang 1, Historie: Anhang 3): N2 Offline-Statuspille, N4 Lock-Screen-Passphrase-UX (8), N5 Panik nur per Maus, kein Hotkey (Entscheid 2026-07-13), N6 Entsperr-Fehlerbildschirm (8), N7 move_task/reorder_lists (Phase 7; clear_completed gestrichen), N8 Roadmap (D.3), N9 Fenster startet maximiert (N11.6), N10 verstärkter Lock + Off-Knopf + Killswitch (UI ✅ 2026-07-08, Sicherheits-Rest Phase 8), N11 Lücken-Klärung 2026-07-09 (verbindlich), N11.10 Sperre schaltet nicht mehr offline (2026-07-13, W1-Entscheid), N11.11 gemeinsame Sperr-/Beenden-Sequenz + Gate G35 (2026-07-13, S5-Entscheid), N11.12 Fehler-Hygiene + Fehlercode-Katalog + Logging-Politik + Gate G29 (2026-07-13, S6-Entscheid), N11.14 Triage des UX/UI-Audits (2026-07-13, S7-Entscheid; **die Triage-Tabelle ist der Status des Audits, nicht das Audit-Dokument**), N11.13 Onboarding-/Tresor-Bridge + dreiwertiger Boot-Zustand + Onboarding-Screens (2026-07-13, U1-Entscheid)
 

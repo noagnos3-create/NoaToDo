@@ -503,11 +503,15 @@ def _frontend_stamp() -> str:
 
 
 def _current_dark(api: Api) -> bool:
-    """Aktuelles Dark-Setting (Titelleisten-Theme); Default dark, wenn keine
-    entsperrte DB da ist (Onboarding hat noch keinen Tresor)."""
+    """Das EFFEKTIV angezeigte Theme fuer die Titelleiste (N11.6).
+
+    Seit N11.6 entscheidet nicht mehr ein Bool-Setting, sondern
+    ``theme = auto|light|dark``; bei ``auto`` zaehlt der Windows-Zustand. Die
+    Aufloesung liegt in ``Api._effective_dark()`` (eine Quelle fuer Frontend
+    und Titelleiste). Ohne entsperrten Tresor bleibt es bei Dunkel.
+    """
     try:
-        raw = api.db.get_setting("dark")
-        return str(raw).lower() != "false" if raw is not None else True
+        return api._effective_dark()
     except Exception:
         return True
 
@@ -722,11 +726,21 @@ def run_webview(api: Api, icon: str) -> None:
         _run_on_ui_thread(window, _startup_window_setup)
 
         def _on_setting_change(key: str, value) -> None:
-            if key == "dark":
-                dark = str(value).lower() not in ("false", "0", "")
-                _run_on_ui_thread(window, lambda: _apply_titlebar_theme(_get_hwnd(window), dark))
+            # N11.6: der gespeicherte Wert ist `auto|light|dark`; die Titelleiste
+            # braucht das daraus aufgeloeste EFFEKTIVE Theme.
+            if key == "theme":
+                _run_on_ui_thread(
+                    window, lambda: _apply_titlebar_theme(_get_hwnd(window), _current_dark(api)))
 
         api._on_setting_change = _on_setting_change
+
+        # N11.6: Windows hat hell/dunkel gewechselt und `theme=auto` steht.
+        # Der Callback kommt aus dem Beobachter-Thread, also ueber den
+        # UI-Thread marshallen (WinForms-Regel, CLAUDE.md).
+        def _on_theme_change(dark: bool) -> None:
+            _run_on_ui_thread(window, lambda: _apply_titlebar_theme(_get_hwnd(window), dark))
+
+        api._on_theme_change = _on_theme_change
 
         def _on_frame_changed(mini: bool) -> None:
             def _frame_setup():
@@ -753,6 +767,9 @@ def run_webview(api: Api, icon: str) -> None:
         storage_path=PROFILE_DIR,
     )
     api._window = None
+    # Das Fenster ist weg: den Titelleisten-Callback loesen, damit ein spaeteres
+    # Windows-Theme-Ereignis nicht auf ein totes Fenster zeigt (N11.6).
+    api._on_theme_change = None
 
 
 def main() -> None:
@@ -831,6 +848,7 @@ def main() -> None:
                     _finish_native_teardown()
                     api._boot_state = "onboarding"
                     api.locked = False
+                    api._resumed = False   # Reset: es beginnt wieder von vorn
                     continue
                 # res == "unlocked": Tresor offen, weiter zum WebView-Fenster.
                 api.locked = False
@@ -847,11 +865,17 @@ def main() -> None:
                 api.locked = True
                 api._boot_state = "locked"
                 api._boot_reason = None
+                # Ab jetzt ist jedes Entsperren eine Rueckkehr in eine laufende
+                # Sitzung, kein Programmstart: das Frontend laesst dann die
+                # Willkommens-Blende weg (N11.22), die Rueckmeldung gibt das
+                # aufgehende Schloss im nativen Sperrfenster.
+                api._resumed = True
                 session.next_state = "exit"   # bis zum naechsten teardown
                 continue
             if ns == "onboarding":
                 api.locked = False
                 api._boot_state = "onboarding"
+                api._resumed = False
                 session.next_state = "exit"
                 continue
             # Kein teardown gelaufen (unerwartet): sicherheitshalber beenden.

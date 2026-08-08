@@ -24,6 +24,7 @@ from typing import Any, Callable
 
 from . import config as config_module
 from . import db as db_module
+from . import ostheme as ostheme_module
 from . import radio as radio_module
 from . import security as security_module
 
@@ -154,14 +155,14 @@ def v_task_fields(value: Any) -> dict[str, Any]:
 # Whitelist + Wert-Schema fuer set_setting (G20 c/d, V5, N11.7). Die sechs
 # Akzent-Hexwerte sind die festen Presets aus B.3/B.6: der Wert landet als
 # CSS-Variable im DOM, die Whitelist toetet CSS-Injection ueber Settings.
-# `dark` bleibt uebergangsweise erlaubt, bis N11.6 es durch `theme` ersetzt
-# (das heutige Frontend schaltet noch ueber `dark` um); `theme`/`sound`/
-# `autoLock` sind schon jetzt validiert, damit die Whitelist mit N11.6/N11.7
-# nicht erneut angefasst werden muss.
+# Seit N11.6 (2026-08-08) ist `dark` ersatzlos durch `theme` ersetzt und
+# `toolbar` entfallen; beide sind aus der Whitelist raus und werden von
+# `db._migrate_settings()` aus Bestands-Tresoren entfernt. Ein Frontend, das
+# noch `dark` schreiben wollte, bekommt jetzt `invalid` (gewollt: die
+# Whitelist ist die eine Wahrheit, kein stiller Alt-Pfad).
 ACCENT_PRESETS = ("#d97757", "#c75d3a", "#5a9d6b", "#4a86c5", "#d4a23c", "#a66a9c")
 SETTINGS_SCHEMA: dict[str, tuple] = {
     "accent": ("enum", ACCENT_PRESETS),
-    "dark": ("bool",),  # uebergangsweise, faellt mit N11.6 zugunsten von theme
     "theme": ("enum", ("auto", "light", "dark")),
     "density": ("enum", ("comfortable", "compact")),
     "sidebar": ("enum", ("open", "closed")),
@@ -390,7 +391,7 @@ def bridge(fn: Callable | None = None, *, schema: dict[str, Callable] | None = N
 
 
 # Typumwandlung beim Lesen der settings-Tabelle (dort liegt alles als String).
-_BOOL_SETTINGS = {"dark", "exportDone", "sound"}
+_BOOL_SETTINGS = {"exportDone", "sound"}
 
 
 def _typed_settings(raw: dict[str, str]) -> dict[str, Any]:
@@ -427,6 +428,13 @@ class Api:
         self._boot_state = "onboarding"
         self._boot_reason = None   # bei vault_error: config_damaged|vault_unreachable
         self._vault_path = None    # Pfad aus config.json (None = Onboarding)
+        # True, sobald die laufende Sitzung schon einmal gesperrt war (Sperr-
+        # knopf/Ctrl+L/Auto-Sperre) und danach wieder entsperrt wurde. main.py
+        # setzt es in der Boot-Schleife; get_boot_state() gibt es als 'resumed'
+        # weiter, damit das Frontend beim Entsperren die Willkommens-Blende
+        # weglaesst (N11.22: dort hat das native Sperrfenster die Rueckmeldung
+        # schon gegeben). Ein echter Programmstart laesst es auf False.
+        self._resumed = False
         # Entsperr-Rate-Limit-Leiter (B.8.4/N11.4.1), persistiert in config.json.
         self._rate = security_module.RateLimiter(self._load_config, self._save_config)
         # Unterstrich-Präfix ist Pflicht: PyWebView durchsucht das Api-Objekt
@@ -447,6 +455,11 @@ class Api:
         self._teardown_in_progress = False
         self._mini = False        # kompakter Mini-Fenster-Modus aktiv?
         self._on_setting_change = None  # optionaler Callback(key, value) für main.py
+        # N11.6: Beobachter des Windows-Hell/Dunkel-Zustands (nur bei
+        # theme=auto wirksam) plus der Callback, mit dem main.py die
+        # Titelleiste dem EFFEKTIVEN Theme nachzieht.
+        self._theme_watcher = None
+        self._on_theme_change = None    # optionaler Callback(dark: bool)
         self._on_frame_changed = None  # Callback(mini) nach jedem Mini-Modus-Wechsel
         self._clip_timer = None   # Timer für das Auto-Leeren der Zwischenablage
         # Höchstens EIN nativer Dialog gleichzeitig (N11.11.5): alle
@@ -540,11 +553,18 @@ class Api:
         # dass ein einziger JS-Aufruf gesperrt keine Daten liefert.
         if self.locked:
             return {"locked": True}
+        # N11.6: der Windows-Hell/Dunkel-Zustand faehrt im selben Aufruf mit,
+        # damit `theme=auto` schon beim ERSTEN Rendern richtig steht (kein
+        # Nachziehen, B.6) und kein zusaetzlicher Bridge-Aufruf noetig ist.
+        # 'unknown' ist ehrlich: dann behaelt das Frontend sein Theme.
+        self._ensure_theme_mirror()
+        os_dark = ostheme_module.read_os_dark()
         return {
             "lists": self._db.get_lists_with_tasks(),
             "settings": _typed_settings(self._db.get_all_settings()),
             "online": self.online,
             "locked": self.locked,
+            "system_theme": "unknown" if os_dark is None else ("dark" if os_dark else "light"),
         }
 
     @bridge
@@ -561,7 +581,11 @@ class Api:
             state = "unlocked"
         else:
             state = self._boot_state
-        out = {"state": state, "vault_path": self._vault_path}
+        out = {"state": state, "vault_path": self._vault_path,
+               # N11.22: 'unlocked nach einer Sperre' statt 'unlocked beim
+               # Start'. Rein praesentationsbezogen (Willkommens-Blende ja/nein),
+               # verraet nichts ueber den Inhalt.
+               "resumed": bool(self._resumed)}
         if state == "vault_error" and self._boot_reason:
             out["reason"] = self._boot_reason
         return out
@@ -1110,6 +1134,71 @@ class Api:
             self._window.evaluate_js(
                 "window.noa && window.noa.onNetChange && window.noa.onNetChange(%s);0"
                 % ("true" if online else "false"))
+        except Exception:
+            pass
+
+    # =====================================================================
+    # Theme folgt Windows (N11.6, B.6)
+    # =====================================================================
+    def _theme_setting(self) -> str:
+        """Der gespeicherte ``theme``-Wert (``auto``|``light``|``dark``).
+
+        Ohne entsperrte DB (Onboarding, gesperrt) gilt ``auto``: das native
+        Lock-Fenster ist zwar per N11.21 immer dunkel, aber die Titelleiste des
+        WebView-Fensters soll auch vor dem ersten Tresor dem System folgen.
+        """
+        try:
+            raw = self._db.get_setting("theme")
+        except Exception:
+            return "auto"
+        value = str(raw).lower() if raw is not None else "auto"
+        return value if value in ("auto", "light", "dark") else "auto"
+
+    def _effective_dark(self) -> bool:
+        """Das TATSAECHLICH angezeigte Theme als Bool (dunkel = ``True``).
+
+        Kein Bridge-Name (fuehrender ``_``): die Methode ist Innenverdrahtung
+        fuer main.py (Titelleiste) und darf nicht als JS-Methode auftauchen, wo
+        sie an der G13-Allowlist vorbeilaufen wuerde.
+        """
+        setting = self._theme_setting()
+        if setting == "dark":
+            return True
+        if setting == "light":
+            return False
+        os_dark = ostheme_module.read_os_dark()
+        # Unlesbar: beim App-Default Dunkel bleiben, nie eine Umschaltung raten.
+        return True if os_dark is None else os_dark
+
+    def _ensure_theme_mirror(self) -> None:
+        """Startet den Windows-Theme-Beobachter. Idempotent (N11.6)."""
+        if self._theme_watcher is not None:
+            return
+        watcher = ostheme_module.ThemeWatcher(self._on_os_theme_change)
+        self._theme_watcher = watcher
+        watcher.start()
+
+    def _on_os_theme_change(self, os_dark: bool) -> None:
+        """Callback aus dem Beobachter-Thread: Windows hat hell/dunkel gewechselt.
+
+        Wirkt nur bei ``theme=auto``; ein manueller Override (N11.6/U16) bleibt
+        stehen, bis der Nutzer im Appearance-Segment wieder ``Auto`` waehlt.
+        Der Titelleisten-Callback laeuft auch dann, wenn kein Fenster-DOM da
+        ist, denn main.py marshallt selbst auf den UI-Thread.
+        """
+        if self._theme_setting() != "auto":
+            return
+        if self._on_theme_change:
+            try:
+                self._on_theme_change(bool(os_dark))
+            except Exception:
+                pass
+        if self.locked or self._window is None:
+            return
+        try:
+            self._window.evaluate_js(
+                "window.noa && window.noa.onSystemTheme && window.noa.onSystemTheme(%s);0"
+                % ("true" if os_dark else "false"))
         except Exception:
             pass
 

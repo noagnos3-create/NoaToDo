@@ -73,6 +73,7 @@ TEXT_DIM      = "#a89a80"
 TEXT_FAINT    = "#73684f"
 ACCENT        = "#d97757"
 ACCENT_INK    = "#ffffff"
+SECURE        = "#6fb87f"   # style.css --secure (dark): "entsperrt / sicher"
 DANGER        = "#e0623e"
 
 #: Rasterabstand des App-Hintergrunds (style.css: 28px-Gitter).
@@ -103,6 +104,8 @@ ACCENT_LINE  = mix(ACCENT, BORDER, 0.45)
 ACCENT_HOVER = mix(ACCENT, "#000000", 0.88)   # style.css: .btn-primary:hover
 ACCENT_DOWN  = mix(ACCENT, "#000000", 0.78)
 ACCENT_GLOW  = mix(ACCENT, BG, 0.16)          # Schein um den Sperr-Ring
+SECURE_WASH  = mix(SECURE, SURFACE, 0.16)     # style.css --secure-wash (dark)
+SECURE_LINE  = mix(SECURE, BORDER, 0.45)
 DANGER_WASH  = mix(DANGER, SURFACE, 0.18)
 DANGER_LINE  = mix(DANGER, BORDER, 0.55)
 
@@ -385,8 +388,15 @@ def draw_glow(g, cx: float, cy: float, radius: float, color: str,
         pass
 
 
-def draw_lock_glyph(g, cx: float, cy: float, size: float, color: str) -> None:
-    """Das Schloss aus Icons.Lock (app.js), 24er-Raster, Strichstaerke 1.7."""
+def draw_lock_glyph(g, cx: float, cy: float, size: float, color: str,
+                    open_t: float = 0.0) -> None:
+    """Das Schloss aus Icons.Lock (app.js), 24er-Raster, Strichstaerke 1.7.
+
+    ``open_t`` (0..1) klappt den Buegel auf: er dreht sich um sein rechtes
+    Standbein nach oben/rechts weg und hebt sich dabei leicht an, wie bei einem
+    echten Vorhaengeschloss. 0 ist das geschlossene Zeichen (Vorgabe), 1 das
+    offene. Der Koerper und das Schluesselloch bleiben stehen.
+    """
     s = size / 24.0
     g.SmoothingMode = SmoothingMode.AntiAlias
     pen = Pen(col(color), max(1.2, 1.7 * s))
@@ -412,7 +422,20 @@ def draw_lock_glyph(g, cx: float, cy: float, size: float, color: str) -> None:
             shackle.AddLine(px(8), py(11), px(8), py(8))
             shackle.AddArc(px(8), py(4), 8 * s, 8 * s, 180.0, 180.0)
             shackle.AddLine(px(16), py(8), px(16), py(11))
-            g.DrawPath(pen, shackle)
+            saved = None
+            if open_t > 0.0:
+                # Drehpunkt ist der Fuss des rechten Standbeins (16, 11); GDI+
+                # dreht bei positiven Winkeln im Uhrzeigersinn (y zeigt nach
+                # unten), der Buegel schwingt also nach oben rechts weg.
+                saved = g.Save()
+                g.TranslateTransform(float(px(16)), float(py(11) - 1.8 * s * open_t))
+                g.RotateTransform(34.0 * float(open_t))
+                g.TranslateTransform(float(-px(16)), float(-py(11)))
+            try:
+                g.DrawPath(pen, shackle)
+            finally:
+                if saved is not None:
+                    g.Restore(saved)
         finally:
             shackle.Dispose()
         # Schluesselloch: Punkt bei (12, 15.5)
