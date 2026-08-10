@@ -1072,13 +1072,13 @@ input { font: inherit; }
 /* Nahtloser Fensterwechsel (N11.25): Der Ring steht hier an GENAU derselben
    Stelle wie im nativen Sperrfenster und in der Uebergabe-Blende, sonst
    springt er beim Wechsel. Die Zahl kommt aus lockwindow._ring_geometry():
-   Blockhoehe 388 = Ring 184 + Ringabstand 96 + Eingabe 46 + 6 + Caps 20 + 10 +
-   Status 26, oben verankert bei (100vh - 388)/2 - 20, also 50vh - 214px, und
+   Blockhoehe 382 = Ring 184 + Ringabstand 96 + Eingabe 40 + 6 + Caps 20 + 10 +
+   Status 26, oben verankert bei (100vh - 382)/2 - 20, also 50vh - 211px, und
    nie hoeher als 24px vom Rand. Wer eines der beiden Masse aendert, aendert
    das andere mit (lockwindow.py und diese Regel sind ein Paar). */
 .lock-card {
   position: absolute; left: 0; right: 0;
-  top: max(24px, calc(50vh - 214px));
+  top: max(24px, calc(50vh - 211px));
   text-align: center; display: flex; flex-direction: column; align-items: center;
 }
 .lock-ring { width: 184px; height: 184px; border-radius: 50%; display: grid; place-items: center; background: var(--accent-wash); border: 1px solid var(--accent-line); color: var(--accent); box-shadow: 0 18px 48px color-mix(in oklab, var(--accent) 22%, transparent); }
@@ -1086,35 +1086,17 @@ input { font: inherit; }
 /* Der Sperrschirm traegt keine Textzeile mehr (2026-08-08), die frueher hier
    stehende Regel .lock-card h2 ist damit weg. */
 
-/* Passwort-Eingabepille: gleiche Optik wie .dock-input, aber im Fluss statt
-   absolut positioniert. Sie ist von Anfang an die Eingabe (kein Aufklappen);
-   die Breite des Feldes setzt JS in ch, sie waechst also erst, wenn die
-   Eingabe laenger als die Grundpille wird. max-width deckelt das Wachstum. */
-.lock-input {
-  display: flex; align-items: center; gap: 10px;
-  padding: 11px 20px; border-radius: 999px;
-  background: color-mix(in oklab, var(--surface) 88%, transparent);
-  border: 1px solid var(--accent-line); box-shadow: var(--shadow-lg);
-  -webkit-backdrop-filter: blur(12px) saturate(1.25);
-  backdrop-filter: blur(12px) saturate(1.25);
-  max-width: 70vw;
-  transition: border-color .14s;
-}
-.lock-input:focus-within { border-color: var(--accent); }
-.lock-input input {
-  width: 9ch; max-width: 60vw; min-width: 0;
-  background: none; border: none; outline: none;
-  color: var(--text); font-size: 15px; font-weight: 500;
-  transition: width .12s ease;
-}
-.lock-input input::placeholder { color: var(--text-faint); }
-/* Solange der Platzhalter "Password" sichtbar ist, steht er mittig in der
-   Pille; sobald getippt wird, laeuft die Eingabe normal von links. */
-.lock-input input:placeholder-shown { text-align: center; }
-/* Keine Klarschrift-Anzeige des Passworts: das "Auge" von Edge/WebView2
-   (und das Loesch-X) am Passwortfeld ausblenden. */
-.lock-input input::-ms-reveal,
-.lock-input input::-ms-clear { display: none; }
+/* Keine Klarschrift-Anzeige einer Passphrase (2026-08-10, Nutzerwunsch): das
+   "Auge" von Edge/WebView2 (und das Loesch-X) ist ueberall aus, wo eine
+   BESTEHENDE Passphrase eingegeben wird. Genauso hat das native Sperrfenster
+   seinen Show/Hide-Knopf verloren. Einzige Ausnahme ist das erstmalige
+   Festlegen im Onboarding (Klasse pw-reveal): dort gibt es noch kein
+   Geheimnis, das aufgedeckt werden koennte, und ein Tippfehler in einer
+   Passphrase ohne Wiederherstellung kostet den ganzen Tresor (N11.3).
+   Die frueheren .lock-input-Regeln sind hier weg: das WebView-Cover zeigt seit
+   N11.18/2026-08-08 nur noch den Ring, ein Passwortfeld hat es nicht mehr. */
+input[type="password"]:not(.pw-reveal)::-ms-reveal,
+input[type="password"]::-ms-clear { display: none; }
 
 /* Off-Knopf oben rechts auf dem Sperrschirm (Nachtrag N10): beendet die App
    sofort ohne Passphrase (quit_app), loescht nie Daten. Dezenter Geist-Knopf,

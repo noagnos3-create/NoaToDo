@@ -632,7 +632,7 @@ class PillButton:
 
 
 class PillInput:
-    """Eingabepille wie ``.lock-input``: runder Rahmen, Text mittig.
+    """Eingabepille im App-Design: runder Rahmen, Text linksbuendig.
 
     Aussen ein selbst gezeichnetes Panel (die Pille), innen eine randlose
     TextBox in derselben Fuellfarbe; WinForms kann Eingabefelder nicht selbst
@@ -656,7 +656,11 @@ class PillInput:
         box.BackColor = col(SURFACE)
         box.ForeColor = col(TEXT)
         box.Font = font(font_size)
-        box.TextAlign = HorizontalAlignment.Center
+        # Links, nicht mittig (Nutzerwunsch 2026-08-10): geschrieben wird am
+        # linken Rand der Pille, und der Platzhalter steht an derselben Stelle
+        # wie das erste Zeichen (das Cue-Banner uebernimmt die Ausrichtung des
+        # Feldes), also springt beim Tippen nichts.
+        box.TextAlign = HorizontalAlignment.Left
         if password:
             box.UseSystemPasswordChar = True
         pad = int(round(22 * scale))

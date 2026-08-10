@@ -1102,7 +1102,8 @@ Gruppen durch Trenner:
 - **ShortcutsModal**, Raster aller Tastenkürzel (siehe B.5).
 - **LockScreen**, Vollbild über allem: Akzent-Ring mit Schloss und darunter die
   Passwort-Pille (Phase 8: echte Passphrase-Prüfung, siehe den N4-Abschnitt unten in
-  B.4). **Ohne Textzeilen** (N11.26, 2026-08-08). Oben rechts ein
+  B.4). **Ohne Textzeilen** (N11.26, 2026-08-08) und **ohne Klartext-Anzeige der
+  Passphrase** (N11.27, 2026-08-10). Oben rechts ein
   klassischer **Off-Knopf** (Power-Symbol): beendet die App sofort ohne Passphrase
   über `quit_app()`, vernichtet dabei Spuren, löscht aber nie Nutzer- oder App-Daten
   (N10.2, Volltext unten in B.4). Unten ein unauffälliger, **nicht** akzentuierter Link
@@ -1261,7 +1262,8 @@ persistenten Banner vor; ihr CSS liegt ungenutzt im Stylesheet. Optionaler UX-Au
 B.4 und Phase 8 nennen die Passphrase-Eingabe, aber nicht die UX-Details. Der heutige
 „4x tippen"-Platzhalter (`renderLock`, `lockTap`) wird ersetzt durch ein echtes
 Eingabefeld mit folgenden **Pflicht-Eigenschaften**:
-- Passwort-Feld mit Show/Hide-Umschalter.
+- Passwort-Feld **ohne** Klartext-Anzeige (der ursprünglich hier geforderte
+  Show/Hide-Umschalter ist mit N11.27 gestrichen, siehe unten).
 - Fehlerzustand bei falscher Passphrase: Shake + Meldung „wrong passphrase", **ohne**
   preiszugeben, ob ein Tresor existiert (neutrale Meldung).
 - Warnung bei aktiver Feststelltaste (Caps Lock).
@@ -1286,8 +1288,9 @@ Eingabefeld mit folgenden **Pflicht-Eigenschaften**:
   Hauptfenster (N11.6), sodass Sperren und Entsperren den Bildschirm optisch stehen
   lassen (gleiche Grösse, gleiche Farben, kein Fenstersprung). Gezeigt wird der
   entworfene Sperrschirm: App-Hintergrund mit Raster, grosser Akzent-Ring mit dem
-  Schloss-Zeichen aus Anhang 4, **Pillen**-Passwortfeld mit Show/Hide,
-  Off-Knopf oben rechts (N10.2) und der Reset-Einstieg als Fusszeile (N11.3).
+  Schloss-Zeichen aus Anhang 4, **Pillen**-Passwortfeld (ohne Klartext-Anzeige,
+  N11.27), Off-Knopf oben rechts (N10.2) und der Reset-Einstieg als Fusszeile
+  (N11.3).
   Bausteine und Grenzen: B.3, „Das Design gilt auch nativ".
 - **Der Sperrschirm trägt keine Textzeile (verbindlich, Etikett N11.26,
   2026-08-08).** Weder Titel („NoaToDo is locked") noch Unterzeile („Type your
@@ -1316,6 +1319,28 @@ Eingabefeld mit folgenden **Pflicht-Eigenschaften**:
   bringt die harte Kante zurueck. Die Rate-Limit-Sperre (N11.4) haengt seitdem an
   einem eigenen Zustand statt am Knopf: waehrend des Countdowns nimmt das Fenster
   keinen Versuch an, das Feld bleibt aber bedienbar.
+- **Keine Klartext-Anzeige, und die Pille bleibt eine Pille (verbindlich,
+  Etikett N11.27, 2026-08-10).** Drei Festlegungen, alle auf Nutzerwunsch:
+  1. **Nirgends aufdeckbar.** Der Show/Hide-Umschalter im nativen Sperrfenster
+     ist **weg** und kommt nicht zurück; ebenso ist das „Auge" von
+     Edge/WebView2 (`::-ms-reveal`) an **jedem** Passwortfeld der App aus
+     (Passphrase-Änderung in den Einstellungen eingeschlossen). **Einzige
+     Ausnahme:** das **erstmalige Festlegen** im Onboarding (N11.13, Schritt 2)
+     darf die Eingabe zeigen. Begründung der Ausnahme: dort gibt es noch kein
+     Geheimnis aufzudecken, und ein unbemerkter Tippfehler kostet wegen der
+     fehlenden Wiederherstellung (N11.3) den ganzen Tresor. Überall sonst wird
+     eine **bestehende** Passphrase eingegeben, und die gehört nicht auf einen
+     Bildschirm, den jemand über die Schulter oder per Aufnahme mitliest.
+  2. **Kleiner und wirklich pillenförmig.** Das Feld ist 240x40 statt 320x46
+     (Verhältnis 6:1 statt 7:1); der Radius ist immer die halbe Höhe, also voll
+     gerundet. Es ist die kurze Geste unter einem grossen Ring, keine
+     Formularzeile. Die Höhe steckt in der gemeinsamen Ring-Geometrie
+     (`lockwindow._ring_geometry`) und damit auch in der `.lock-card`-Regel des
+     Stylesheets: Blockhöhe **382**, Verankerung `50vh - 211px`. Die beiden
+     Zahlen bleiben ein Paar (N11.25), wer eine ändert, ändert die andere mit.
+  3. **Geschrieben wird links.** Die Eingabepille ist linksbündig (Platzhalter
+     und erstes Zeichen an derselben Stelle, also kein Sprung beim Tippen);
+     die frühere mittige Ausrichtung ist damit erledigt.
 - **Das Schloss geht auf (verbindlich, Etikett N11.22, 2026-08-08).** Eine richtige
   Passphrase schliesst das Fenster **nicht** wortlos: der Ring wechselt von der
   Akzent- in die Sicher-Farbe (`--secure`), der Bügel des Schloss-Zeichens klappt um
@@ -4189,6 +4214,7 @@ liegen durchgestrichen in Anhang 3, Umbau-Etappe 5.)
 | N11.22 | 2026-08-08 | **Entsperren zeigt das aufgehende Schloss statt der Willkommens-Blende** (Nutzerwunsch): eine richtige Passphrase faerbt den Ring im nativen Sperrfenster von der Akzent- in die Sicher-Farbe, klappt den Buegel des Schloss-Zeichens auf und schliesst das Fenster nach rund 0,6 s; die Willkommens-Blende (N11.20) laeuft dafuer nur noch beim echten Programmstart und nach dem Anlegen des Tresors. `get_boot_state()` bekommt dafuer das Feld `resumed` (Start vs. Rueckkehr aus der Sperre) | B.4 (Sperrschirm + Onboarding-Kapitel) + B.2 (`get_boot_state`) |
 | N11.25 | 2026-08-08 | **Nahtloser Fensterwechsel** (Nutzerwunsch „beim Sperren minimiert sich die App"): zwischen zwei Fenstern darf der Bildschirm nie leer werden. Eine Uebergabe-Blende im App-Design (gleicher Hintergrund, gleiche Titelleiste, maximiert, derselbe Ring an derselben Stelle aus **einer** geteilten Quelle) wird VOR dem Abbau des alten Fensters aufgelegt und erst weggenommen, wenn das neue gemalt bzw. geladen ist; drei Zustaende (geschlossenes Schloss ins Sperrfenster, offenes Schloss heraus, nur Hintergrund ins Onboarding). Das WebView-Fenster bekommt zusaetzlich den App-Grundton als Hintergrundfarbe (kein weisses Aufblitzen). Beim Beenden bewusst KEINE Blende. Rein kosmetisch: kein Nutzerinhalt, keine Bridge, haelt die teardown-Sequenz (G35) nicht auf, eigener UI-Thread (der Hauptthread blockiert waehrend des G14-Wischs) und ein Zeitwaechter, der sie in jedem Fall wieder schliesst. **Nachgezogen 2026-08-08** (Nutzerwunsch „der Wechsel soll nicht zu sehen sein"), Punkt 5 des Vertrags: keine Windows-Fensteranimation (`DWMWA_TRANSITIONS_FORCEDISABLED`, gesetzt vor dem ersten Anzeigen, zusammen mit der dunklen Titelleiste), Blende mit denselben Fensterknoepfen und derselben Taskleisten-Identitaet (aber nicht bedienbar), DPI-skaliertes Raster und ein WebView-Cover, dessen Ring auf derselben Hoehe steht wie die gemeinsame Ring-Geometrie, weiches Ausblenden der Blende (~160 ms) und WebView2, das auch verdeckt weiterzeichnet. Dazu die Flüssigkeits-Pflicht des Willkommens-Lichtwischs (Endlagen ausserhalb der Marke, gegenlaeufige Transformationen statt `mask-position`, kein WLAN-Takt waehrend der Blende) | B.3 (+ B.4 N11.20) |
 | N11.24 | 2026-08-08 | **Kein „Unlock"-Knopf im Sperrfenster, mehr Luft um den Ring** (Nutzerwunsch): der Knopf sass unter dem Ring und schnitt dessen Schein als harte Kante ab (native Steuerelemente malen ihren eigenen Hintergrund). Entsperrt wird nur noch mit Enter im Passwortfeld (Untertitel sagt es), der Abstand Ring zu Titelzeile waechst auf rund die halbe Ringbreite; die Rate-Limit-Sperre haengt jetzt an einem eigenen Zustand statt an `Button.Enabled` | B.4 (Sperrschirm) |
+| N11.27 | 2026-08-10 | **Passphrase nirgends im Klartext, kleinere Pille, linksbuendig** (Nutzerwunsch): der Show/Hide-Umschalter im nativen Sperrfenster ist ersatzlos weg, und das „Auge" von Edge/WebView2 (`::-ms-reveal`) ist an **jedem** Passwortfeld der App aus (auch bei der Passphrase-Aenderung). Einzige Ausnahme ist das **erstmalige Festlegen** im Onboarding (dort gibt es noch kein Geheimnis aufzudecken, und ein unbemerkter Tippfehler kostet mangels Wiederherstellung den ganzen Tresor). Die Eingabepille wird 240x40 statt 320x46 (Verhaeltnis 6:1, voll gerundet) und ist linksbuendig statt mittig; die Blockhoehe der gemeinsamen Ring-Geometrie faellt damit auf 382, die `.lock-card`-Verankerung im Stylesheet auf `50vh - 211px` (Paar-Regel aus N11.25) | B.4 (Sperrschirm, N4) |
 | N11.26 | 2026-08-08 | **Sperrschirm ohne Text, kleineres Passwortfeld, und genau eine Feier** (Nutzerwunsch): der Sperrschirm zeigt nur noch Ring und Passwort-Pille, die beiden Zeilen „NoaToDo is locked" und „Type your passphrase and press Enter." fallen weg (das Schloss zeigt den Zustand, der Platzhalter „Password" die Aufgabe, Enter ist die gelernte Geste), die Pille wird kleiner; gilt fuer beide Wege ins Fenster und ebenso fuer die kurze Sperr-Blende im WebView, einzige Ausnahme ist der Fehlerbildschirm N6, der seine Zeilen behaelt und ihre Hoehe an die gemeinsame Ring-Geometrie meldet. Dazu: die Entsperr-Animation (N11.22) laeuft **nur** bei der Rueckkehr in eine gesperrte Sitzung; beim normalen Programmstart bleibt das Schloss zu und die Willkommens-Blende mit dem Logo (N11.20) ist die einzige Begruessung (die Uebergabe-Blende traegt dort `plain`) | B.4 (Sperrschirm + Onboarding-Kapitel) |
 
 
@@ -4292,7 +4318,7 @@ gilt vor dem Audit-Dokument: bei Widerspruch gewinnt diese Tabelle.*
 | 7.5 "Heute"-/Smart-Ansicht | ❌ hinfaellig | Setzt Faelligkeiten voraus (7.1). |
 | 7.6 Settings fuer kommende Phasen | 🔵/❌ gemischt | `autoLock` (N11.4) und Startverhalten "maximiert" (N11.6) sind **eingeplant**; der **Screenshot-Schalter ist hinfaellig** (G26 verworfen, nicht wieder einbauen). |
 | 7.7 Mini-Modus-Erweiterungen | 🟡 gueltig (Roadmap) | Listenwechsel im Mini-Fenster, D.3. |
-| 8.1 Lock-Screen mit echtem Passphrase-Feld **[Sec]** | 🔵 eingeplant | N4 + N11.3/N11.4 (Show/Hide, Fehlerzustand, Caps-Lock-Hinweis, Rate-Limit-Anzeige, Entsperr-Fortschritt); Phase 8 (nicht mehr "Phase 11"). |
+| 8.1 Lock-Screen mit echtem Passphrase-Feld **[Sec]** | 🔵 eingeplant | N4 + N11.3/N11.4 (Fehlerzustand, Caps-Lock-Hinweis, Rate-Limit-Anzeige, Entsperr-Fortschritt; das hier urspruenglich geforderte Show/Hide ist mit N11.27 gestrichen); Phase 8 (nicht mehr "Phase 11"). |
 | 8.2 Panik-Flow | ✅ erledigt/ueberholt | N5 (kein Hotkey, nur Maus) + N10 (Endschirm mit Finish/Killswitch). |
 | 8.3 Sign-in/Sync-UX | ❌ hinfaellig | Es gibt keinen Login und keinen Sync mehr; nur die Statuspille lebt weiter als Offline-Pille (4.2). |
 | 8.4 Status-Modal als ehrliches Security-Dashboard **[Sec]** | ✅ erledigt (2026-07-25) | Das volle Dashboard steht: seit 2026-07-25 stammt **jede** Zeile aus dem beim Oeffnen frisch geholten `get_status()` (Tresordatei `tasks.db.enc` + Groesse, Schicht 1 SQLCipher/AES-256, Schicht 2 ChaCha20-Poly1305, Argon2-Parameter, Pepper ja/nein, letzter Wrap, BitLocker-Status G31, Netz, WebView2-Version), dazu der G29-Ringpuffer. Kein fester Text mehr im Frontend: fehlende Antwort zeigt "checking..." bzw. "unavailable", ein nicht lesbarer Wert "unknown", nie eine Behauptung (G22). |

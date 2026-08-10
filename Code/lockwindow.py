@@ -19,7 +19,8 @@ benutzen. Beim Sperren aus der laufenden App bleibt der Bildschirm dadurch
 optisch stehen: gleiche Groesse, gleiche Farben, gleiches Bild.
 
 Erfuellt die N4-/N6-Pflichten so weit im nativen Rahmen moeglich (die
-Web-Animationen entfallen bewusst): Passwortfeld mit Show/Hide, neutrale
+Web-Animationen entfallen bewusst): Passwortfeld (ohne Klartext-Anzeige,
+2026-08-10: aufdecken laesst sich die Passphrase nirgends mehr), neutrale
 Fehlermeldung bei falscher Passphrase, Caps-Lock-Warnung, Unlocking-Zustand
 (Argon2 im Hintergrund-Thread), Rate-Limit-Countdown, Off-Knopf, Reset-Weg
 (vergessene Passphrase). DevTools/Remote-Debugging gibt es hier gar nicht
@@ -73,7 +74,7 @@ def _ring_geometry(w: int, h: int, scale: float, extra: int = 0) -> dict:
     # unten); erst ab diesem Abstand ist er ausgelaufen, bevor das erste
     # Steuerelement anfaengt, und es bleibt keine sichtbare Kante.
     ring_gap = s(96)
-    block = (ring_d + ring_gap + extra + s(46)
+    block = (ring_d + ring_gap + extra + s(40)
              + s(6) + s(20) + s(10) + s(26))
     y = max(s(24), (h - block) // 2 - s(20))
     return {"ring_d": ring_d, "ring_x": w // 2 - ring_d // 2, "ring_y": y,
@@ -480,13 +481,18 @@ def run_lock_window(api: Any, boot_state: str, boot_reason: str | None,
         title.control.Visible = False
         subtitle.control.Visible = False
 
-    pw_pill = T.PillInput((320, 46), password=True, cue="Password", font_size=11.0)
+    # Kleiner als frueher (320x46, Nutzerwunsch 2026-08-10): die Eingabe ist
+    # eine kurze Geste unter einem grossen Ring, keine Formularzeile. Das
+    # Seitenverhaeltnis ist dabei Absicht (6:1 statt der frueheren 7:1): die
+    # Pille soll wie eine Pille aussehen und nicht wie ein Balken, der Radius
+    # ist immer die halbe Hoehe (``fill_pill``), also voll gerundet.
+    # Bewusst KEIN Show/Hide-Knopf mehr (2026-08-10): die Passphrase ist an
+    # keiner Stelle, an der sie **eingegeben** wird, im Klartext zu sehen. Die
+    # einzige Ausnahme ist das erstmalige Festlegen im Onboarding, wo es keine
+    # gespeicherte Passphrase gibt, die aufgedeckt werden koennte. Ohne den
+    # Knopf hat die Pille auch rechts wieder ihren vollen Innenraum.
+    pw_pill = T.PillInput((240, 40), password=True, cue="Password", font_size=11.0)
     pw = pw_pill.box
-
-    # Show/Hide sitzt IN der Pille (Fuellfarbe der Pille als Hintergrund).
-    show = T.PillButton("Show", "ghost", (54, 28), font_size=8.0, bold=False,
-                        backdrop=T.SURFACE)
-    pw_pill.control.Controls.Add(show.control)
 
     caps = T.AppLabel("", 9.0, False, T.DANGER, size=(500, 20))
     # Bewusst KEIN "Unlock"-Knopf (N11.24): entsperrt wird mit Enter im Feld.
@@ -521,7 +527,7 @@ def run_lock_window(api: Any, boot_state: str, boot_reason: str | None,
 
         gap = s(26)
         title_h, sub_h = s(38), s(26)
-        input_h, caps_h, status_h = s(46), s(20), s(26)
+        input_h, caps_h, status_h = s(40), s(20), s(26)
         # Ring-Lage kommt aus der gemeinsamen Quelle (dieselbe benutzt die
         # Uebergabe-Blende, N11.25), damit beim Fensterwechsel nichts springt.
         # Nur der Fehlerfall meldet die zwei Textzeilen als Zusatzhoehe an; der
@@ -543,13 +549,10 @@ def run_lock_window(api: Any, boot_state: str, boot_reason: str | None,
             subtitle.control.Location = Point(cx - subtitle.control.Width // 2, y)
             y += sub_h + gap
 
-        pill_w = min(w - s(60), s(320))
+        pill_w = min(w - s(60), s(240))
         pw_pill.control.Size = Size(pill_w, input_h)
         pw_pill.control.Location = Point(cx - pill_w // 2, y)
-        show.control.Size = Size(s(54), s(28))
-        show.control.Location = Point(pill_w - s(54) - s(9),
-                                      (input_h - s(28)) // 2)
-        pw_pill.layout_box(right_reserve=s(54) + s(16), scale=scale["v"])
+        pw_pill.layout_box(scale=scale["v"])
         y += input_h + s(6)
 
         caps.control.Size = Size(min(w - s(40), s(500)), caps_h)
@@ -634,13 +637,6 @@ def run_lock_window(api: Any, boot_state: str, boot_reason: str | None,
                 pw.Focus()
         except Exception:
             pass
-
-    def on_show_click(_s, _a):
-        visible = pw.UseSystemPasswordChar
-        pw.UseSystemPasswordChar = not visible
-        show.set_text("Hide" if visible else "Show")
-        pw.Focus()
-    show.control.Click += EventHandler(on_show_click)
 
     def _caps_on():
         import ctypes

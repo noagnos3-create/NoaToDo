@@ -931,8 +931,13 @@ function renderOnboarding() {
           <div class="ob-icon">${I.Lock}</div>
           <h1>Set a passphrase</h1>
           <p class="ob-sub">At least 12 characters. There are no other rules.</p>
-          <input id="ob-pass1" type="password" class="ob-input" placeholder="Passphrase" autocomplete="new-password" spellcheck="false" />
-          <input id="ob-pass2" type="password" class="ob-input" placeholder="Repeat passphrase" autocomplete="new-password" spellcheck="false" />
+          <!-- pw-reveal: das Auge von WebView2 bleibt NUR hier stehen. Beim
+               erstmaligen Festlegen gibt es noch kein Geheimnis aufzudecken,
+               und ein unbemerkter Tippfehler kostet hier den ganzen Tresor
+               (keine Wiederherstellung, N11.3). Ueberall sonst ist die
+               Klartext-Anzeige aus (style.css). -->
+          <input id="ob-pass1" type="password" class="ob-input pw-reveal" placeholder="Passphrase" autocomplete="new-password" spellcheck="false" />
+          <input id="ob-pass2" type="password" class="ob-input pw-reveal" placeholder="Repeat passphrase" autocomplete="new-password" spellcheck="false" />
           <div class="ob-lossbox">
             <b>There is no recovery.</b> If you forget the passphrase, all data is lost, and no one can bring it back (not even the developer). The vault is also bound to this Windows account: a new Windows profile or another PC means data loss, even with the correct passphrase.
           </div>
