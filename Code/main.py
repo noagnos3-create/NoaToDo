@@ -491,6 +491,109 @@ def _wire_navigation_guard(window) -> None:
     _run_on_ui_thread(window, _attach)
 
 
+def _webview2_ready() -> bool:
+    """Steht auf diesem Rechner eine brauchbare WebView2-Runtime? (N11.29 c)
+
+    NoaToDo buendelt kein Chromium und setzt die Evergreen-WebView2-Runtime
+    voraus. Fehlt sie, faellt PyWebView **still auf MSHTML (Internet Explorer)
+    zurueck**: das Fenster geht auf, zeigt aber ein zerfallenes Bild statt einer
+    ehrlichen Meldung. Genau das verbietet Phase 9.
+
+    Gefragt wird deshalb nicht die Registry, sondern PyWebViews eigene
+    Entscheidung (``renderer``): nur ``edgechromium`` ist unsere Betriebsart.
+    Das kann nicht falsch-negativ sein, denn was PyWebView nicht als WebView2
+    ansieht, benutzt es auch nicht. Laesst sich das Modul nicht befragen, gilt
+    die Runtime als vorhanden (im Zweifel starten, nie ohne Not blockieren).
+    """
+    try:
+        from webview.platforms import winforms as _winforms
+        return getattr(_winforms, "renderer", "edgechromium") == "edgechromium"
+    except Exception:
+        return True
+
+
+def _show_missing_webview2() -> None:
+    """Verstaendliche Meldung statt weissem Fenster (Phase 9, N11.29 c)."""
+    text = (
+        "NoaToDo needs the Microsoft Edge WebView2 runtime.\n"
+        "It is not available on this PC.\n"
+        "\n"
+        "Install the free Evergreen runtime from Microsoft,\n"
+        "then start NoaToDo again:\n"
+        "microsoft.com/edge/webview2"
+    )
+    try:
+        import wintheme
+        wintheme.show_message(text, "NoaToDo", ICON)
+    except Exception:
+        # Selbst das Hinweisfenster braucht WinForms: notfalls die nackte
+        # Windows-Box, denn eine Meldung ist Pflicht, ihr Aussehen nicht.
+        try:
+            ctypes.windll.user32.MessageBoxW(0, text, "NoaToDo", 0x30)
+        except Exception:
+            pass
+    print("[NoaToDo] WebView2-Runtime fehlt, Start abgebrochen.", flush=True)
+
+
+def _harden_release_webview(window) -> None:
+    """Gate G34 (a)/(c): die Browser-Kanaele im Release zumachen.
+
+    Nur im gefrorenen Build (``buildinfo.is_release()``), der Entwicklerstart
+    behaelt DevTools und Kontextmenue. Gesetzt werden drei
+    CoreWebView2-Einstellungen:
+
+    - ``AreDevToolsEnabled = False`` (a): zusaetzlich zum harten ``debug=False``.
+      Sonst haette jeder mit kurzem Zugriff (K3) eine Konsole mit vollem
+      ``pywebview.api.*``-Zugriff, inklusive ``killswitch()`` (das per G13 auch
+      gesperrt erlaubt ist, also ohne Passphrase Daten vernichten koennte).
+    - ``AreBrowserAcceleratorKeysEnabled = False`` (c): toetet ``Strg+P``, also
+      den Weg "Als PDF drucken" = kompletter Klartext-Export an G21 vorbei, samt
+      der uebrigen Browser-Tasten (``Strg+S``, ``F12``, ...). Die App-Shortcuts
+      aus B.5 laufen ueber den eigenen JS-Handler und bleiben unberuehrt.
+    - ``AreDefaultContextMenusEnabled = False`` (c): kein Browser-Kontextmenue
+      mit "Speichern unter"/"Untersuchen".
+
+    Die ``CoreWebView2``-Instanz existiert beim Anhaengen oft noch nicht; dann
+    wird auf ``CoreWebView2InitializationCompleted`` gewartet. Jede Eigenschaft
+    wird einzeln gesetzt: eine aeltere WebView2-Runtime, die eine davon nicht
+    kennt, darf die anderen nicht mitreissen (G27-Leitlinie: Haertung darf die
+    Funktion nie brechen).
+    """
+    if not buildinfo.is_release():
+        return
+
+    def _apply_settings(control) -> None:
+        try:
+            settings = control.CoreWebView2.Settings
+        except Exception:
+            return
+        for name in ("AreDevToolsEnabled", "AreBrowserAcceleratorKeysEnabled",
+                     "AreDefaultContextMenusEnabled"):
+            try:
+                setattr(settings, name, False)
+            except Exception:
+                pass
+
+    def _attach():
+        try:
+            browser = getattr(window.native, "browser", None)
+            control = getattr(browser, "webview", None)  # WinForms WebView2
+            if control is None:
+                return
+            if getattr(control, "CoreWebView2", None) is not None:
+                _apply_settings(control)
+                return
+
+            def on_ready(_sender, _args):
+                _apply_settings(control)
+
+            control.CoreWebView2InitializationCompleted += on_ready
+        except Exception:
+            pass
+
+    _run_on_ui_thread(window, _attach)
+
+
 def _frontend_stamp() -> str:
     """Aenderungszeit der wichtigsten Frontend-Dateien als kurzer Stempel.
 
@@ -787,6 +890,9 @@ def run_webview(api: Api, icon: str) -> None:
     def on_start():
         # Gate G12: externe Navigation abriegeln.
         _wire_navigation_guard(window)
+        # Gate G34 (a)/(c): DevTools, Browser-Tasten (Strg+P) und das
+        # Standard-Kontextmenue im Release abschalten.
+        _harden_release_webview(window)
 
         def _startup_window_setup():
             hwnd = _get_hwnd(window)
@@ -932,6 +1038,14 @@ def main() -> None:
         setup_app()
     except Exception:
         pass
+
+    # N11.29 (c): die Runtime wird vorausgesetzt, ihr Fehlen aber ehrlich
+    # gemeldet. Vor dem ersten Fenster pruefen, sonst stuende die App mit
+    # MSHTML-Rueckfall als kaputtes Bild da.
+    if not _webview2_ready():
+        _show_missing_webview2()
+        _release_single_instance()
+        return
 
     session = security_module.Session()
     api = Api(session)

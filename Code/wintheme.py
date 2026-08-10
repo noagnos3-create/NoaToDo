@@ -912,9 +912,14 @@ def show_message(text: str, title: str = "NoaToDo", icon_path: str | None = None
     form.MaximizeBox = False
     form.MinimizeBox = False
     style_form(form, icon_path)
-    form.ClientSize = Size(460, 220)
+    # Hoehe waechst mit dem Text: das Hinweisfenster traegt seit Phase 9 auch
+    # laengere Meldungen (fehlende WebView2-Runtime, Integritaetsfehler), und
+    # ein fester Kasten wuerde sie abschneiden. Kurze Meldungen (G19) behalten
+    # exakt die alten Masse.
+    body_h = max(90, 22 * (text.count("\n") + 1))
+    form.ClientSize = Size(460, 130 + body_h)
 
-    body = AppLabel(text, 10.5, False, TEXT_DIM, size=(400, 90))
+    body = AppLabel(text, 10.5, False, TEXT_DIM, size=(400, body_h))
     body.control.Location = Point(30, 40)
 
     ok = PillButton(button, "primary", (160, 44), 10.5)
