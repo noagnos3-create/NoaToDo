@@ -434,7 +434,11 @@ def run_lock_window(api: Any, boot_state: str, boot_reason: str | None,
              # Rate-Limit-Sperre (N11.4): laeuft ein Countdown, nimmt do_unlock()
              # keinen Versuch an. Seit dem Wegfall des Unlock-Knopfes (N11.24)
              # haengt dieser Zustand hier statt an Button.Enabled.
-             "blocked": False}
+             "blocked": False,
+             # Der Ringlauf des Off-Knopfes laeuft (N11.28): das Beenden ist
+             # beschlossen, ein zweiter Klick und ein Entsperr-Versuch waeren
+             # ab hier nur noch zwei Wege, die sich gegenseitig ueberholen.
+             "quitting": False}
     vault_error = boot_state == "vault_error"
 
     # ------------------------------------------------------------------
@@ -731,7 +735,7 @@ def run_lock_window(api: Any, boot_state: str, boot_reason: str | None,
 
     def do_unlock():
         # Ausgeloest wird nur noch ueber Enter im Passwortfeld (N11.24).
-        if state["busy"] or state["blocked"]:
+        if state["busy"] or state["blocked"] or state["quitting"]:
             return
         passphrase = pw.Text or ""
         state["busy"] = True
@@ -742,6 +746,11 @@ def run_lock_window(api: Any, boot_state: str, boot_reason: str | None,
 
             def apply():
                 state["busy"] = False
+                if state["quitting"]:
+                    # Waehrend der Pruefung wurde der Off-Knopf gedrueckt: das
+                    # Beenden laeuft bereits (teardown schliesst das Fenster),
+                    # hier darf kein zweiter Ausgang danebenlaufen.
+                    return
                 if isinstance(res, dict) and res.get("ok"):
                     if resumed:
                         # Rueckkehr in eine laufende Sitzung: erst aufgehen
@@ -788,13 +797,46 @@ def run_lock_window(api: Any, boot_state: str, boot_reason: str | None,
             do_unlock()
     pw.KeyDown += KeyEventHandler(on_pw_key)
 
-    def on_off_click(_s, _a):
+    # ------------------------------------------------------------------
+    # Ausschalt-Animation (N11.28): der Kreis um das Power-Zeichen faehrt in
+    # der Akzentfarbe herum, und erst wenn er zu ist, beendet sich die App.
+    # Der Knopf hat dafuer seinen Hover-Zustand verloren (wintheme): die
+    # Rueckmeldung gehoert an den Klick, nicht schon an den Zeiger daneben.
+    # Sie ist rein praesentationsbezogen und haelt nichts auf, was Daten
+    # schuetzt: der Tresor ist waehrend der Sperre ohnehin zu, und das
+    # eigentliche Beenden (teardown, G35) laeuft erst danach los.
+    # ------------------------------------------------------------------
+    OFF_ANIM_MS = 760.0
+    off_anim = {"start": 0.0}
+    off_timer = Timer()
+    off_timer.Interval = 16           # ~60 Bilder/s, wie die Entsperr-Animation
+
+    def do_quit():
         state["closing_intent"] = "quit"
         result["value"] = "quit"
         try:
             api.quit_app()   # teardown('quit'); request_teardown schliesst das Fenster
         except Exception:
             form.Close()
+
+    def on_off_tick(_s, _a):
+        t = min(1.0, (time.monotonic() - off_anim["start"]) * 1000.0 / OFF_ANIM_MS)
+        off.set_progress(t)
+        if t >= 1.0:
+            off_timer.Stop()
+            do_quit()
+    off_timer.Tick += EventHandler(on_off_tick)
+
+    def on_off_click(_s, _a):
+        # Ein Klick genuegt und ist endgueltig: ein zweiter startet den Lauf
+        # nicht neu, und abbrechen laesst er sich nicht (beendet wird ohne
+        # Passphrase, es geht dabei nichts verloren).
+        if state["quitting"]:
+            return
+        state["quitting"] = True
+        off_anim["start"] = time.monotonic()
+        off.set_progress(0.0)
+        off_timer.Start()
     off.control.Click += EventHandler(on_off_click)
 
     def open_reset():
@@ -818,6 +860,8 @@ def run_lock_window(api: Any, boot_state: str, boot_reason: str | None,
         pw.Focus()
 
     def do_reset():
+        if state["quitting"]:
+            return               # das Beenden laeuft schon (N11.28)
         if (reset_pill.box.Text or "").strip() != "RESET":
             set_status("Type RESET (all caps) to confirm.")
             return

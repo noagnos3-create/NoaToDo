@@ -501,6 +501,28 @@ def draw_lock_glyph(g, cx: float, cy: float, size: float, color: str,
         pen.Dispose()
 
 
+def draw_ring_progress(g, x: float, y: float, w: float, h: float, t: float,
+                       color: str, width: float) -> None:
+    """Einen Kreisbogen von oben im Uhrzeigersinn ziehen (Fortschritt 0..1).
+
+    Gedacht fuer den **runden** Icon-Knopf: der Bogen liegt genau auf dessen
+    Pillenrand (bei w == h ist die Pille ein Kreis) und faerbt ihn Stueck fuer
+    Stueck ein. GDI+ zaehlt Winkel im Uhrzeigersinn (y zeigt nach unten), -90
+    Grad ist also oben.
+    """
+    t = max(0.0, min(1.0, float(t)))
+    if t <= 0.0:
+        return
+    g.SmoothingMode = SmoothingMode.AntiAlias
+    pen = Pen(col(color), float(width))
+    pen.StartCap = LineCap.Round
+    pen.EndCap = LineCap.Round
+    try:
+        g.DrawArc(pen, float(x), float(y), float(w), float(h), -90.0, 360.0 * t)
+    finally:
+        pen.Dispose()
+
+
 def draw_power_glyph(g, cx: float, cy: float, size: float, color: str) -> None:
     """Ein-/Aus-Zeichen (Kreis mit Luecke oben plus Strich), wie .lock-off."""
     g.SmoothingMode = SmoothingMode.AntiAlias
@@ -523,6 +545,12 @@ class PillButton:
 
     ``kind``: ``primary`` (Akzentfuellung), ``ghost`` (Flaeche + Rand),
     ``danger`` (Warnfarbe), ``icon`` (runder Geisterknopf mit Zeichen).
+
+    ``progress`` (nur ``icon``, N11.28): ``None`` = Ruhezustand, ``0..1`` faehrt
+    den Rand des Knopfes in der Akzentfarbe herum und zieht das Zeichen mit. Der
+    Off-Knopf des Sperrschirms benutzt das als sichtbaren Ablauf vor dem
+    Beenden; wer den Wert setzt, treibt ihn auch weiter (der Knopf hat keine
+    eigene Uhr).
     """
 
     def __init__(self, text: str = "", kind: str = "primary",
@@ -533,6 +561,7 @@ class PillButton:
         self.text = text
         self.glyph = glyph          # None | 'power' | 'lock'
         self.backdrop = backdrop    # None = App-Raster, sonst Fuellfarbe
+        self.progress = None        # None | 0..1 (Ringlauf, siehe set_progress)
         self._hover = False
         self._down = False
         self._font = font(font_size, bold)
@@ -577,6 +606,11 @@ class PillButton:
         self.text = text
         self.control.Invalidate()
 
+    def set_progress(self, value: float | None) -> None:
+        """Ringlauf setzen (``None`` = aus, sonst 0..1) und neu zeichnen."""
+        self.progress = None if value is None else max(0.0, min(1.0, float(value)))
+        self.control.Invalidate()
+
     def set_enabled(self, flag: bool) -> None:
         self.control.Enabled = bool(flag)
         self.control.Cursor = Cursors.Hand if flag else Cursors.Default
@@ -600,8 +634,11 @@ class PillButton:
                 fill = mix(DANGER, SURFACE, 0.28)
             return fill, DANGER_LINE, (DANGER if on else mix(DANGER, SURFACE, 0.5))
         if self.kind == "icon":
-            if self._hover:
-                return DANGER_WASH, DANGER_LINE, DANGER
+            # Bewusst OHNE Hover-Zustand (N11.28, Nutzerwunsch): der Knopf
+            # springt beim blossen Darueberfahren nicht mehr in die Warnfarbe.
+            # Die Rueckmeldung gibt erst der Klick, und zwar als Ringlauf
+            # (siehe _on_paint); ein Farbwechsel schon beim Zeiger daneben
+            # nahm ihm die Wirkung vorweg.
             return mix(SURFACE, BG, 0.70), BORDER, TEXT_FAINT
         # ghost
         fill = SURFACE_2 if not self._hover else SURFACE_3
@@ -621,10 +658,26 @@ class PillButton:
             finally:
                 brush.Dispose()
         fill, border, fg = self._colors()
+        # Ringlauf (N11.28): waehrend er faehrt, zieht die Akzentfarbe in
+        # Fuellung und Zeichen ein, damit der Knopf als Ganzes "warm wird" und
+        # nicht nur ein Bogen darauf liegt.
+        t = self.progress
+        if t is not None:
+            ease = 1.0 - (1.0 - t) ** 2
+            fill = mix(ACCENT_WASH, fill, ease)
+            fg = mix(ACCENT, fg, ease)
         # Beim Druecken minimal einruecken (CSS: .btn:active transform scale(.98)).
         inset = 1.0 if self._down else 0.0
         fill_pill(g, 0.5 + inset, 0.5 + inset, w - 1 - 2 * inset, h - 1 - 2 * inset,
                   (h - 1) / 2.0, fill, border)
+        if t is not None:
+            # Der Bogen liegt auf dem Rand des Knopfes und ist so weit nach
+            # innen gerueckt, dass ihn die eigene Strichstaerke nicht am
+            # Steuerelementrand abschneidet.
+            line_w = max(1.8, min(w, h) * 0.06)
+            pad = line_w / 2.0 + inset
+            draw_ring_progress(g, pad, pad, w - 2 * pad, h - 2 * pad, t,
+                               ACCENT, line_w)
         if self.glyph == "power":
             draw_power_glyph(g, w / 2.0, h / 2.0, min(w, h) * 0.44, fg)
         elif self.text:
