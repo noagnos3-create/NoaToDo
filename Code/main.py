@@ -1047,6 +1047,28 @@ def main() -> None:
         _release_single_instance()
         return
 
+    # Gate G27 (A5): Frontend-Hashes gegen das eingebettete Manifest. Schlaegt
+    # das fehl, startet die App NICHT (kein "trotzdem fortfahren"): das
+    # manipulierte JS haette vollen Bridge-Zugriff und koennte die Passphrase
+    # im Lock-Screen mitlesen. Im Quellbaum gibt es kein Manifest, dort ist die
+    # Pruefung ein No-op.
+    import integrity
+    bad = integrity.check()
+    if bad:
+        try:
+            import wintheme
+            wintheme.show_message(integrity.message(bad), "NoaToDo", ICON)
+        except Exception:
+            try:
+                ctypes.windll.user32.MessageBoxW(
+                    0, integrity.message(bad), "NoaToDo", 0x10)
+            except Exception:
+                pass
+        print("[NoaToDo] G27: Integritaetspruefung fehlgeschlagen, Start abgebrochen.",
+              flush=True)
+        _release_single_instance()
+        return
+
     session = security_module.Session()
     api = Api(session)
     icon = ICON
