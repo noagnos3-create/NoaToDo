@@ -117,6 +117,17 @@ Screenshot protection (gate G26, `SetWindowDisplayAffinity` / `WDA_EXCLUDEFROMCA
 - **G27 extension (Phase 9, frontend integrity, A5):** the exe signature does not cover `index.html`/`app.js`/`style.css`; embed the frontend assets in the signed binary or verify each asset hash against an embedded manifest at startup, and refuse to start with a clear message on any mismatch (hardens against silent K4 persistence, never sold as full K4 protection).
 - **Window-title rule (B.4, A7, no gate):** the native window title is constantly "NoaToDo" and never contains user content (no list names, task text, or counters, in no mode incl. mini mode); same for taskbar tooltip and jumplists.
 
+## Building the release (`NoaToDo.exe`)
+
+```powershell
+# From Code/ (venv python), one-file release build:
+.\venv\Scripts\python.exe tools\build_exe.py
+# Debug variants (never shipped): folder build / with console
+.\venv\Scripts\python.exe tools\build_exe.py --onedir --console
+```
+
+`tools/build_exe.py` is the **one** entry point (Bauplan N11.29 a2): it refuses to run on anything but CPython 3.11.x (G11/U25), writes the build stamp `Code/_buildstamp.py` (build date, commit with a `+dirty` mark, `SIGNED = False`, the G27 frontend SHA-256 manifest), writes the version resource `Code/build/version_info.txt`, runs PyInstaller with `Code/NoaToDo.spec`, and **deletes the stamp again** in a `finally` (a leftover stamp would make the next dev start run the integrity check and cry wolf on every frontend edit). The spec builds one-file with `optimize=2` (no docstrings, no asserts, G27), embedded icon, `console=False`, **no UPX** (packed binaries are an antivirus red flag and buy no security), and excludes `pytest`/`PyInstaller`/`tkinter` from the bundle. `--onedir` is the only way to run the G27 tamper proof by hand (only there does an `app.js` lie next to the exe). Dev tooling is pinned in `Code/requirements-dev.txt`. Build output (`Code/build/`, `Code/dist/`, `_buildstamp.py`) is git-ignored. **Verified 2026-08-10:** one-file exe 19.5 MB, starts on this machine, version + icon in the Windows properties; the tampered one-folder build stops at the integrity message and opens **no** WebView (zero `msedgewebview2` processes on the NoaToDo profile).
+
 ## Running the app
 
 ```powershell

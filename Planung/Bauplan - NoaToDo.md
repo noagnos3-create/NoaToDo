@@ -4066,6 +4066,25 @@ Sicherheit steckt in Passphrase, DPAPI-Pepper und Verschlüsselung, nie im Bauve
   nicht ins weisse Fenster, sondern zeigt ein Hinweisfenster im App-Design
   (`wintheme.show_message`, kein WebView nötig) mit dem Namen der fehlenden
   Komponente und der Bezugsstelle, und beendet sich sauber.
+- **(a2) So wird gebaut (umgesetzt 2026-08-10).** Ein Einstiegspunkt:
+  `Code/tools/build_exe.py`, aufgerufen mit dem venv-Python des Projekts. Er
+  (1) bricht ab, wenn nicht CPython **3.11.x** läuft (G11/U25), (2) schreibt den
+  Bau-Stempel `Code/_buildstamp.py` (Build-Datum, Commit samt `+dirty`-Kennung,
+  `SIGNED = False`, das SHA-256-Frontend-Manifest für G27), (3) schreibt die
+  Versions-Ressource `Code/build/version_info.txt`, (4) ruft PyInstaller mit
+  `Code/NoaToDo.spec` auf und (5) **löscht den Stempel wieder** (bliebe er
+  liegen, liefe der nächste Entwicklerstart in die Integritätsprüfung und
+  schlüge bei jeder Frontend-Änderung Fehlalarm). Die Spec baut One-file mit
+  `optimize=2` (also `.pyc` ohne Docstrings und ohne `assert`, G27), eingebettetem
+  Icon, `console=False` und **ohne UPX** (gepackte Binaries sind ein
+  Virenscanner-Warnsignal und bringen keine Sicherheit). Zwei Schalter nur zum
+  Untersuchen eines Builds, nie für die Auslieferung: `--onedir` (Ordnerbau, der
+  einzige Weg, den G27-Nachweis von Hand zu führen, weil nur dort eine `app.js`
+  neben der `.exe` liegt) und `--console` (Startmeldungen sichtbar).
+  Ergebnis der ersten Fassung: **19,5 MB**, startet, trägt Version und Icon in
+  den Windows-Eigenschaften. `Code/requirements-dev.txt` pinnt die
+  Werkzeuge (`pytest`, `pyinstaller`); sie sind in der Spec ausdrücklich
+  ausgeschlossen und liegen nie im Bundle.
 - **(d) Version und Bezugsquelle.** Erste ausgelieferte Fassung ist **1.0.0**;
   Version, Build-Datum und Bezugsquelle stehen in `Code/buildinfo.py` (eine
   Quelle) und erscheinen unverändert in den `.exe`-Ressourcen und im
