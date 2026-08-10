@@ -42,12 +42,12 @@ from typing import Any
 import wintheme as T
 
 # Off-Knopf (N11.28): Dauer des Ringlaufs und Haltezeit des scharfen Zustands.
-# Modulweit, damit ein Test sie kurz drehen kann, ohne 15 Sekunden zu warten.
+# Modulweit, damit ein Test sie kurz drehen kann, ohne die Haltezeit abzuwarten.
 #: Wie lange der Ring um das Power-Zeichen braucht (Millisekunden).
-OFF_FILL_MS = 760.0
+OFF_FILL_MS = 1100.0
 #: Wie lange der geschlossene Ring auf den Klick wartet, bevor der Knopf wieder
 #: in den Ruhezustand faellt (Millisekunden).
-OFF_HOLD_MS = 15000.0
+OFF_HOLD_MS = 10000.0
 
 
 # ---------------------------------------------------------------------------
@@ -816,7 +816,7 @@ def run_lock_window(api: Any, boot_state: str, boot_reason: str | None,
     # beendet ein Klick die App; vorher passiert bei einem Klick nichts. Der
     # Ring ist damit nicht nur Schmuck, sondern die Sicherung gegen den
     # versehentlichen Klick, die der Knopf vorher nicht hatte.
-    # Der scharfe Zustand haelt nicht ewig: kommt binnen 15 Sekunden kein
+    # Der scharfe Zustand haelt nicht ewig: kommt binnen zehn Sekunden kein
     # Klick, faellt der Knopf in seinen Ruhezustand zurueck, und ein Zeiger
     # darauf loest ihn neu aus. Sonst stuende ein einmal beruehrter Knopf den
     # ganzen Abend scharf da.
@@ -884,7 +884,7 @@ def run_lock_window(api: Any, boot_state: str, boot_reason: str | None,
         off_reset()
 
     off.control.MouseEnter += EventHandler(lambda _s, _a: off_trigger())
-    # Auch die Bewegung auf dem Knopf loest aus: nach dem Ablauf der 15 Sekunden
+    # Auch die Bewegung auf dem Knopf loest aus: nach dem Ablauf der Haltezeit
     # liegt der Zeiger unter Umstaenden noch darauf, und ohne diesen Weg muesste
     # man erst herunter und wieder herauf fahren, um den Ring neu zu starten.
     off.control.MouseMove += MouseEventHandler(lambda _s, _a: off_trigger())
