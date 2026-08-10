@@ -104,6 +104,19 @@ def grid_step() -> int:
     return max(6, int(round(GRID_STEP * _ui_scale)))
 
 
+def line_w(base: float = 1.0) -> float:
+    """Strichstaerke in **ganzen** physischen Pixeln (mindestens 1).
+
+    Gebrochene Strichstaerken sind der Grund, warum eine gemalte Pille
+    unsauber wirkt: GDI+ verteilt z.B. 1.4 px auf zwei Pixelreihen. Auf den
+    geraden Kanten bleibt die Linie trotzdem kraeftig, in den Rundungen wird
+    sie blass und breit, und die Enden sehen ausgefranst aus. Ganze Pixel
+    (zusammen mit einem Versatz von genau der halben Strichstaerke, siehe
+    ``stroke_pill``) geben rundherum dasselbe Gewicht.
+    """
+    return float(max(1, int(round(base * _ui_scale))))
+
+
 def rgb(hex_color: str) -> tuple[int, int, int]:
     h = hex_color.lstrip("#")
     return int(h[0:2], 16), int(h[2:4], 16), int(h[4:6], 16)
@@ -393,6 +406,23 @@ def fill_pill(g, x: float, y: float, w: float, h: float, r: float,
         path.Dispose()
 
 
+def stroke_pill(g, w: float, h: float, fill: str | None, border: str | None,
+                border_w: float = 1.0, inset: float = 0.0) -> None:
+    """Eine Pille, die eine Steuerelementflaeche ``w`` x ``h`` sauber ausfuellt.
+
+    Der Pfad liegt um die **halbe Strichstaerke** nach innen, damit der Strich
+    genau auf ganzen Pixeln sitzt und nicht halb ueber den Rand haengt; der
+    Radius ist immer die halbe Hoehe, die Form ist also eine echte Kapsel.
+    Zusammen mit ganzzahligen Strichstaerken (``line_w``) hat der Rand damit
+    auf den Geraden und in den Rundungen dasselbe Gewicht.
+
+    ``inset`` rueckt die ganze Pille zusaetzlich ein (Knopf im Druckzustand).
+    """
+    o = border_w / 2.0 + inset
+    ww, hh = w - 2 * o, h - 2 * o
+    fill_pill(g, o, o, ww, hh, hh / 2.0, fill, border, border_w)
+
+
 _CENTER = None
 
 
@@ -547,10 +577,12 @@ class PillButton:
     ``danger`` (Warnfarbe), ``icon`` (runder Geisterknopf mit Zeichen).
 
     ``progress`` (nur ``icon``, N11.28): ``None`` = Ruhezustand, ``0..1`` faehrt
-    den Rand des Knopfes in der Akzentfarbe herum und zieht das Zeichen mit. Der
-    Off-Knopf des Sperrschirms benutzt das als sichtbaren Ablauf vor dem
-    Beenden; wer den Wert setzt, treibt ihn auch weiter (der Knopf hat keine
-    eigene Uhr).
+    den Rand des Knopfes in der Akzentfarbe herum (von oben im Uhrzeigersinn);
+    bei ``1.0`` ist der Kreis zu und das Zeichen wird farbig. Der Off-Knopf des
+    Sperrschirms fuellt den Ring, solange der Zeiger darauf steht, und nimmt den
+    Klick erst beim vollen Kreis an. Wer den Wert setzt, treibt ihn auch weiter
+    (der Knopf hat keine eigene Uhr) und legt damit auch fest, was der volle
+    Kreis bedeutet.
     """
 
     def __init__(self, text: str = "", kind: str = "primary",
@@ -634,11 +666,10 @@ class PillButton:
                 fill = mix(DANGER, SURFACE, 0.28)
             return fill, DANGER_LINE, (DANGER if on else mix(DANGER, SURFACE, 0.5))
         if self.kind == "icon":
-            # Bewusst OHNE Hover-Zustand (N11.28, Nutzerwunsch): der Knopf
-            # springt beim blossen Darueberfahren nicht mehr in die Warnfarbe.
-            # Die Rueckmeldung gibt erst der Klick, und zwar als Ringlauf
-            # (siehe _on_paint); ein Farbwechsel schon beim Zeiger daneben
-            # nahm ihm die Wirkung vorweg.
+            # Bewusst OHNE eigenen Hover-Zustand (N11.28, Nutzerwunsch): der
+            # Knopf springt beim Darueberfahren nicht mehr in die Warnfarbe.
+            # Die Hover-Rueckmeldung ist der Ringlauf (siehe _on_paint), ein
+            # zusaetzlicher Farbsprung wuerde sie nur uebertoenen.
             return mix(SURFACE, BG, 0.70), BORDER, TEXT_FAINT
         # ghost
         fill = SURFACE_2 if not self._hover else SURFACE_3
@@ -658,26 +689,28 @@ class PillButton:
             finally:
                 brush.Dispose()
         fill, border, fg = self._colors()
-        # Ringlauf (N11.28): waehrend er faehrt, zieht die Akzentfarbe in
-        # Fuellung und Zeichen ein, damit der Knopf als Ganzes "warm wird" und
-        # nicht nur ein Bogen darauf liegt.
+        # Ringlauf (N11.28): waehrend er faehrt, waermt sich nur die Flaeche
+        # leicht an. Das Zeichen bleibt gedaempft und wird erst farbig, wenn der
+        # Kreis **zu** ist, denn genau dann nimmt der Knopf den Klick an: das
+        # farbige Zeichen ist die Ansage dafuer, nicht blosse Zierde.
         t = self.progress
+        armed = t is not None and t >= 1.0
         if t is not None:
             ease = 1.0 - (1.0 - t) ** 2
-            fill = mix(ACCENT_WASH, fill, ease)
-            fg = mix(ACCENT, fg, ease)
+            fill = mix(ACCENT_WASH, fill, 0.55 * ease)
+            if armed:
+                fill, fg = ACCENT_WASH, ACCENT
         # Beim Druecken minimal einruecken (CSS: .btn:active transform scale(.98)).
         inset = 1.0 if self._down else 0.0
-        fill_pill(g, 0.5 + inset, 0.5 + inset, w - 1 - 2 * inset, h - 1 - 2 * inset,
-                  (h - 1) / 2.0, fill, border)
+        stroke_pill(g, w, h, fill, border, line_w(1.0), inset)
         if t is not None:
             # Der Bogen liegt auf dem Rand des Knopfes und ist so weit nach
             # innen gerueckt, dass ihn die eigene Strichstaerke nicht am
             # Steuerelementrand abschneidet.
-            line_w = max(1.8, min(w, h) * 0.06)
-            pad = line_w / 2.0 + inset
+            arc_w = max(1.8, min(w, h) * 0.06)
+            pad = arc_w / 2.0 + inset
             draw_ring_progress(g, pad, pad, w - 2 * pad, h - 2 * pad, t,
-                               ACCENT, line_w)
+                               ACCENT, arc_w)
         if self.glyph == "power":
             draw_power_glyph(g, w / 2.0, h / 2.0, min(w, h) * 0.44, fg)
         elif self.text:
@@ -759,8 +792,15 @@ class PillInput:
         ax, ay = abs_pos(p)
         paint_backdrop(g, ax, ay, p.Width, p.Height)
         border = ACCENT if self._focus else ACCENT_LINE
-        fill_pill(g, 0.5, 0.5, p.Width - 1, p.Height - 1, (p.Height - 1) / 2.0,
-                  SURFACE, border, 1.4 if self._focus else 1.0)
+        # Der Fokusrand war frueher 1.4 px breit und lag auf einer halben
+        # Pixelgrenze. GDI+ verteilt so eine Linie ueber zwei Pixelreihen: auf
+        # den Geraden blieb sie kraeftig, in den Rundungen wurde sie blass und
+        # breit, die Enden der Pille sahen ausgefranst aus (und das Feld hat
+        # auf dem Sperrschirm **immer** den Fokus, man sah also immer den
+        # schlechteren Fall). Ganze Pixel, halber Versatz, gleiches Gewicht
+        # rundherum (N11.27).
+        stroke_pill(g, p.Width, p.Height, SURFACE, border,
+                    line_w(2.0 if self._focus else 1.0))
 
 
 class TextLink:

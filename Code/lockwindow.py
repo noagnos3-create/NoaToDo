@@ -716,6 +716,7 @@ def run_lock_window(api: Any, boot_state: str, boot_reason: str | None,
 
     def play_unlock_anim():
         timer.Stop()                  # Caps-/Countdown-Takt wird nicht mehr gebraucht
+        stop_off_ring()               # der Off-Knopf verschwindet gleich (N11.28)
         # Im Normalfall sind beide Labels unsichtbar (der Sperrschirm traegt
         # keinen Text mehr), das aufgehende Schloss ist die Rueckmeldung. Nur
         # im Fehlerfall, wo sie stehen, ersetzt "Unlocked" die Fehlerzeilen.
@@ -798,18 +799,24 @@ def run_lock_window(api: Any, boot_state: str, boot_reason: str | None,
     pw.KeyDown += KeyEventHandler(on_pw_key)
 
     # ------------------------------------------------------------------
-    # Ausschalt-Animation (N11.28): der Kreis um das Power-Zeichen faehrt in
-    # der Akzentfarbe herum, und erst wenn er zu ist, beendet sich die App.
-    # Der Knopf hat dafuer seinen Hover-Zustand verloren (wintheme): die
-    # Rueckmeldung gehoert an den Klick, nicht schon an den Zeiger daneben.
-    # Sie ist rein praesentationsbezogen und haelt nichts auf, was Daten
-    # schuetzt: der Tresor ist waehrend der Sperre ohnehin zu, und das
-    # eigentliche Beenden (teardown, G35) laeuft erst danach los.
+    # Off-Knopf: erst der Ring, dann der Klick (N11.28)
     # ------------------------------------------------------------------
-    OFF_ANIM_MS = 760.0
-    off_anim = {"start": 0.0}
+    # Solange der Zeiger auf dem Knopf steht, faehrt der Kreis um das
+    # Power-Zeichen in der Akzentfarbe herum (von oben im Uhrzeigersinn). Ist er
+    # **zu**, wird das Zeichen farbig, und **erst dann** beendet ein Klick die
+    # App; vorher passiert bei einem Klick nichts. Der Ring ist damit nicht nur
+    # Schmuck, sondern die Sicherung gegen den versehentlichen Klick, die der
+    # Knopf vorher nicht hatte (bis dahin beendete der erste Klick sofort).
+    # Verlaesst der Zeiger den Knopf, laeuft der Ring wieder zurueck, und der
+    # Knopf ist erneut gesichert.
+    OFF_FILL_MS = 760.0               # Hinlauf (Zeiger steht auf dem Knopf)
+    OFF_UNDO_MS = 420.0               # Ruecklauf (Zeiger ist weg), bewusst flotter
+    off_anim = {"t": 0.0, "dir": 0, "last": 0.0}
     off_timer = Timer()
     off_timer.Interval = 16           # ~60 Bilder/s, wie die Entsperr-Animation
+
+    def off_armed() -> bool:
+        return off_anim["t"] >= 1.0
 
     def do_quit():
         state["closing_intent"] = "quit"
@@ -820,23 +827,54 @@ def run_lock_window(api: Any, boot_state: str, boot_reason: str | None,
             form.Close()
 
     def on_off_tick(_s, _a):
-        t = min(1.0, (time.monotonic() - off_anim["start"]) * 1000.0 / OFF_ANIM_MS)
-        off.set_progress(t)
-        if t >= 1.0:
+        now = time.monotonic()
+        dt = max(0.0, now - off_anim["last"])
+        off_anim["last"] = now
+        span = OFF_FILL_MS if off_anim["dir"] > 0 else OFF_UNDO_MS
+        off_anim["t"] += off_anim["dir"] * dt * 1000.0 / span
+        if off_anim["t"] >= 1.0:
+            off_anim["t"] = 1.0
+            off_timer.Stop()          # voller Kreis: stehen lassen, jetzt scharf
+            off.set_progress(1.0)
+            return
+        if off_anim["t"] <= 0.0:
+            off_anim["t"] = 0.0
             off_timer.Stop()
-            do_quit()
+            off.set_progress(None)    # zurueck in den Ruhezustand
+            return
+        off.set_progress(off_anim["t"])
     off_timer.Tick += EventHandler(on_off_tick)
 
-    def on_off_click(_s, _a):
-        # Ein Klick genuegt und ist endgueltig: ein zweiter startet den Lauf
-        # nicht neu, und abbrechen laesst er sich nicht (beendet wird ohne
-        # Passphrase, es geht dabei nichts verloren).
+    def off_run(direction: int):
+        # Richtung wechseln, ohne zu springen: der Ring laeuft von dort weiter,
+        # wo er gerade steht (schnelles Rein und Raus sieht sonst hakelig aus).
         if state["quitting"]:
             return
+        off_anim["dir"] = direction
+        off_anim["last"] = time.monotonic()
+        if (direction > 0 and off_anim["t"] < 1.0) or (direction < 0 and off_anim["t"] > 0.0):
+            off_timer.Start()
+
+    def stop_off_ring():
+        # Wird gebraucht, wenn der Knopf verschwindet (Entsperr-Animation):
+        # ein weiterlaufender Takt auf einem unsichtbaren Knopf hat nichts mehr
+        # zu zeichnen, und MouseLeave kommt beim Ausblenden nicht zuverlaessig.
+        off_anim["dir"] = 0
+        off_anim["t"] = 0.0
+        off_timer.Stop()
+        off.set_progress(None)
+
+    off.control.MouseEnter += EventHandler(lambda _s, _a: off_run(1))
+    off.control.MouseLeave += EventHandler(lambda _s, _a: off_run(-1))
+
+    def on_off_click(_s, _a):
+        # Vor dem vollen Kreis ist der Knopf bewusst stumm: kein Beenden, keine
+        # Meldung. Der Ring sagt bereits, was fehlt.
+        if state["quitting"] or not off_armed():
+            return
         state["quitting"] = True
-        off_anim["start"] = time.monotonic()
-        off.set_progress(0.0)
-        off_timer.Start()
+        off_timer.Stop()
+        do_quit()
     off.control.Click += EventHandler(on_off_click)
 
     def open_reset():
@@ -971,8 +1009,11 @@ def run_lock_window(api: Any, boot_state: str, boot_reason: str | None,
                 try:
                     # "submit" ist der Ersatz fuer den frueheren Unlock-Knopf
                     # (N11.24): der Test loest den Entsperr-Versuch direkt aus.
+                    # "off_hover" ersetzt das Zeigen mit der Maus (N11.28): ohne
+                    # vollen Ring nimmt "off" keinen Klick an.
                     _test_after_shown({"pw": pw, "submit": do_unlock,
-                                       "off": off.control, "form": form})
+                                       "off": off.control, "off_hover": off_run,
+                                       "form": form})
                 except Exception as exc:
                     print("test_after_shown error:", exc, flush=True)
             probe.Tick += EventHandler(fire)
