@@ -382,6 +382,60 @@ def _cleanup_stale_webview_profiles() -> None:
             pass
 
 
+def _cleanup_redirected_legacy() -> None:
+    """Einmal-Aufraeumen der alten Store-Python-Redirect-Pfade (G14, N11.15.5 d).
+
+    Unter Microsoft-Store-Python werden Schreibzugriffe auf ``%LOCALAPPDATA%``
+    nach ``...\\Packages\\PythonSoftwareFoundation.Python.3.11_*\\LocalCache\\
+    Local\\NoaToDo\\`` umgeleitet. Die ``.exe`` laeuft **ohne** diesen Redirect
+    und wuerde den alten umgeleiteten Profilordner (WebView2-Cache, G14) und die
+    alte ``config.json`` sonst fuer immer liegen lassen: niemand wischt sie je.
+
+    Regeln aus N11.15.5:
+    - **Aufraeumen ja, Migration nein:** die alte ``config.json`` wird geloescht,
+      nie gelesen. Wer vom Dev-Python zur ``.exe`` wechselt, landet im
+      Onboarding und zeigt mit "Tresor suchen" auf seine vorhandene Datei.
+    - Eine ``tasks.db.enc`` wird **niemals** angefasst (das waere Datenverlust,
+      der Tresor liegt am vom Nutzer gewaehlten Ort).
+    - Nur im gefrorenen Build. Im Quellbaum IST der umgeleitete Pfad der echte
+      Arbeitspfad; dort zu wischen wuerde die laufende Installation zerstoeren.
+    - Genau einmal: ein Merker im echten ``%LOCALAPPDATA%\\NoaToDo`` verhindert,
+      dass jeder Start erneut durch die Paketordner laeuft.
+    """
+    if not buildinfo.is_frozen():
+        return
+    own_dir = os.path.join(_LOCALAPPDATA, "NoaToDo")
+    marker = os.path.join(own_dir, "redirect-cleanup.done")
+    if os.path.exists(marker):
+        return
+    packages = os.path.join(_LOCALAPPDATA, "Packages")
+    try:
+        entries = os.listdir(packages)
+    except OSError:
+        entries = []
+    for name in entries:
+        if not name.startswith("PythonSoftwareFoundation.Python."):
+            continue
+        base = os.path.join(packages, name, "LocalCache", "Local", "NoaToDo")
+        if not os.path.isdir(base):
+            continue
+        try:
+            shutil.rmtree(os.path.join(base, "webview"))
+        except OSError:
+            pass
+        try:
+            os.remove(os.path.join(base, "config.json"))
+        except OSError:
+            pass
+    try:
+        os.makedirs(own_dir, exist_ok=True)
+        with open(marker, "w", encoding="utf-8") as fh:
+            fh.write("Phase 9 / N11.15.5: alte Redirect-Pfade einmalig geraeumt.\n")
+    except OSError:
+        # Kein Merker schreibbar: dann laeuft der (harmlose) Lauf halt erneut.
+        pass
+
+
 def _purge_webview_cache() -> None:
     """Loescht HTTP- und Code-Cache im WebView2-Profil bei jedem Start.
 
@@ -1019,6 +1073,9 @@ def main() -> None:
         return
 
     _cleanup_stale_webview_profiles()
+    # G14/N11.15.5 (d): die alten, unter Store-Python umgeleiteten Pfade der
+    # Entwicklerzeit einmalig wegraeumen (nur im gefrorenen Build).
+    _cleanup_redirected_legacy()
     ctypes.windll.user32.SetProcessDpiAwarenessContext(ctypes.c_void_p(-4))
     _set_app_user_model_id()
     # Verwaiste (verschluesselte) Arbeitsdateien eines Absturzes verwerfen

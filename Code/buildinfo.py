@@ -44,6 +44,10 @@ except Exception:
 
 BUILD_DATE: str | None = getattr(_stamp, "BUILD_DATE", None)
 BUILD_COMMIT: str | None = getattr(_stamp, "BUILD_COMMIT", None)
+# Wurde die .exe nach dem Bauen signiert? Setzt der Build-Schritt, der wirklich
+# signiert hat. Default False, damit die App nie eine Signatur behauptet, die
+# es nicht gibt (G22; diese Fassung ist unsigniert, N11.29 b).
+BUILD_SIGNED: bool = bool(getattr(_stamp, "SIGNED", False))
 # Frontend-Hash-Manifest fuer Gate G27: {"frontend/app.js": "<sha256 hex>", ...}
 FRONTEND_MANIFEST: dict = getattr(_stamp, "FRONTEND_MANIFEST", {}) or {}
 
@@ -132,5 +136,6 @@ def build_info() -> dict:
         "build_date": BUILD_DATE,
         "commit": BUILD_COMMIT,
         "frozen": is_frozen(),
+        "signed": BUILD_SIGNED,
         "source": SOURCE_URL,
     }
