@@ -4029,6 +4029,48 @@ sein, bevor man verteilt (sonst gibt man eine „Tresor-App" mit `DEV_AES_KEY` h
      liefert Wheels nur fuer bestimmte CPython-Versionen);
      Version und Build-Datum in die `.exe`-Ressourcen schreiben.
 
+##### N11.29 Auslieferungs-Entscheid der ersten Fassung (2026-08-10, Nutzerentscheid)
+
+Die drei oben offen gelassenen Wahlmöglichkeiten sind entschieden. Der Entscheid ist
+verbindlich für diese Auslieferung und **verändert kein Sicherheitsversprechen**: die
+Sicherheit steckt in Passphrase, DPAPI-Pepper und Verschlüsselung, nie im Bauverfahren
+(Kerckhoffs, G27).
+
+- **(a) PyInstaller, nicht Nuitka; One-file.** Gebaut wird eine einzelne
+  `NoaToDo.exe` mit PyInstaller. G27 nennt Nuitka als bevorzugt, weil ein
+  PyInstaller-Bundle mit Standardwerkzeug entpackbar und der Bytecode
+  dekompilierbar ist. Das wird bewusst in Kauf genommen und **ehrlich benannt**
+  (B.10.3: kein Schutz, der nicht existiert): der Pflichtteil von G27 bleibt
+  „keinen Python-Quelltext mitliefern, Docstrings und `assert`s beim Build
+  entfernen" (Bau mit `--optimize 2`, also `.pyc` ohne Docstrings und ohne
+  `assert`), die Nuitka-Empfehlung wandert auf die Liste möglicher späterer
+  Verschärfungen. One-file heisst zugleich: die Frontend-Dateien liegen **im**
+  Binary und werden pro Start in einen frischen Ordner entpackt, womit der
+  G27-Pflichtpunkt „Frontend-Assets ins Binary einbetten" erfüllt ist; die
+  Hash-Prüfung gegen das eingebettete Manifest wird trotzdem gebaut (Gürtel und
+  Hosenträger, siehe G27).
+- **(b) Kein Code-Signing in dieser Fassung.** Ein Authenticode-Zertifikat liegt
+  nicht vor. G27 bleibt an dieser Stelle **offen** (nicht erledigt, nicht
+  gestrichen): sobald ein Zertifikat verfügbar ist, wird signiert. Folgen, die
+  dokumentiert werden müssen statt sie zu beschönigen: SmartScreen warnt beim
+  ersten Start auf einem fremden Rechner, und eine Manipulation am Binary ist für
+  den Nutzer nicht per Signaturprüfung erkennbar. Die Frontend-Integritätsprüfung
+  (G27, A5) hilft nur gegen das Austauschen der **danebenliegenden** Dateien; wer
+  das Binary selbst tauscht, ist damit nicht gefasst. Genau so steht es im
+  Status-Modal bzw. in der Auslieferungs-Doku, nie als „signiert" verkauft (G22).
+- **(c) WebView2-Runtime wird vorausgesetzt, nichts gebündelt.** Kein
+  Evergreen-Bootstrapper, keine Fixed-Version-Runtime im Paket (die Runtime ist
+  auf Windows 11 und auf gepflegten Windows-10-Rechnern vorhanden, und ein
+  mitgelieferter Installer wäre ein zweiter, ungeprüfter Update-Kanal). Pflicht
+  bleibt der **verständliche Fehlerfall**: fehlt die Runtime, startet die App
+  nicht ins weisse Fenster, sondern zeigt ein Hinweisfenster im App-Design
+  (`wintheme.show_message`, kein WebView nötig) mit dem Namen der fehlenden
+  Komponente und der Bezugsstelle, und beendet sich sauber.
+- **(d) Version und Bezugsquelle.** Erste ausgelieferte Fassung ist **1.0.0**;
+  Version, Build-Datum und Bezugsquelle stehen in `Code/buildinfo.py` (eine
+  Quelle) und erscheinen unverändert in den `.exe`-Ressourcen und im
+  Status-Modal (V10). Kein Auto-Update, kein Update-Check übers Netz.
+
 3. **Verhalten auf einem fremden Rechner (Erststart):**
    - Keine `tasks.db.enc` vorhanden, also Onboarding: Speicherort wählen (N11.3), neue
      Passphrase anlegen (min. 12 Zeichen plus Verlust-Warnung, N11.3), Pepper erzeugen
@@ -4265,6 +4307,7 @@ liegen durchgestrichen in Anhang 3, Umbau-Etappe 5.)
 | N11.24 | 2026-08-08 | **Kein „Unlock"-Knopf im Sperrfenster, mehr Luft um den Ring** (Nutzerwunsch): der Knopf sass unter dem Ring und schnitt dessen Schein als harte Kante ab (native Steuerelemente malen ihren eigenen Hintergrund). Entsperrt wird nur noch mit Enter im Passwortfeld (Untertitel sagt es), der Abstand Ring zu Titelzeile waechst auf rund die halbe Ringbreite; die Rate-Limit-Sperre haengt jetzt an einem eigenen Zustand statt an `Button.Enabled` | B.4 (Sperrschirm) |
 | N11.27 | 2026-08-10 | **Passphrase nirgends im Klartext, kleinere Pille, linksbuendig** (Nutzerwunsch): der Show/Hide-Umschalter im nativen Sperrfenster ist ersatzlos weg, und das „Auge" von Edge/WebView2 (`::-ms-reveal`) ist an **jedem** Passwortfeld der App aus (auch bei der Passphrase-Aenderung). Einzige Ausnahme ist das **erstmalige Festlegen** im Onboarding (dort gibt es noch kein Geheimnis aufzudecken, und ein unbemerkter Tippfehler kostet mangels Wiederherstellung den ganzen Tresor). Die Eingabepille wird 240x40 statt 320x46 (Verhaeltnis 6:1, voll gerundet), ihr Rand liegt auf ganzen Pixeln (`wintheme.line_w` + `wintheme.stroke_pill`, eine Quelle fuer alle gemalten Pillen; der frueher 1,4 px breite Fokusrand auf halber Pixelgrenze liess die Rundungen blass und ausgefranst wirken), und sie ist linksbuendig statt mittig; die Blockhoehe der gemeinsamen Ring-Geometrie faellt damit auf 382, die `.lock-card`-Verankerung im Stylesheet auf `50vh - 211px` (Paar-Regel aus N11.25) | B.4 (Sperrschirm, N4) |
 | N11.26 | 2026-08-08 | **Sperrschirm ohne Text, kleineres Passwortfeld, und genau eine Feier** (Nutzerwunsch): der Sperrschirm zeigt nur noch Ring und Passwort-Pille, die beiden Zeilen „NoaToDo is locked" und „Type your passphrase and press Enter." fallen weg (das Schloss zeigt den Zustand, der Platzhalter „Password" die Aufgabe, Enter ist die gelernte Geste), die Pille wird kleiner; gilt fuer beide Wege ins Fenster und ebenso fuer die kurze Sperr-Blende im WebView, einzige Ausnahme ist der Fehlerbildschirm N6, der seine Zeilen behaelt und ihre Hoehe an die gemeinsame Ring-Geometrie meldet. Dazu: die Entsperr-Animation (N11.22) laeuft **nur** bei der Rueckkehr in eine gesperrte Sitzung; beim normalen Programmstart bleibt das Schloss zu und die Willkommens-Blende mit dem Logo (N11.20) ist die einzige Begruessung (die Uebergabe-Blende traegt dort `plain`) | B.4 (Sperrschirm + Onboarding-Kapitel) |
+| N11.29 | 2026-08-10 | **Auslieferungs-Entscheid der ersten Fassung** (Nutzerentscheid): gebaut wird mit **PyInstaller als One-file** (nicht Nuitka; die G27-Empfehlung wird bewusst zurueckgestellt und ehrlich benannt, Pflichtteil „kein Quelltext, keine Docstrings/asserts" bleibt und wird ueber `--optimize 2` erfuellt), **ohne Code-Signing** (kein Zertifikat vorhanden: G27 bleibt an dieser Stelle offen, SmartScreen-Warnung und fehlende Manipulationserkennung am Binary werden dokumentiert statt beschoenigt), und die **Evergreen-WebView2-Runtime wird auf dem Zielrechner vorausgesetzt** (nichts gebuendelt; Pflicht bleibt die verstaendliche Meldung im App-Design statt weissem Fenster). Erste Fassung **1.0.0**; Version, Build-Datum und Bezugsquelle stehen einmal in `Code/buildinfo.py` und gehen von dort in die `.exe`-Ressourcen und ins Status-Modal (V10) | Phase 9 (+ B.9 G27/G34) |
 | N11.28 | 2026-08-10 | **Erst der Ring, dann zaehlt der Klick: der Off-Knopf** (Nutzerwunsch, am selben Tag in drei Schritten geschaerft: erst Ring beim Klick, dann Ring beim Hover mit Klick-Sperre, dann Selbstlauf plus Haltezeit): der Zeiger auf dem Power-Knopf des Sperrschirms laesst den Kreis um das Zeichen in der Akzentfarbe herumfahren (rund 1,1 s, von oben im Uhrzeigersinn); der Lauf laeuft auch zu Ende, wenn der Zeiger woanders hinfaehrt; erst beim vollen Kreis wird das Zeichen farbig und ein Klick beendet die App ueber den unveraenderten Weg (`quit_app()` -> `teardown('quit')`, G35); vorher ist der Knopf stumm (Sicherung gegen den versehentlichen Klick, die er vorher nicht hatte); der scharfe Zustand haelt 10 s und faellt ohne Klick in den Ruhezustand zurueck (Zeiger darauf loest neu aus); der frueher Warnfarben-Hover faellt weg, die Hover-Rueckmeldung ist der Ring. Der Ring nutzt den festen nativen Akzent, weil die eingestellte Akzentfarbe im geschlossenen Tresor liegt (B.3 Punkt 1), wie schon der grosse Sperr-Ring. Umsetzung: `PillButton.set_progress()` + `draw_ring_progress()` in `wintheme.py` (eine Optik-Quelle), Takt und Haltezeit (`OFF_FILL_MS`/`OFF_HOLD_MS`) im Sperrfenster | B.4 (Sperrschirm, N10.2) + B.3 (Punkt 4) |
 
 

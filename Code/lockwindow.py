@@ -134,8 +134,9 @@ def _call(fn, *args) -> None:
     try:
         fn(*args)
     except Exception as exc:
-        import os
-        if os.environ.get("NOATODO_DEBUG", "").lower() in ("1", "true", "yes"):
+        # Eine Quelle fuer den Debug-Schalter: im Release ist er hart aus (G34 a).
+        import buildinfo
+        if buildinfo.debug_enabled():
             print("[NoaToDo] Rueckruf fehlgeschlagen: %r" % (exc,), flush=True)
 
 

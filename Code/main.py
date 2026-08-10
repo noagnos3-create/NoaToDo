@@ -18,13 +18,19 @@ import time
 
 import webview
 
+import buildinfo
 from backend import config as config_module
 from backend import radio as radio_module
 from backend import security as security_module
 from backend.api import Api
 
+# Pfade zu mitgelieferten Dateien IMMER ueber buildinfo (Phase 9): im
+# Quellbaum liegen sie neben dieser Datei, im One-file-Build in dem pro Start
+# frisch entpackten Bundle-Ordner (sys._MEIPASS). ``HERE`` bleibt nur als
+# Quellbaum-Bezug erhalten und darf nicht mehr fuer Frontend/Icon dienen.
 HERE = os.path.dirname(os.path.abspath(__file__))
-INDEX = os.path.join(HERE, "frontend", "index.html")
+INDEX = buildinfo.index_html()
+ICON = buildinfo.icon_path()
 
 # Fester WebView2-Profilordner (Gate G14). Ersetzt den frueheren Privatmodus, der
 # pro Start ein neues Temp-Profil anlegte und sich anhaeufte. Liegt unter
@@ -439,7 +445,7 @@ def _is_allowed_navigation(uri: str) -> bool:
         return host in ("127.0.0.1", "localhost", "::1")
     if not u.startswith("file:"):
         return False
-    frontend_root = os.path.join(HERE, "frontend").replace("\\", "/").lower()
+    frontend_root = buildinfo.frontend_dir().replace("\\", "/").lower()
     path = unquote(urlparse(u).path or "").replace("\\", "/").lstrip("/")
     return path.startswith(frontend_root.lstrip("/"))
 
@@ -490,16 +496,20 @@ def _frontend_stamp() -> str:
 
     Reine Diagnose: macht im Terminal sichtbar, welcher Frontend-Stand geladen
     wird, damit "es hat sich nichts geaendert" sofort auf alt-laufendes Fenster
-    vs. echter Neustart zurueckgefuehrt werden kann.
+    vs. echter Neustart zurueckgefuehrt werden kann. Im gefrorenen Build sagen
+    diese Zeiten nichts (das Bundle wird pro Start frisch entpackt), dort steht
+    stattdessen Version und Build-Datum (V10).
     """
+    if buildinfo.is_frozen():
+        return f"Version {buildinfo.version_line()}"
     parts = []
-    for name in ("frontend/index.html", "frontend/app.js", "frontend/style.css"):
-        path = os.path.join(HERE, name)
+    for name in ("index.html", "app.js", "style.css"):
+        path = os.path.join(buildinfo.frontend_dir(), name)
         try:
             ts = time.strftime("%H:%M:%S", time.localtime(os.path.getmtime(path)))
         except OSError:
             ts = "??"
-        parts.append(f"{os.path.basename(name)} {ts}")
+        parts.append(f"{name} {ts}")
     return "Frontend: " + ", ".join(parts)
 
 
@@ -780,7 +790,7 @@ def run_webview(api: Api, icon: str) -> None:
 
         def _startup_window_setup():
             hwnd = _get_hwnd(window)
-            icon_path = os.path.join(HERE, "frontend", "icon.ico")
+            icon_path = ICON
             _apply_window_icon(window, icon_path)
             _apply_taskbar_identity(hwnd, _APP_USER_MODEL_ID, icon_path)
             _apply_titlebar_theme(hwnd, _current_dark(api))
@@ -890,7 +900,7 @@ def main() -> None:
             wintheme.show_message(
                 "NoaToDo is already running.\nOnly one instance can be open.",
                 "NoaToDo",
-                os.path.join(HERE, "frontend", "icon.ico"),
+                ICON,
             )
         except Exception:
             ctypes.windll.user32.MessageBoxW(
@@ -925,7 +935,7 @@ def main() -> None:
 
     session = security_module.Session()
     api = Api(session)
-    icon = os.path.join(HERE, "frontend", "icon.ico")
+    icon = ICON
 
     _determine_boot_state(api)
 
@@ -1015,8 +1025,12 @@ def _release_single_instance() -> None:
 
 
 def _debug_enabled() -> bool:
-    """DevTools aktivieren, wenn NOATODO_DEBUG gesetzt ist."""
-    return os.environ.get("NOATODO_DEBUG", "").lower() in ("1", "true", "yes")
+    """DevTools aktivieren, wenn NOATODO_DEBUG gesetzt ist.
+
+    Nur im Quellbaum. Der gefrorene Release-Build ignoriert die Variable hart
+    (Gate G34 a); die eine Entscheidung dazu liegt in ``buildinfo``.
+    """
+    return buildinfo.debug_enabled()
 
 
 if __name__ == "__main__":

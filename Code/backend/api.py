@@ -1813,8 +1813,12 @@ def _cleanup_dev_legacy_db() -> bool:
     ehrlichen SSD-Restgrenze, den G33 verlangt: ohne Fund gaebe es nichts zu
     warnen, und ein Hinweis auf Vorrat waere eine Behauptung ins Blaue.
     """
-    base = os.path.join(
-        os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "data", "tasks.db")
+    # Der Ort der Altlast ist der Ordner, in dem die App wohnt: im Quellbaum
+    # ``Code/data/tasks.db``, gefroren ``<Ordner der .exe>\data\tasks.db``
+    # (Phase 9, buildinfo.app_dir()). Bewusst NICHT der entpackte Bundle-Ordner:
+    # dort gibt es keine Altlasten, nur mitgelieferte Dateien.
+    import buildinfo
+    base = os.path.join(buildinfo.app_dir(), "data", "tasks.db")
     removed = False
     for suffix in ("", "-journal", "-wal", "-shm"):
         target = base + suffix
