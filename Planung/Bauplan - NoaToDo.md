@@ -1375,25 +1375,38 @@ Eingabefeld mit folgenden **Pflicht-Eigenschaften**:
   hintereinander. Den Merker liefert `api._resumed` (dasselbe Feld, das
   `get_boot_state().resumed` speist, B.2); `main.py` reicht ihn beim Öffnen des
   Sperrfensters durch.
-- **Der Off-Knopf fährt einen Ring, und er reagiert nicht mehr auf den Zeiger
-  (verbindlich, Etikett N11.28, 2026-08-10).** Ein Klick auf den Power-Knopf oben
-  rechts (N10.2) beendet die App nicht mehr im selben Augenblick: zuerst läuft der
-  Kreis um das Power-Zeichen **in der Akzentfarbe herum** (rund 0,75 Sekunden, von
-  oben im Uhrzeigersinn; Füllung und Zeichen ziehen die Akzentfarbe mit, damit der
-  ganze Knopf warm wird und nicht nur ein Bogen darauf liegt), und **erst wenn der
-  Kreis zu ist**, startet der Beenden-Weg (`quit_app()` → `teardown('quit')`, G35,
-  unverändert). Zweite Hälfte derselben Entscheidung und genauso verbindlich: der
-  Knopf hat **keinen Hover-Zustand mehr**, das Umschlagen in die Warnfarbe beim
-  blossen Darüberfahren fällt weg. Die Rückmeldung gehört an den Klick; ein
-  Farbwechsel schon beim Zeiger daneben nahm ihr die Wirkung vorweg.
-  Der Lauf ist **rein präsentationsbezogen**: er hält nichts auf, was schützt (der
-  Tresor ist während der Sperre ohnehin zu, und das Wischen der Spuren läuft erst
-  danach los), er lässt sich nicht abbrechen, ein zweiter Klick startet ihn nicht
-  neu, und solange er läuft, nimmt das Fenster weder einen Entsperr-Versuch noch
-  den Reset an, damit nie zwei Ausgänge nebeneinander laufen.
-  Der Ring nimmt den **festen** Akzent der nativen Palette (B.3, Punkt 1): die vom
-  Nutzer eingestellte Akzentfarbe liegt im geschlossenen Tresor und ist während der
-  Sperre nicht lesbar, genau wie beim grossen Sperr-Ring daneben.
+- **Erst der Ring, dann zählt der Klick: der Off-Knopf (verbindlich, Etikett
+  N11.28, 2026-08-10).** Der Power-Knopf oben rechts (N10.2) beendet die App nicht
+  mehr beim ersten Klick. Sechs Punkte, alle verbindlich:
+  1. **Ausgelöst wird mit dem Zeiger.** Steht die Maus auf dem Knopf, fährt der
+     Kreis um das Power-Zeichen **in der Akzentfarbe** von oben im Uhrzeigersinn
+     herum (rund 0,75 Sekunden); die Fläche wärmt sich dabei leicht an.
+  2. **Der Lauf gehört sich selbst.** Fährt der Zeiger mittendrin woanders hin,
+     läuft der Ring trotzdem zu Ende. Er springt nicht zurück, und ein erneutes
+     Berühren startet ihn nicht neu.
+  3. **Voller Kreis heisst scharf.** Dann, und **erst dann**, wird das
+     Power-Zeichen selbst farbig, und ein Klick beendet die App über den
+     unveränderten Weg (`quit_app()` → `teardown('quit')`, G35).
+  4. **Vorher ist der Knopf stumm.** Ein Klick auf den nicht fertigen Ring tut
+     **nichts**: kein Beenden, keine Meldung (der Ring sagt bereits, was fehlt).
+     Damit ist der zweite Ausgang der App gegen den versehentlichen Klick
+     gesichert, was er vorher nicht war.
+  5. **Der scharfe Zustand hält 15 Sekunden.** Bleibt der Klick aus, fällt der
+     Knopf in den Ruhezustand zurück (Ring weg, Zeichen wieder gedämpft); der
+     Zeiger darauf löst ihn neu aus, auch durch blosse Bewegung, falls er nach
+     Ablauf noch darauf liegt. Ein einmal berührter Knopf soll nicht den ganzen
+     Abend scharf dastehen.
+  6. **Kein eigener Hover-Farbwechsel mehr.** Das frühere Umschlagen in die
+     Warnfarbe beim Darüberfahren fällt weg; die Hover-Rückmeldung **ist** der
+     Ring, ein zweiter Farbsprung würde sie übertönen.
+
+  Der Ring hält nichts auf, was schützt (der Tresor ist während der Sperre ohnehin
+  zu, das Wischen der Spuren läuft erst nach dem Klick los), und solange das
+  Beenden läuft, nimmt das Fenster weder einen Entsperr-Versuch noch den Reset an,
+  damit nie zwei Ausgänge nebeneinander laufen. Der Ring nimmt den **festen**
+  Akzent der nativen Palette (B.3, Punkt 1): die vom Nutzer eingestellte
+  Akzentfarbe liegt im geschlossenen Tresor und ist während der Sperre nicht
+  lesbar, genau wie beim grossen Sperr-Ring daneben.
 
 #### Entsperr-/Boot-Fehlerbildschirm (Etikett N6, UX 6.3, Phase 8) [Sec]
 
@@ -1418,10 +1431,10 @@ Wischen von `PROFILE_DIR` nach G14, Schlüssel nullen nach G25), aber ausdrückl
 **keine Nutzer- und keine App-Daten gelöscht**. Die Passworteingabe bleibt daneben
 jederzeit möglich; der Off-Knopf ist nur der zweite Ausgang.
 
-*(Verfeinert durch N11.28, 2026-08-10, siehe die Sperrschirm-Liste oben: „sofort"
-heisst seitdem „sobald der Ring um das Power-Zeichen herumgefahren ist", rund 0,75
-Sekunden nach dem Klick. Am Weg selbst und an der Regel „löscht nie Daten" ändert
-das nichts.)*
+*(Verfeinert durch N11.28, 2026-08-10, siehe die Sperrschirm-Liste oben: „ein Klick
+beendet sofort" gilt seitdem erst für den Klick auf den **fertigen** Ring. Der Zeiger
+auf dem Knopf lässt den Ring herumfahren (rund 0,75 s), vorher ist der Knopf stumm.
+Am Weg selbst und an der Regel „löscht nie Daten" ändert das nichts.)*
 
 #### Panik-Endschirm mit zwei Ausgaengen (Etikett N10.3, 2026-07-08)
 
@@ -4252,7 +4265,7 @@ liegen durchgestrichen in Anhang 3, Umbau-Etappe 5.)
 | N11.24 | 2026-08-08 | **Kein „Unlock"-Knopf im Sperrfenster, mehr Luft um den Ring** (Nutzerwunsch): der Knopf sass unter dem Ring und schnitt dessen Schein als harte Kante ab (native Steuerelemente malen ihren eigenen Hintergrund). Entsperrt wird nur noch mit Enter im Passwortfeld (Untertitel sagt es), der Abstand Ring zu Titelzeile waechst auf rund die halbe Ringbreite; die Rate-Limit-Sperre haengt jetzt an einem eigenen Zustand statt an `Button.Enabled` | B.4 (Sperrschirm) |
 | N11.27 | 2026-08-10 | **Passphrase nirgends im Klartext, kleinere Pille, linksbuendig** (Nutzerwunsch): der Show/Hide-Umschalter im nativen Sperrfenster ist ersatzlos weg, und das „Auge" von Edge/WebView2 (`::-ms-reveal`) ist an **jedem** Passwortfeld der App aus (auch bei der Passphrase-Aenderung). Einzige Ausnahme ist das **erstmalige Festlegen** im Onboarding (dort gibt es noch kein Geheimnis aufzudecken, und ein unbemerkter Tippfehler kostet mangels Wiederherstellung den ganzen Tresor). Die Eingabepille wird 240x40 statt 320x46 (Verhaeltnis 6:1, voll gerundet), ihr Rand liegt auf ganzen Pixeln (`wintheme.line_w` + `wintheme.stroke_pill`, eine Quelle fuer alle gemalten Pillen; der frueher 1,4 px breite Fokusrand auf halber Pixelgrenze liess die Rundungen blass und ausgefranst wirken), und sie ist linksbuendig statt mittig; die Blockhoehe der gemeinsamen Ring-Geometrie faellt damit auf 382, die `.lock-card`-Verankerung im Stylesheet auf `50vh - 211px` (Paar-Regel aus N11.25) | B.4 (Sperrschirm, N4) |
 | N11.26 | 2026-08-08 | **Sperrschirm ohne Text, kleineres Passwortfeld, und genau eine Feier** (Nutzerwunsch): der Sperrschirm zeigt nur noch Ring und Passwort-Pille, die beiden Zeilen „NoaToDo is locked" und „Type your passphrase and press Enter." fallen weg (das Schloss zeigt den Zustand, der Platzhalter „Password" die Aufgabe, Enter ist die gelernte Geste), die Pille wird kleiner; gilt fuer beide Wege ins Fenster und ebenso fuer die kurze Sperr-Blende im WebView, einzige Ausnahme ist der Fehlerbildschirm N6, der seine Zeilen behaelt und ihre Hoehe an die gemeinsame Ring-Geometrie meldet. Dazu: die Entsperr-Animation (N11.22) laeuft **nur** bei der Rueckkehr in eine gesperrte Sitzung; beim normalen Programmstart bleibt das Schloss zu und die Willkommens-Blende mit dem Logo (N11.20) ist die einzige Begruessung (die Uebergabe-Blende traegt dort `plain`) | B.4 (Sperrschirm + Onboarding-Kapitel) |
-| N11.28 | 2026-08-10 | **Off-Knopf faehrt einen Ring, und kein Hover mehr** (Nutzerwunsch): ein Klick auf den Power-Knopf des Sperrschirms beendet die App nicht mehr sofort, sondern laesst zuerst den Kreis um das Zeichen in der Akzentfarbe herumfahren (rund 0,75 s, von oben im Uhrzeigersinn, Fuellung und Zeichen ziehen mit); erst wenn der Kreis zu ist, startet der unveraenderte Beenden-Weg (`quit_app()` -> `teardown('quit')`, G35). Zweite Haelfte derselben Entscheidung: der Knopf hat keinen Hover-Zustand mehr (kein Umschlagen in die Warnfarbe beim blossen Darueberfahren), die Rueckmeldung gehoert an den Klick. Rein praesentationsbezogen, nicht abbrechbar, ein zweiter Klick startet nichts neu, und waehrend des Laufs nimmt das Fenster weder Entsperr-Versuch noch Reset an. Der Ring nutzt den festen nativen Akzent, weil die eingestellte Akzentfarbe im geschlossenen Tresor liegt (B.3 Punkt 1), wie schon der grosse Sperr-Ring. Umsetzung: `PillButton.set_progress()` in `wintheme.py` (eine Optik-Quelle), Takt im Sperrfenster | B.4 (Sperrschirm, N10.2) + B.3 (Punkt 4) |
+| N11.28 | 2026-08-10 | **Erst der Ring, dann zaehlt der Klick: der Off-Knopf** (Nutzerwunsch, am selben Tag in drei Schritten geschaerft: erst Ring beim Klick, dann Ring beim Hover mit Klick-Sperre, dann Selbstlauf plus Haltezeit): der Zeiger auf dem Power-Knopf des Sperrschirms laesst den Kreis um das Zeichen in der Akzentfarbe herumfahren (rund 0,75 s, von oben im Uhrzeigersinn); der Lauf laeuft auch zu Ende, wenn der Zeiger woanders hinfaehrt; erst beim vollen Kreis wird das Zeichen farbig und ein Klick beendet die App ueber den unveraenderten Weg (`quit_app()` -> `teardown('quit')`, G35); vorher ist der Knopf stumm (Sicherung gegen den versehentlichen Klick, die er vorher nicht hatte); der scharfe Zustand haelt 15 s und faellt ohne Klick in den Ruhezustand zurueck (Zeiger darauf loest neu aus); der frueher Warnfarben-Hover faellt weg, die Hover-Rueckmeldung ist der Ring. Der Ring nutzt den festen nativen Akzent, weil die eingestellte Akzentfarbe im geschlossenen Tresor liegt (B.3 Punkt 1), wie schon der grosse Sperr-Ring. Umsetzung: `PillButton.set_progress()` + `draw_ring_progress()` in `wintheme.py` (eine Optik-Quelle), Takt und Haltezeit (`OFF_FILL_MS`/`OFF_HOLD_MS`) im Sperrfenster | B.4 (Sperrschirm, N10.2) + B.3 (Punkt 4) |
 
 
 
