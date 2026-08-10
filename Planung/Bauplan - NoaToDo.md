@@ -4133,7 +4133,11 @@ Sicherheit steckt in Passphrase, DPAPI-Pepper und Verschlüsselung, nie im Bauve
   (`wintheme.show_message`, kein WebView nötig) mit dem Namen der fehlenden
   Komponente und der Bezugsstelle, und beendet sich sauber.
 - **(a2) So wird gebaut (umgesetzt 2026-08-10).** Ein Einstiegspunkt:
-  `Code/tools/build_exe.py`, aufgerufen mit dem venv-Python des Projekts. Er
+  `Code/tools/build_exe.py`, aufgerufen mit dem venv-Python des Projekts, oder
+  bequem per Doppelklick über `Code/build.bat` (das Gegenstück zu `run.ps1`
+  für den App-Start: findet das projekteigene venv über `%~dp0`, reicht
+  Argumente durch, meldet ein fehlendes venv verständlich und hält das Fenster
+  nur beim Doppelklick offen). Er
   (1) bricht ab, wenn nicht CPython **3.11.x** läuft (G11/U25), (2) schreibt den
   Bau-Stempel `Code/_buildstamp.py` (Build-Datum, Commit samt `+dirty`-Kennung,
   `SIGNED = False`, das SHA-256-Frontend-Manifest für G27), (3) schreibt die
