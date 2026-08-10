@@ -22,6 +22,8 @@ from collections import deque
 from datetime import datetime
 from typing import Any, Callable
 
+import buildinfo as _buildinfo   # Version/Build-Stempel (Phase 9, V10)
+
 from . import config as config_module
 from . import db as db_module
 from . import ostheme as ostheme_module
@@ -1036,6 +1038,11 @@ class Api:
             "encryption": encryption,
             "bitlocker": _bitlocker_status(enc_path),
             "runtime": {"webview2": _webview2_version()},
+            # V10 (Update-/Release-Story): Version, Build-Datum, Bezugsquelle
+            # und die ehrliche Signatur-Angabe. Alles aus der einen Quelle
+            # buildinfo, dieselben Werte wie in den .exe-Ressourcen. NoaToDo
+            # prueft NIE selbst uebers Netz auf Updates.
+            "app": _buildinfo.build_info(),
             # Redigierter Fehler-Ringpuffer (G29): neueste zuerst, nur fuer die
             # "Recent errors"-Sektion des Status-Modals. Eintraege sind schon
             # beim Schreiben redigiert (<path>, 200 Zeichen, keine Argumente).
@@ -1813,8 +1820,12 @@ def _cleanup_dev_legacy_db() -> bool:
     ehrlichen SSD-Restgrenze, den G33 verlangt: ohne Fund gaebe es nichts zu
     warnen, und ein Hinweis auf Vorrat waere eine Behauptung ins Blaue.
     """
-    base = os.path.join(
-        os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "data", "tasks.db")
+    # Der Ort der Altlast ist der Ordner, in dem die App wohnt: im Quellbaum
+    # ``Code/data/tasks.db``, gefroren ``<Ordner der .exe>\data\tasks.db``
+    # (Phase 9, buildinfo.app_dir()). Bewusst NICHT der entpackte Bundle-Ordner:
+    # dort gibt es keine Altlasten, nur mitgelieferte Dateien.
+    import buildinfo
+    base = os.path.join(buildinfo.app_dir(), "data", "tasks.db")
     removed = False
     for suffix in ("", "-journal", "-wal", "-shm"):
         target = base + suffix

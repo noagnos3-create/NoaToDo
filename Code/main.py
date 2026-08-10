@@ -18,13 +18,19 @@ import time
 
 import webview
 
+import buildinfo
 from backend import config as config_module
 from backend import radio as radio_module
 from backend import security as security_module
 from backend.api import Api
 
+# Pfade zu mitgelieferten Dateien IMMER ueber buildinfo (Phase 9): im
+# Quellbaum liegen sie neben dieser Datei, im One-file-Build in dem pro Start
+# frisch entpackten Bundle-Ordner (sys._MEIPASS). ``HERE`` bleibt nur als
+# Quellbaum-Bezug erhalten und darf nicht mehr fuer Frontend/Icon dienen.
 HERE = os.path.dirname(os.path.abspath(__file__))
-INDEX = os.path.join(HERE, "frontend", "index.html")
+INDEX = buildinfo.index_html()
+ICON = buildinfo.icon_path()
 
 # Fester WebView2-Profilordner (Gate G14). Ersetzt den frueheren Privatmodus, der
 # pro Start ein neues Temp-Profil anlegte und sich anhaeufte. Liegt unter
@@ -376,6 +382,60 @@ def _cleanup_stale_webview_profiles() -> None:
             pass
 
 
+def _cleanup_redirected_legacy() -> None:
+    """Einmal-Aufraeumen der alten Store-Python-Redirect-Pfade (G14, N11.15.5 d).
+
+    Unter Microsoft-Store-Python werden Schreibzugriffe auf ``%LOCALAPPDATA%``
+    nach ``...\\Packages\\PythonSoftwareFoundation.Python.3.11_*\\LocalCache\\
+    Local\\NoaToDo\\`` umgeleitet. Die ``.exe`` laeuft **ohne** diesen Redirect
+    und wuerde den alten umgeleiteten Profilordner (WebView2-Cache, G14) und die
+    alte ``config.json`` sonst fuer immer liegen lassen: niemand wischt sie je.
+
+    Regeln aus N11.15.5:
+    - **Aufraeumen ja, Migration nein:** die alte ``config.json`` wird geloescht,
+      nie gelesen. Wer vom Dev-Python zur ``.exe`` wechselt, landet im
+      Onboarding und zeigt mit "Tresor suchen" auf seine vorhandene Datei.
+    - Eine ``tasks.db.enc`` wird **niemals** angefasst (das waere Datenverlust,
+      der Tresor liegt am vom Nutzer gewaehlten Ort).
+    - Nur im gefrorenen Build. Im Quellbaum IST der umgeleitete Pfad der echte
+      Arbeitspfad; dort zu wischen wuerde die laufende Installation zerstoeren.
+    - Genau einmal: ein Merker im echten ``%LOCALAPPDATA%\\NoaToDo`` verhindert,
+      dass jeder Start erneut durch die Paketordner laeuft.
+    """
+    if not buildinfo.is_frozen():
+        return
+    own_dir = os.path.join(_LOCALAPPDATA, "NoaToDo")
+    marker = os.path.join(own_dir, "redirect-cleanup.done")
+    if os.path.exists(marker):
+        return
+    packages = os.path.join(_LOCALAPPDATA, "Packages")
+    try:
+        entries = os.listdir(packages)
+    except OSError:
+        entries = []
+    for name in entries:
+        if not name.startswith("PythonSoftwareFoundation.Python."):
+            continue
+        base = os.path.join(packages, name, "LocalCache", "Local", "NoaToDo")
+        if not os.path.isdir(base):
+            continue
+        try:
+            shutil.rmtree(os.path.join(base, "webview"))
+        except OSError:
+            pass
+        try:
+            os.remove(os.path.join(base, "config.json"))
+        except OSError:
+            pass
+    try:
+        os.makedirs(own_dir, exist_ok=True)
+        with open(marker, "w", encoding="utf-8") as fh:
+            fh.write("Phase 9 / N11.15.5: alte Redirect-Pfade einmalig geraeumt.\n")
+    except OSError:
+        # Kein Merker schreibbar: dann laeuft der (harmlose) Lauf halt erneut.
+        pass
+
+
 def _purge_webview_cache() -> None:
     """Loescht HTTP- und Code-Cache im WebView2-Profil bei jedem Start.
 
@@ -439,7 +499,7 @@ def _is_allowed_navigation(uri: str) -> bool:
         return host in ("127.0.0.1", "localhost", "::1")
     if not u.startswith("file:"):
         return False
-    frontend_root = os.path.join(HERE, "frontend").replace("\\", "/").lower()
+    frontend_root = buildinfo.frontend_dir().replace("\\", "/").lower()
     path = unquote(urlparse(u).path or "").replace("\\", "/").lstrip("/")
     return path.startswith(frontend_root.lstrip("/"))
 
@@ -485,21 +545,128 @@ def _wire_navigation_guard(window) -> None:
     _run_on_ui_thread(window, _attach)
 
 
+def _webview2_ready() -> bool:
+    """Steht auf diesem Rechner eine brauchbare WebView2-Runtime? (N11.29 c)
+
+    NoaToDo buendelt kein Chromium und setzt die Evergreen-WebView2-Runtime
+    voraus. Fehlt sie, faellt PyWebView **still auf MSHTML (Internet Explorer)
+    zurueck**: das Fenster geht auf, zeigt aber ein zerfallenes Bild statt einer
+    ehrlichen Meldung. Genau das verbietet Phase 9.
+
+    Gefragt wird deshalb nicht die Registry, sondern PyWebViews eigene
+    Entscheidung (``renderer``): nur ``edgechromium`` ist unsere Betriebsart.
+    Das kann nicht falsch-negativ sein, denn was PyWebView nicht als WebView2
+    ansieht, benutzt es auch nicht. Laesst sich das Modul nicht befragen, gilt
+    die Runtime als vorhanden (im Zweifel starten, nie ohne Not blockieren).
+    """
+    try:
+        from webview.platforms import winforms as _winforms
+        return getattr(_winforms, "renderer", "edgechromium") == "edgechromium"
+    except Exception:
+        return True
+
+
+def _show_missing_webview2() -> None:
+    """Verstaendliche Meldung statt weissem Fenster (Phase 9, N11.29 c)."""
+    text = (
+        "NoaToDo needs the Microsoft Edge WebView2 runtime.\n"
+        "It is not available on this PC.\n"
+        "\n"
+        "Install the free Evergreen runtime from Microsoft,\n"
+        "then start NoaToDo again:\n"
+        "microsoft.com/edge/webview2"
+    )
+    try:
+        import wintheme
+        wintheme.show_message(text, "NoaToDo", ICON)
+    except Exception:
+        # Selbst das Hinweisfenster braucht WinForms: notfalls die nackte
+        # Windows-Box, denn eine Meldung ist Pflicht, ihr Aussehen nicht.
+        try:
+            ctypes.windll.user32.MessageBoxW(0, text, "NoaToDo", 0x30)
+        except Exception:
+            pass
+    print("[NoaToDo] WebView2-Runtime fehlt, Start abgebrochen.", flush=True)
+
+
+def _harden_release_webview(window) -> None:
+    """Gate G34 (a)/(c): die Browser-Kanaele im Release zumachen.
+
+    Nur im gefrorenen Build (``buildinfo.is_release()``), der Entwicklerstart
+    behaelt DevTools und Kontextmenue. Gesetzt werden drei
+    CoreWebView2-Einstellungen:
+
+    - ``AreDevToolsEnabled = False`` (a): zusaetzlich zum harten ``debug=False``.
+      Sonst haette jeder mit kurzem Zugriff (K3) eine Konsole mit vollem
+      ``pywebview.api.*``-Zugriff, inklusive ``killswitch()`` (das per G13 auch
+      gesperrt erlaubt ist, also ohne Passphrase Daten vernichten koennte).
+    - ``AreBrowserAcceleratorKeysEnabled = False`` (c): toetet ``Strg+P``, also
+      den Weg "Als PDF drucken" = kompletter Klartext-Export an G21 vorbei, samt
+      der uebrigen Browser-Tasten (``Strg+S``, ``F12``, ...). Die App-Shortcuts
+      aus B.5 laufen ueber den eigenen JS-Handler und bleiben unberuehrt.
+    - ``AreDefaultContextMenusEnabled = False`` (c): kein Browser-Kontextmenue
+      mit "Speichern unter"/"Untersuchen".
+
+    Die ``CoreWebView2``-Instanz existiert beim Anhaengen oft noch nicht; dann
+    wird auf ``CoreWebView2InitializationCompleted`` gewartet. Jede Eigenschaft
+    wird einzeln gesetzt: eine aeltere WebView2-Runtime, die eine davon nicht
+    kennt, darf die anderen nicht mitreissen (G27-Leitlinie: Haertung darf die
+    Funktion nie brechen).
+    """
+    if not buildinfo.is_release():
+        return
+
+    def _apply_settings(control) -> None:
+        try:
+            settings = control.CoreWebView2.Settings
+        except Exception:
+            return
+        for name in ("AreDevToolsEnabled", "AreBrowserAcceleratorKeysEnabled",
+                     "AreDefaultContextMenusEnabled"):
+            try:
+                setattr(settings, name, False)
+            except Exception:
+                pass
+
+    def _attach():
+        try:
+            browser = getattr(window.native, "browser", None)
+            control = getattr(browser, "webview", None)  # WinForms WebView2
+            if control is None:
+                return
+            if getattr(control, "CoreWebView2", None) is not None:
+                _apply_settings(control)
+                return
+
+            def on_ready(_sender, _args):
+                _apply_settings(control)
+
+            control.CoreWebView2InitializationCompleted += on_ready
+        except Exception:
+            pass
+
+    _run_on_ui_thread(window, _attach)
+
+
 def _frontend_stamp() -> str:
     """Aenderungszeit der wichtigsten Frontend-Dateien als kurzer Stempel.
 
     Reine Diagnose: macht im Terminal sichtbar, welcher Frontend-Stand geladen
     wird, damit "es hat sich nichts geaendert" sofort auf alt-laufendes Fenster
-    vs. echter Neustart zurueckgefuehrt werden kann.
+    vs. echter Neustart zurueckgefuehrt werden kann. Im gefrorenen Build sagen
+    diese Zeiten nichts (das Bundle wird pro Start frisch entpackt), dort steht
+    stattdessen Version und Build-Datum (V10).
     """
+    if buildinfo.is_frozen():
+        return f"Version {buildinfo.version_line()}"
     parts = []
-    for name in ("frontend/index.html", "frontend/app.js", "frontend/style.css"):
-        path = os.path.join(HERE, name)
+    for name in ("index.html", "app.js", "style.css"):
+        path = os.path.join(buildinfo.frontend_dir(), name)
         try:
             ts = time.strftime("%H:%M:%S", time.localtime(os.path.getmtime(path)))
         except OSError:
             ts = "??"
-        parts.append(f"{os.path.basename(name)} {ts}")
+        parts.append(f"{name} {ts}")
     return "Frontend: " + ", ".join(parts)
 
 
@@ -777,10 +944,13 @@ def run_webview(api: Api, icon: str) -> None:
     def on_start():
         # Gate G12: externe Navigation abriegeln.
         _wire_navigation_guard(window)
+        # Gate G34 (a)/(c): DevTools, Browser-Tasten (Strg+P) und das
+        # Standard-Kontextmenue im Release abschalten.
+        _harden_release_webview(window)
 
         def _startup_window_setup():
             hwnd = _get_hwnd(window)
-            icon_path = os.path.join(HERE, "frontend", "icon.ico")
+            icon_path = ICON
             _apply_window_icon(window, icon_path)
             _apply_taskbar_identity(hwnd, _APP_USER_MODEL_ID, icon_path)
             _apply_titlebar_theme(hwnd, _current_dark(api))
@@ -890,7 +1060,7 @@ def main() -> None:
             wintheme.show_message(
                 "NoaToDo is already running.\nOnly one instance can be open.",
                 "NoaToDo",
-                os.path.join(HERE, "frontend", "icon.ico"),
+                ICON,
             )
         except Exception:
             ctypes.windll.user32.MessageBoxW(
@@ -903,6 +1073,9 @@ def main() -> None:
         return
 
     _cleanup_stale_webview_profiles()
+    # G14/N11.15.5 (d): die alten, unter Store-Python umgeleiteten Pfade der
+    # Entwicklerzeit einmalig wegraeumen (nur im gefrorenen Build).
+    _cleanup_redirected_legacy()
     ctypes.windll.user32.SetProcessDpiAwarenessContext(ctypes.c_void_p(-4))
     _set_app_user_model_id()
     # Verwaiste (verschluesselte) Arbeitsdateien eines Absturzes verwerfen
@@ -923,9 +1096,39 @@ def main() -> None:
     except Exception:
         pass
 
+    # N11.29 (c): die Runtime wird vorausgesetzt, ihr Fehlen aber ehrlich
+    # gemeldet. Vor dem ersten Fenster pruefen, sonst stuende die App mit
+    # MSHTML-Rueckfall als kaputtes Bild da.
+    if not _webview2_ready():
+        _show_missing_webview2()
+        _release_single_instance()
+        return
+
+    # Gate G27 (A5): Frontend-Hashes gegen das eingebettete Manifest. Schlaegt
+    # das fehl, startet die App NICHT (kein "trotzdem fortfahren"): das
+    # manipulierte JS haette vollen Bridge-Zugriff und koennte die Passphrase
+    # im Lock-Screen mitlesen. Im Quellbaum gibt es kein Manifest, dort ist die
+    # Pruefung ein No-op.
+    import integrity
+    bad = integrity.check()
+    if bad:
+        try:
+            import wintheme
+            wintheme.show_message(integrity.message(bad), "NoaToDo", ICON)
+        except Exception:
+            try:
+                ctypes.windll.user32.MessageBoxW(
+                    0, integrity.message(bad), "NoaToDo", 0x10)
+            except Exception:
+                pass
+        print("[NoaToDo] G27: Integritaetspruefung fehlgeschlagen, Start abgebrochen.",
+              flush=True)
+        _release_single_instance()
+        return
+
     session = security_module.Session()
     api = Api(session)
-    icon = os.path.join(HERE, "frontend", "icon.ico")
+    icon = ICON
 
     _determine_boot_state(api)
 
@@ -1015,8 +1218,12 @@ def _release_single_instance() -> None:
 
 
 def _debug_enabled() -> bool:
-    """DevTools aktivieren, wenn NOATODO_DEBUG gesetzt ist."""
-    return os.environ.get("NOATODO_DEBUG", "").lower() in ("1", "true", "yes")
+    """DevTools aktivieren, wenn NOATODO_DEBUG gesetzt ist.
+
+    Nur im Quellbaum. Der gefrorene Release-Build ignoriert die Variable hart
+    (Gate G34 a); die eine Entscheidung dazu liegt in ``buildinfo``.
+    """
+    return buildinfo.debug_enabled()
 
 
 if __name__ == "__main__":

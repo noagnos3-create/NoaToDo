@@ -609,6 +609,7 @@ function renderModal() {
       const dbi = (d && d.db) || null;
       const bl = (d && d.bitlocker) || null;
       const rt = (d && d.runtime) || null;
+      const app = (d && d.app) || null;
       // Jede Zeile ist [Wert, Farbe, Tag]; ohne Antwort neutral und ohne Aussage.
       const wait = [statusFailed ? 'unavailable' : 'checking...', 'var(--text-faint)', ''];
       const encOk = !!(enc && enc.active);
@@ -648,6 +649,28 @@ function renderModal() {
           ? (rt.webview2 && rt.webview2 !== 'unknown'
             ? [rt.webview2, 'var(--secure)', 'ok']
             : ['not readable', 'var(--text-faint)', 'unknown'])
+          : wait)],
+        // V10 (Update-/Release-Story): Version und Build-Datum stammen aus
+        // derselben Quelle wie die .exe-Ressourcen (buildinfo). Ohne Antwort
+        // "checking...", nie eine erfundene Zahl.
+        ['Version', ...(app
+          ? [`${app.version} · ${app.build_date || 'source build'}`,
+            'var(--text-faint)', app.frozen ? 'release' : 'dev']
+          : wait)],
+        // Ehrlich statt beschoenigt (G22 / N11.29 b): eine unsignierte Fassung
+        // steht als unsigniert da. Im Quellbaum gibt es kein Binary zu signieren.
+        ['Code signature', ...(app
+          ? (app.frozen
+            ? (app.signed
+              ? ['signed', 'var(--secure)', 'ok']
+              : ['not signed', 'var(--text-faint)', 'unsigned'])
+            : ['not applicable', 'var(--text-faint)', 'source'])
+          : wait)],
+        // Kein Auto-Update und kein Update-Check uebers Netz (V10): die App
+        // ruft nie nach Hause, hier steht nur, wo der Nutzer selbst nachsieht.
+        ['Updates', ...(app
+          ? [`manual · ${String(app.source || '').replace(/^https?:\/\//, '')}`,
+            'var(--text-faint)', '']
           : wait)],
       ];
       const body = rows.map((r, i) => `
