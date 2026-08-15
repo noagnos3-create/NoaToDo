@@ -1,4 +1,16 @@
-# NoaToDo: Abhängigkeiten
+# NoaToDo: Abhängigkeiten (die lose Liste, mit der Begründung je Wahl).
+#
+# Es gibt vier Dateien, und sie haben verschiedene Aufgaben:
+#   requirements.txt              diese hier: was gebraucht wird und warum
+#   requirements.lock.txt         dasselbe, jede Version exakt festgenagelt
+#   requirements.lock.hashes.txt  dasselbe plus ein SHA-256 je Artefakt;
+#                                 das installiert der Release-Build, mit
+#                                 --require-hashes (Gate G11)
+#   requirements-dev.txt          pytest, PyInstaller, Pillow; nie im Bundle
+#
+# Zum Entwickeln reicht die Hash-Datei:
+#   python -m pip install --require-hashes -r requirements.lock.hashes.txt
+#
 # Fenster / WebView2-Wrapper
 pywebview
 

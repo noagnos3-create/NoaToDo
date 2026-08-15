@@ -46,9 +46,24 @@ HEADER = """\
 # Installation fuer den Release-Build (bricht bei jedem abweichenden Artefakt ab):
 #   python -m pip install --require-hashes -r requirements.lock.hashes.txt
 #
-# Interpreter: CPython {py} (gepinnt, U25). Hashes gelten fuer die Wheels
-# dieser Plattform ({plat}).
+# Interpreter: CPython {py} (gepinnt, U25). Die Hashes gelten fuer die
+# Wheels dieser Plattform: {plat}. Ausgeschrieben, weil Pythons
+# Kurzname dafuer "win32" heisst und sich faelschlich als 32 Bit liest.
 """
+
+
+def _platform_label() -> str:
+    """Lesbare Plattformangabe fuer den Kopf der Hash-Datei.
+
+    ``sys.platform`` liefert auf Windows immer ``win32``, auch auf 64 Bit:
+    das ist Pythons Plattformkennung, nicht die Wortbreite. Im Kopf einer
+    Datei, die Wheel-Hashes erklaert, liest sich das falsch, deshalb steht
+    hier zusaetzlich die Maschinenarchitektur.
+    """
+    import platform
+
+    machine = platform.machine() or "unbekannt"
+    return "%s / %s" % (sys.platform, machine.lower())
 
 
 def _requirements() -> list[str]:
@@ -121,7 +136,7 @@ def main() -> int:
             key = f"{_norm(pkg)}=={version}"
             digests.setdefault(key, []).append(_sha256(os.path.join(tmp, name)))
 
-    lines = [HEADER.format(py=sys.version.split()[0], plat=sys.platform)]
+    lines = [HEADER.format(py=sys.version.split()[0], plat=_platform_label())]
     missing = []
     for req in reqs:
         name, _, version = req.partition("==")

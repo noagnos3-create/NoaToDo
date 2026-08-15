@@ -1,5 +1,13 @@
 """Spike U3 / N11.8.3 (Phase 8, erster Handgriff): Zweitprofil vs. nativer Fallback.
 
+**Kein toter Code, sondern der Beleg fuer Entscheid N11.18.** Dass der
+Sperrbildschirm ein natives WinForms-Fenster ist (``lockwindow.py``) und kein
+zweites WebView, ist keine Geschmacksfrage: dieses Skript zeigt nachpruefbar,
+dass PyWebView zwei getrennte WebView2-Profile in einem Prozess gar nicht
+anbietet. Wer die Entscheidung anzweifelt oder umdrehen will, laesst zuerst das
+hier laufen, statt sich auf den Satz im Plan zu verlassen. Genau dafuer liegt es
+im Repository.
+
 Der Bauplan verlangt BEWEISE, keine Annahmen (N11.8.3, U3-Entscheid). Dieses
 Skript beantwortet die empirisch pruefbaren Spike-Fragen:
 
