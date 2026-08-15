@@ -1,0 +1,88 @@
+name: Bug report
+description: Something in NoaToDo does not work the way it should
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to report this.
+
+        **Found a security vulnerability?** Please do not file it here. See
+        [SECURITY.md](https://github.com/noagnos3-create/NoaToDo/blob/main/SECURITY.md)
+        for the private reporting path.
+
+        **Please do not paste task text or list names** into this issue unless you
+        are certain you want them public. A description of the content is enough,
+        for example "a task with an emoji and a very long line".
+
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened
+      description: What did you see, and what did you expect instead?
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Open the app and unlock
+        2. ...
+        3. ...
+    validations:
+      required: true
+
+  - type: dropdown
+    id: how-run
+    attributes:
+      label: How are you running NoaToDo?
+      options:
+        - The released NoaToDo.exe
+        - From source (python main.py)
+        - I built the .exe myself
+    validations:
+      required: true
+
+  - type: input
+    id: version
+    attributes:
+      label: Version and build date
+      description: >
+        Settings, then the status dialog, then the "Version" row. It reads
+        something like "1.0.0 · 2026-08-10" or "1.0.0 · source build".
+      placeholder: "1.0.0 · 2026-08-10"
+    validations:
+      required: true
+
+  - type: input
+    id: windows
+    attributes:
+      label: Windows version
+      description: 'Run `winver`, or press Win+R and type winver.'
+      placeholder: "Windows 11 23H2"
+    validations:
+      required: true
+
+  - type: textarea
+    id: errors
+    attributes:
+      label: Recent errors from the status dialog
+      description: >
+        The status dialog has a collapsed "Recent errors" section with a copy
+        button. Its contents are already redacted (paths are replaced, no task
+        text, no keys), so it is safe to paste here. Leave empty if it is empty.
+      render: text
+
+  - type: checkboxes
+    id: confirm
+    attributes:
+      label: Before submitting
+      options:
+        - label: I searched the existing issues
+          required: true
+        - label: This is not a security vulnerability (those go through SECURITY.md)
+          required: true
+        - label: I have not pasted any private task content into this report
+          required: true

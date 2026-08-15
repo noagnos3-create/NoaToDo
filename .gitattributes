@@ -1,0 +1,24 @@
+# Zeilenenden. Der wichtigste Teil dieser Datei: build.bat und run.ps1 werden von
+# cmd.exe bzw. der PowerShell ausgefuehrt, und ein .bat mit LF-Zeilenenden
+# verhaelt sich unzuverlaessig. Das trifft genau die Leute, die das Projekt zum
+# ersten Mal bauen, also die schlechteste Stelle fuer eine Ueberraschung.
+* text=auto eol=lf
+*.bat text eol=crlf
+*.cmd text eol=crlf
+*.ps1 text eol=crlf
+
+# Binaerdateien nie anfassen und nie diffen.
+*.woff2 binary
+*.ico   binary
+*.png   binary
+*.jpg   binary
+*.jpeg  binary
+
+# Sprachstatistik (GitHub Linguist). Die Schriften sind fremde, mitgelieferte
+# Dateien und kein eigener Code; docs/ ist Dokumentation. Ohne diese Zeilen
+# faerbt die Statistik das Projekt nach dem, was zufaellig am meisten Bytes hat.
+src/frontend/fonts/** linguist-vendored
+docs/**               linguist-documentation
+
+# Der Sperrbildschirm und die Uebergabe-Blende sind Python, auch wenn sie sehr
+# lang sind. Nichts hier ist generiert, deshalb kein linguist-generated.

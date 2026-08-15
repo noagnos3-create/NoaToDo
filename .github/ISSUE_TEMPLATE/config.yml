@@ -1,0 +1,18 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Security vulnerability
+    url: https://github.com/noagnos3-create/NoaToDo/security/advisories/new
+    about: >
+      Please report vulnerabilities privately, never as a public issue. This
+      opens GitHub's private advisory form. See SECURITY.md for scope and for an
+      email alternative.
+  - name: Question or idea
+    url: https://github.com/noagnos3-create/NoaToDo/discussions
+    about: >
+      For "how do I ..." and open-ended ideas, Discussions is the better place.
+      Issues are for concrete bugs and concrete proposals.
+  - name: Forgotten passphrase
+    url: https://github.com/noagnos3-create/NoaToDo/blob/main/README.md#honest-limits
+    about: >
+      There is no recovery, deliberately. The lock screen's reset wipes the vault
+      and starts over. Nobody, including the maintainer, can restore your data.

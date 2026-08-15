@@ -1,0 +1,59 @@
+name: Feature request
+description: Suggest something NoaToDo should do
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Before you write: NoaToDo leaves out a lot of things **on purpose**, and
+        the reasoning is written down rather than implied. Please have a quick
+        look at "What NoaToDo deliberately does not do" in the
+        [README](https://github.com/noagnos3-create/NoaToDo/blob/main/README.md)
+        and at the [threat model](https://github.com/noagnos3-create/NoaToDo/blob/main/docs/threat-model.md).
+
+        Suggesting one of those anyway is fine, if you bring an argument. Several
+        decisions in this project exist because an earlier version was challenged.
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: What problem would this solve
+      description: >
+        Please describe the situation you are in, not only the feature you have
+        in mind. The underlying problem often has a smaller answer.
+    validations:
+      required: true
+
+  - type: textarea
+    id: idea
+    attributes:
+      label: What you have in mind
+    validations:
+      required: true
+
+  - type: dropdown
+    id: category
+    attributes:
+      label: Which part does this touch?
+      options:
+        - Tasks and lists
+        - Interface, theme, keyboard
+        - Lock, panic, encryption
+        - Export
+        - Build, packaging, release
+        - Something else
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: constraints
+    attributes:
+      label: Does your idea fit the project's constraints?
+      description: >
+        Tick what applies. An unticked box is not a rejection, it just tells me
+        where the discussion has to start.
+      options:
+        - label: It needs no network connection of any kind
+        - label: It needs no notification and no new toast
+        - label: It does not weaken or make optional any part of the encryption
+        - label: It does not require a claim the app cannot verifiably keep

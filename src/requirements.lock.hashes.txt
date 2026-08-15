@@ -6,8 +6,10 @@
 # Installation fuer den Release-Build (bricht bei jedem abweichenden Artefakt ab):
 #   python -m pip install --require-hashes -r requirements.lock.hashes.txt
 #
-# Interpreter: CPython 3.11.9 (gepinnt, U25). Hashes gelten fuer die Wheels
-# dieser Plattform (win32).
+# Interpreter: CPython 3.11.9 (gepinnt, U25). Die Hashes gelten fuer die Wheels
+# von Windows auf x86-64 (cp311, win_amd64), nicht fuer 32-Bit: der frueher hier
+# stehende Kurzname "win32" war Pythons Plattformkennung, nicht die Wortbreite,
+# und las sich falsch. Dieselben Wheels zieht die CI (windows-latest, x64).
 
 argon2-cffi==25.1.0 \
     --hash=sha256:fdc8b074db390fccb6eb4a3604ae7231f219aa669a2652e0f20e16ba513d5741
