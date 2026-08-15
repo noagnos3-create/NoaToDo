@@ -37,6 +37,21 @@ src/_buildstamp.py
 # Claude Code local settings
 .claude/
 
+# Interne Arbeitsunterlagen (Entscheid N11.32, 2026-08-14): Sie bleiben auf der
+# Platte des Entwicklers und behalten ihren Rang (der Bauplan ist weiter das
+# verbindliche Dokument), sie werden nur nicht mitveroeffentlicht. CLAUDE.md ist
+# eine Anweisung an eine KI und keine Dokumentation fuer Menschen; Planung/ ist
+# die deutschsprachige Bauakte samt Design-Konzept.
+# Beides liegt bis Commit 1c7ac09 in der Historie. Ein verlorener Arbeitsstand
+# kommt so zurueck:
+#   git show 1c7ac09:CLAUDE.md > CLAUDE.md
+#   git show 1c7ac09:"Planung/Bauplan - NoaToDo.md" > "Planung/Bauplan - NoaToDo.md"
+CLAUDE.md
+Planung/
+
+# Analyse-Notiz dieser Etappe, gehoert nicht ins Projekt.
+TEMP-Open-Source-Analyse.md
+
 # OS / editor
 Thumbs.db
 desktop.ini
