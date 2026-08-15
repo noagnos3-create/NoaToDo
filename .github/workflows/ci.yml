@@ -62,6 +62,12 @@ jobs:
           python - <<'PY'
           import io, subprocess, sys
 
+          # Die beiden Zeichen werden bewusst als Escape-Folge gebaut und nicht
+          # hingeschrieben: staenden sie literal in dieser Datei, wuerde die
+          # Pruefung bei jedem Lauf ueber sich selbst stolpern.
+          EM_DASH = '\u2014'
+          EN_DASH = '\u2013'
+
           SKIP = ('.woff2', '.ico', '.png', '.jpg', '.jpeg', '.gif', '.pdf')
           files = subprocess.check_output(['git', 'ls-files']).decode().split('\n')
           bad = []
@@ -73,7 +79,7 @@ jobs:
               except (UnicodeDecodeError, OSError):
                   continue
               for number, line in enumerate(text.split('\n'), 1):
-                  if '—' in line or '–' in line:
+                  if EM_DASH in line or EN_DASH in line:
                       bad.append('%s:%d: %s' % (name, number, line.strip()[:100]))
 
           if bad:
@@ -94,7 +100,9 @@ jobs:
       - name: Report open TODO(noa) markers
         continue-on-error: true
         run: |
-          if git grep -n "TODO(noa)" -- . ; then
+          # Diese Datei nennt die Markierung selbst und ist deshalb ausgenommen,
+          # sonst meldet der Schritt bei jedem Lauf drei Treffer aus sich heraus.
+          if git grep -n "TODO(noa)" -- . ':!.github/workflows/ci.yml' ; then
             echo ""
             echo "Open markers above. They are intentional while the repository is"
             echo "being prepared, and they must be gone before the first release."
