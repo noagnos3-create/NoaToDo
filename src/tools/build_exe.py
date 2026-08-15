@@ -1,6 +1,6 @@
 """Baut die auslieferbare ``NoaToDo.exe`` (Bauplan Phase 9, Entscheid N11.29).
 
-Aufruf (aus ``Code/``, mit dem venv-Python des Projekts):
+Aufruf (aus ``src/``, mit dem venv-Python des Projekts):
 
     .\\venv\\Scripts\\python.exe tools\\build_exe.py
 
@@ -10,13 +10,13 @@ Was der Schritt tut, in dieser Reihenfolge:
    CPython 3.11.x. ``sqlcipher3-wheels`` liefert Wheels nur fuer bestimmte
    CPython-Versionen, und der Interpreter ist eine gepinnte Abhaengigkeit wie
    jedes Paket.
-2. **Build-Stempel schreiben** (``Code/_buildstamp.py``): Build-Datum, Commit,
+2. **Build-Stempel schreiben** (``src/_buildstamp.py``): Build-Datum, Commit,
    Signatur-Angabe und das SHA-256-Manifest ueber alle Frontend-Dateien
    (Gate G27, siehe ``integrity.py``). Die Datei ist ein Bau-Artefakt und wird
    am Ende **wieder geloescht**: bliebe sie liegen, liefe der naechste
    Entwicklerstart in die Integritaetspruefung und schluege bei jeder
    Frontend-Aenderung Fehlalarm.
-3. **Versions-Ressource schreiben** (``Code/build/version_info.txt``), damit
+3. **Versions-Ressource schreiben** (``src/build/version_info.txt``), damit
    die ``.exe`` in den Windows-Eigenschaften Version und Namen traegt (V10,
    dieselben Werte wie im Status-Modal).
 4. **PyInstaller** mit ``NoaToDo.spec`` laufen lassen (One-file, ``optimize=2``,

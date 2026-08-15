@@ -82,7 +82,7 @@ def bundle_dir() -> str:
 
     Gefroren: der von PyInstaller entpackte Temp-Ordner (``sys._MEIPASS``),
     der pro Start frisch ist und beim Ende wieder verschwindet. Im Quellbaum:
-    der ``Code``-Ordner, in dem diese Datei liegt.
+    der ``src``-Ordner, in dem diese Datei liegt.
     """
     if is_frozen():
         base = getattr(sys, "_MEIPASS", None)
@@ -114,7 +114,7 @@ def app_dir() -> str:
     """Ordner, in dem die App "wohnt" (nicht der entpackte Bundle-Ordner).
 
     Gefroren: der Ordner der ``.exe`` (dort wuerde eine daneben gelegte
-    Alt-Datei liegen). Im Quellbaum: der ``Code``-Ordner. Wird fuer Altlasten
+    Alt-Datei liegen). Im Quellbaum: der ``src``-Ordner. Wird fuer Altlasten
     gebraucht (G33: alte Dev-Datenbank ``data/tasks.db``), nie fuer Tresor,
     Konfig oder Profil: die liegen an ihren eigenen, vom Nutzer bzw. von
     ``%LOCALAPPDATA%`` bestimmten Orten.

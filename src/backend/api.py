@@ -1821,7 +1821,7 @@ def _cleanup_dev_legacy_db() -> bool:
     warnen, und ein Hinweis auf Vorrat waere eine Behauptung ins Blaue.
     """
     # Der Ort der Altlast ist der Ordner, in dem die App wohnt: im Quellbaum
-    # ``Code/data/tasks.db``, gefroren ``<Ordner der .exe>\data\tasks.db``
+    # ``src/data/tasks.db``, gefroren ``<Ordner der .exe>\data\tasks.db``
     # (Phase 9, buildinfo.app_dir()). Bewusst NICHT der entpackte Bundle-Ordner:
     # dort gibt es keine Altlasten, nur mitgelieferte Dateien.
     import buildinfo

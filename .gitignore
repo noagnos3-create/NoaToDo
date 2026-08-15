@@ -5,12 +5,12 @@ __pycache__/
 .pytest_cache/
 
 # Virtual environment
-Code/venv/
+src/venv/
 venv/
 .venv/
 
 # App data: encrypted DB, logs, runtime state (never commit user data)
-Code/data/
+src/data/
 data/
 *.db
 *.db-journal
@@ -26,9 +26,9 @@ data/
 # Build-Artefakte der Auslieferung (Phase 9): das Bundle und der beim Bauen
 # erzeugte Stempel (Build-Datum, Commit, Frontend-Manifest) sind Ergebnisse,
 # keine Quellen. Der Stempel wird nach jedem Build ohnehin geloescht.
-Code/build/
-Code/dist/
-Code/_buildstamp.py
+src/build/
+src/dist/
+src/_buildstamp.py
 
 # Secrets / local config
 .env

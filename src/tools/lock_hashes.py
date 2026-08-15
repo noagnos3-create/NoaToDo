@@ -13,7 +13,7 @@ installiert deshalb mit **pip-Hash-Checking**:
 mindestens einen ``--hash`` traegt; passt ein heruntergeladenes Artefakt nicht,
 bricht pip ab, statt es zu installieren.
 
-Aufruf (aus ``Code/``, mit dem venv-Python des Projekts, Netz noetig):
+Aufruf (aus ``src/``, mit dem venv-Python des Projekts, Netz noetig):
 
     .\\venv\\Scripts\\python.exe tools\\lock_hashes.py
 

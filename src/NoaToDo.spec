@@ -79,7 +79,10 @@ a = Analysis(
     excludes=[
         # Nicht gebraucht und nur Angriffsflaeche/Groesse: Tk, Test- und
         # Entwicklerwerkzeuge gehoeren nicht in eine ausgelieferte Tresor-App.
+        # PIL steht mit dabei, weil Pillow im Entwickler-venv liegt (nur fuer
+        # tools/make_icon.py) und nichts davon in die .exe gehoert.
         "tkinter", "unittest", "pytest", "pydoc", "doctest", "PyInstaller",
+        "PIL",
     ],
     noarchive=False,
     # Gate G27: mit Optimierungsstufe 2 uebersetzen, also .pyc ohne Docstrings

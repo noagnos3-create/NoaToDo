@@ -1063,9 +1063,12 @@ def main() -> None:
                 ICON,
             )
         except Exception:
+            # Derselbe Wortlaut wie oben: die Oberflaeche ist durchgehend
+            # englisch, und dieser Notweg ist der einzige Ort, an dem ein
+            # Nutzer je einen deutschen Satz zu sehen bekaeme.
             ctypes.windll.user32.MessageBoxW(
                 0,
-                "NoaToDo läuft bereits. Es kann nur eine Instanz geöffnet sein.",
+                "NoaToDo is already running.\nOnly one instance can be open.",
                 "NoaToDo",
                 0x40,  # MB_ICONINFORMATION
             )
