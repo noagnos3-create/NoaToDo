@@ -8,18 +8,9 @@ NoaToDo looks roughly like Microsoft To Do and behaves nothing like it underneat
 
 ## Screenshots
 
-<!-- TODO(noa): Vier Screenshots aufnehmen und nach docs/ legen. Die Pfade unten
-     stimmen schon, es fehlen nur die Bilder. Vorschlag fuer die Motive:
-       docs/screenshot-lists.png     Liste mit Aufgaben, Sidebar offen, Rail rechts
-       docs/screenshot-lock.png      natives Sperrfenster mit Ring und Passwort-Pille
-       docs/screenshot-status.png    Status-Modal mit den echten Verschluesselungszeilen
-       docs/screenshot-onboarding.png  Einrichtung Schritt 2 (Passphrase + Warnung)
-     Alternativ per Drag and Drop in eine GitHub-Issue hochladen und die
-     user-attachments-URLs eintragen, so wie beim Silicant-README. -->
-
 | Lists | Lock screen | Status | Setup |
 |:--:|:--:|:--:|:--:|
-| <img width="1919" height="1079" alt="image" src="https://github.com/user-attachments/assets/40015acf-79c2-4023-8edc-e6f13e20695d" /> | <img width="1919" height="1079" alt="image" src="https://github.com/user-attachments/assets/7e53079f-b345-4b11-97c4-d599224d72a0" /> | <img width="1919" height="1079" alt="image" src="https://github.com/user-attachments/assets/9d967c55-8adf-4944-b1be-51f9bccbcd38" /> | <img width="1600" height="999" alt="WhatsApp Image 2026-08-16 at 12 31 39" src="https://github.com/user-attachments/assets/04367357-6d3f-4b65-bbf3-8ee6a8941e00" />|
+| <img width="1919" height="1079" alt="A list of tasks with the sidebar open and the contextual rail on the right" src="https://github.com/user-attachments/assets/40015acf-79c2-4023-8edc-e6f13e20695d" /> | <img width="1919" height="1079" alt="The native lock window with the progress ring and the passphrase field" src="https://github.com/user-attachments/assets/7e53079f-b345-4b11-97c4-d599224d72a0" /> | <img width="1919" height="1079" alt="The status dialog listing the real encryption parameters" src="https://github.com/user-attachments/assets/9d967c55-8adf-4944-b1be-51f9bccbcd38" /> | <img width="1600" height="999" alt="Setup, choosing a passphrase, with the warning that it cannot be recovered" src="https://github.com/user-attachments/assets/04367357-6d3f-4b65-bbf3-8ee6a8941e00" /> |
 
 ## Features
 
