@@ -1,3 +1,19 @@
+# NoaToDo, a local encrypted to-do app for Windows.
+# Copyright (C) 2026 Noa Gnos
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <https://www.gnu.org/licenses/>.
+
 """Baut die auslieferbare ``NoaToDo.exe`` (Bauplan Phase 9, Entscheid N11.29).
 
 Aufruf (aus ``src/``, mit dem venv-Python des Projekts):
@@ -117,6 +133,7 @@ VSVersionInfo(
          StringStruct('FileDescription', 'NoaToDo, local encrypted to-do app'),
          StringStruct('FileVersion', '{buildinfo.VERSION}'),
          StringStruct('InternalName', 'NoaToDo'),
+         StringStruct('LegalCopyright', 'Copyright (C) 2026 Noa Gnos. GNU GPL v3 or later.'),
          StringStruct('OriginalFilename', 'NoaToDo.exe'),
          StringStruct('ProductName', 'NoaToDo'),
          StringStruct('ProductVersion', '{buildinfo.VERSION} ({build_date})'),

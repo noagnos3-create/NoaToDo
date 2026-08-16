@@ -26,7 +26,8 @@
 - [ ] Native window changes are dispatched to the WinForms UI thread
 - [ ] This PR does not add a network call, a notification, or a new toast
 - [ ] Security claims in the code, the UI or the docs match what the code does
-- [ ] I agree to license my contribution under the project's license
+- [ ] New source files carry the GPL header, as a comment above the docstring
+- [ ] I agree to license my contribution under the GNU GPL v3 or later
 
 <!-- Touching security.py, db.py, the .enc format, the lock allowlist or the CSP?
      Please open an issue first, see CONTRIBUTING.md. Found a vulnerability?

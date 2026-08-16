@@ -72,9 +72,8 @@ Not here, and not as a public issue. See [SECURITY.md](SECURITY.md).
 
 ## License
 
-<!-- TODO(noa): Diesen Abschnitt fertigstellen, sobald die Lizenz gewaehlt und
-     LICENSE angelegt ist. Der Satz muss dieselbe Lizenz nennen wie LICENSE und
-     wie der License-Abschnitt im README, sonst ist die Zusage des Beitragenden
-     unklar. Vorschlag aus der Analyse: GPL-3.0-or-later, wie bei Silicant. -->
+By contributing, you agree that your contributions are licensed under the **GNU General Public License, version 3 or any later version**, the same license as the rest of the project. See [LICENSE](LICENSE).
 
-By contributing, you agree that your contributions will be licensed under the same license as this project. The `LICENSE` file will be added before this repository is made public; until then this section is intentionally unfinished.
+There is no contributor license agreement to sign and no copyright assignment. You keep the copyright on what you write.
+
+If you add a new source file, give it the same header the existing files carry (the short GPL notice with the copyright line, as a comment above the module docstring, never inside it). The two font license files under `src/frontend/fonts/` are third-party texts and must stay exactly as they are.

@@ -1,3 +1,19 @@
+# NoaToDo, a local encrypted to-do app for Windows.
+# Copyright (C) 2026 Noa Gnos
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <https://www.gnu.org/licenses/>.
+
 """Spike U3 / N11.8.3 (Phase 8, erster Handgriff): Zweitprofil vs. nativer Fallback.
 
 **Kein toter Code, sondern der Beleg fuer Entscheid N11.18.** Dass der

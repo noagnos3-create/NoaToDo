@@ -279,8 +279,17 @@ Bug reports, questions and pull requests are welcome. Please read [CONTRIBUTING.
 
 ## License
 
-<!-- TODO(noa): Lizenz eintragen, sobald LICENSE liegt. Vorschlag aus der Analyse:
-     GPL-3.0-or-later, wie bei Silicant. Dieser Abschnitt und die LICENSE-Datei
-     muessen zusammenpassen, bevor das Repository oeffentlich wird. -->
+NoaToDo is free software: you can redistribute it and modify it under the terms of the **GNU General Public License, version 3 or any later version**. The full text is in [LICENSE](LICENSE).
 
-Not yet licensed. A `LICENSE` file will be added before this repository is made public. Until then, no permission to use, copy, modify or distribute this code is granted.
+It comes with **absolutely no warranty**, which for an app like this is worth reading literally rather than as boilerplate: nobody can restore your tasks if something goes wrong, and there is no recovery for a forgotten passphrase by design.
+
+Copyright (C) 2026 Noa Gnos.
+
+### Bundled fonts
+
+The two bundled typefaces are **not** covered by the GPL. They are licensed under the [SIL Open Font License, version 1.1](https://openfontlicense.org/), and their license texts ship next to them:
+
+- JetBrains Mono, Copyright 2020 The JetBrains Mono Project Authors, see [src/frontend/fonts/OFL-JetBrainsMono.txt](src/frontend/fonts/OFL-JetBrainsMono.txt)
+- Space Grotesk, Copyright 2020 The Space Grotesk Project Authors, see [src/frontend/fonts/OFL-SpaceGrotesk.txt](src/frontend/fonts/OFL-SpaceGrotesk.txt)
+
+Everything else NoaToDo depends on is listed under [Built with](#built-with) and carries a GPL-compatible license of its own (BSD, MIT, Apache-2.0 or zlib).
