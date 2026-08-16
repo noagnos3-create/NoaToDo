@@ -69,7 +69,7 @@ This section is deliberately as prominent as the one above. A security claim the
 - **The pepper makes an offline attack hopeless only as long as** the attacker has the vault file alone, or the disk is encrypted. Whoever holds the whole unencrypted disk can attack the DPAPI master key, whose strength then rests on your Windows password. If that falls, only the passphrase is left, expensive through Argon2id but alone.
 - **BitLocker or Windows device encryption is effectively a prerequisite.** NoaToDo cannot reach the pagefile, the hibernation file or crash dumps. The app reads your real BitLocker state and shows it, and says "unknown" when it cannot read it rather than claiming anything.
 - **Malware running in your own Windows account is an explicit non-goal.** Anything running as you can read the pepper, hook the keyboard, read unlocked process memory or swap out `app.js`. The hardening in this app (Content Security Policy, backend-enforced lock allowlist, hardened clipboard, frontend hash manifest, no DevTools in release) raises the bar and makes silent persistence harder. It is never sold as protection against this class.
-- **This build is not code-signed.** Windows SmartScreen will warn on first run, and a tampered binary cannot be detected by a signature. Verify the SHA-256 checksum published with the release, or build it yourself.
+- **This build is not code-signed.** Windows SmartScreen will warn on first run, and a tampered binary cannot be detected by a signature. Verify the SHA-256 checksum published with the [release](https://github.com/noagnos3-create/NoaToDo/releases/tag/v1.0.0), or build it yourself.
 - **The rate limit ladder slows down a person at your keyboard and nothing else.** Anyone who can copy the vault file guesses offline, where no ladder exists. Anyone with file access can delete the config and reset the ladder.
 - **Exports write plaintext files.** That is what an export is for. Once saved, the file is outside the vault and outside this model.
 - **Input fields stay selectable**, so their native `Ctrl+C` lands in the ordinary Windows clipboard. Only the rail's copy button takes the hardened path.
@@ -96,6 +96,12 @@ The full threat model, including the six attacker classes this app is written ag
 - **BitLocker or Windows device encryption** is strongly recommended, see the honest limits above.
 
 ## Installation
+
+### Download
+
+The current release is [v1.0.0](https://github.com/noagnos3-create/NoaToDo/releases/tag/v1.0.0). Take `NoaToDo.exe` from there, put it wherever you like and run it. There is no installer, no setup wizard and nothing written outside your own user profile.
+
+Two things to expect, both spelled out in the release notes: SmartScreen warns on first run because the binary is not signed, and the SHA-256 checksum published with the release is what lets you check that your copy is the one published here. `THIRD-PARTY-NOTICES.md` and `LICENSE` are attached to the release as well, since a downloaded executable carries neither.
 
 ### Running from source
 
