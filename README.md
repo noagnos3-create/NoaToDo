@@ -19,7 +19,7 @@ NoaToDo looks roughly like Microsoft To Do and behaves nothing like it underneat
 
 | Lists | Lock screen | Status | Setup |
 |:--:|:--:|:--:|:--:|
-| ![Lists](docs/screenshot-lists.png) | ![Lock screen](docs/screenshot-lock.png) | ![Status](docs/screenshot-status.png) | ![Setup](docs/screenshot-onboarding.png) |
+| <img width="1919" height="1079" alt="image" src="https://github.com/user-attachments/assets/40015acf-79c2-4023-8edc-e6f13e20695d" /> | <img width="1919" height="1079" alt="image" src="https://github.com/user-attachments/assets/7e53079f-b345-4b11-97c4-d599224d72a0" /> | <img width="1919" height="1079" alt="image" src="https://github.com/user-attachments/assets/9d967c55-8adf-4944-b1be-51f9bccbcd38" /> | ![Setup](docs/screenshot-onboarding.png) |
 
 ## Features
 
