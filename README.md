@@ -293,3 +293,7 @@ The two bundled typefaces are **not** covered by the GPL. They are licensed unde
 - Space Grotesk, Copyright 2020 The Space Grotesk Project Authors, see [src/frontend/fonts/OFL-SpaceGrotesk.txt](src/frontend/fonts/OFL-SpaceGrotesk.txt)
 
 Everything else NoaToDo depends on is listed under [Built with](#built-with) and carries a GPL-compatible license of its own (BSD, MIT, Apache-2.0 or zlib).
+
+### Third-party components
+
+[THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md) lists every third-party component with its license: the pinned Python packages, the native libraries compiled into them (SQLCipher, SQLite, OpenSSL, the Argon2 reference implementation), the bundled CPython runtime and the two fonts. That matters most for the released executable, which carries compiled copies of all of them in a single file without their license texts, so the notices are published alongside it.
