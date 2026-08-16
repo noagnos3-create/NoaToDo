@@ -7,10 +7,7 @@
 Two ways, either is fine:
 
 - GitHub's private vulnerability reporting: the **Security** tab of this repository, then **Report a vulnerability**.
-- Email: <!-- TODO(noa): Kontaktadresse eintragen. Entweder die Adresse aus den
-  Commits oder eine getrennte. Ohne diese Zeile hat der Melder nur den GitHub-Weg,
-  und wer kein GitHub-Konto hat, kann gar nichts melden. -->
-  `TODO(noa): address`
+- Email: noagnos3@gmail.com
 
 This project is maintained by one person in their spare time. Expect a first reply within seven days. Please allow 90 days before disclosing publicly, and let me know if you intend to publish sooner, so I can prioritise accordingly.
 
