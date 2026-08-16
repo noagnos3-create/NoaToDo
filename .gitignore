@@ -5,12 +5,12 @@ __pycache__/
 .pytest_cache/
 
 # Virtual environment
-Code/venv/
+src/venv/
 venv/
 .venv/
 
 # App data: encrypted DB, logs, runtime state (never commit user data)
-Code/data/
+src/data/
 data/
 *.db
 *.db-journal
@@ -26,9 +26,9 @@ data/
 # Build-Artefakte der Auslieferung (Phase 9): das Bundle und der beim Bauen
 # erzeugte Stempel (Build-Datum, Commit, Frontend-Manifest) sind Ergebnisse,
 # keine Quellen. Der Stempel wird nach jedem Build ohnehin geloescht.
-Code/build/
-Code/dist/
-Code/_buildstamp.py
+src/build/
+src/dist/
+src/_buildstamp.py
 
 # Secrets / local config
 .env
@@ -36,6 +36,21 @@ Code/_buildstamp.py
 
 # Claude Code local settings
 .claude/
+
+# Interne Arbeitsunterlagen (Entscheid N11.32, 2026-08-14): Sie bleiben auf der
+# Platte des Entwicklers und behalten ihren Rang (der Bauplan ist weiter das
+# verbindliche Dokument), sie werden nur nicht mitveroeffentlicht. CLAUDE.md ist
+# eine Anweisung an eine KI und keine Dokumentation fuer Menschen; Planung/ ist
+# die deutschsprachige Bauakte samt Design-Konzept.
+# Beides liegt bis Commit 1c7ac09 in der Historie. Ein verlorener Arbeitsstand
+# kommt so zurueck:
+#   git show 1c7ac09:CLAUDE.md > CLAUDE.md
+#   git show 1c7ac09:"Planung/Bauplan - NoaToDo.md" > "Planung/Bauplan - NoaToDo.md"
+CLAUDE.md
+Planung/
+
+# Analyse-Notiz dieser Etappe, gehoert nicht ins Projekt.
+TEMP-Open-Source-Analyse.md
 
 # OS / editor
 Thumbs.db

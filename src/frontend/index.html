@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<!--
+  NoaToDo, a local encrypted to-do app for Windows.
+  Copyright (C) 2026 Noa Gnos
+
+  This program is free software: you can redistribute it and/or modify
+  it under the terms of the GNU General Public License as published by
+  the Free Software Foundation, either version 3 of the License, or
+  (at your option) any later version.
+
+  This program is distributed in the hope that it will be useful,
+  but WITHOUT ANY WARRANTY; without even the implied warranty of
+  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+  GNU General Public License for more details.
+
+  You should have received a copy of the GNU General Public License
+  along with this program.  If not, see <https://www.gnu.org/licenses/>.
+-->
+
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <!-- Content Security Policy (Bauplan B.9 Regel 2), Defense-in-Depth gegen
+       XSS/RCE. 'unsafe-inline' NUR fuer style-src (das Frontend nutzt
+       inline style=""-Attribute), NICHT fuer script-src: damit bleiben
+       eingeschleuste Inline-Handler (z.B. <img onerror=...>) wirkungslos,
+       selbst wenn doch einmal innerHTML mit Fremddaten benutzt wird. -->
+  <meta http-equiv="Content-Security-Policy"
+        content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'none';" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>NoaToDo</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <div class="app" id="root">
+    <div class="boot">Unpacking vault…</div>
+  </div>
+  <script src="app.js"></script>
+</body>
+</html>

@@ -1,0 +1,64 @@
+# NoaToDo: gepinnte Abhaengigkeiten MIT Artefakt-Hashes (Gate G11).
+# Erzeugt von tools/lock_hashes.py, nicht von Hand pflegen: wer eine Version
+# aendert, aendert sie in requirements.lock.txt und laesst das Werkzeug neu
+# laufen.
+#
+# Installation fuer den Release-Build (bricht bei jedem abweichenden Artefakt ab):
+#   python -m pip install --require-hashes -r requirements.lock.hashes.txt
+#
+# Interpreter: CPython 3.11.9 (gepinnt, U25). Die Hashes gelten fuer die
+# Wheels dieser Plattform: win32 / amd64. Ausgeschrieben, weil Pythons
+# Kurzname dafuer "win32" heisst und sich faelschlich als 32 Bit liest.
+
+argon2-cffi==25.1.0 \
+    --hash=sha256:fdc8b074db390fccb6eb4a3604ae7231f219aa669a2652e0f20e16ba513d5741
+argon2-cffi-bindings==25.1.0 \
+    --hash=sha256:a98cd7d17e9f7ce244c0803cad3c23a7d379c301ba618a5fa76a67d116618b98
+backports.tarfile==1.2.0 \
+    --hash=sha256:77e284d754527b01fb1e6fa8a1afe577858ebe4e9dad8919e34c862cb399bc34
+bottle==0.13.4 \
+    --hash=sha256:045684fbd2764eac9cdeb824861d1551d113e8b683d8d26e296898d3dd99a12e
+cffi==2.0.0 \
+    --hash=sha256:66f011380d0e49ed280c789fbd08ff0d40968ee7b665575489afa95c98196ab5
+clr_loader==0.3.1 \
+    --hash=sha256:cbad189de20d202a7d621956b0fc38049e13c9bf7ca2923441eff725cd121aa1
+cryptography==48.0.0 \
+    --hash=sha256:5b012212e08b8dd5edc78ef54da83dd9892fd9105323b3993eff6bea65dc21d7
+importlib_metadata==9.0.0 \
+    --hash=sha256:2d21d1cc5a017bd0559e36150c21c830ab1dc304dedd1b7ea85d20f45ef3edd7
+jaraco.classes==3.4.0 \
+    --hash=sha256:f662826b6bed8cace05e7ff873ce0f9283b5c924470fe664fff1c2f00f581790
+jaraco.context==6.1.2 \
+    --hash=sha256:bf8150b79a2d5d91ae48629d8b427a8f7ba0e1097dd6202a9059f29a36379535
+jaraco.functools==4.5.0 \
+    --hash=sha256:79ce39246eddbde4b3a03b77ea5f0f7878dc669b166a66cf3fa8e266aa3fa2f4
+keyring==25.7.0 \
+    --hash=sha256:be4a0b195f149690c166e850609a477c532ddbfbaed96a404d4e43f8d5e2689f
+more-itertools==11.1.0 \
+    --hash=sha256:4b65538ae22f6fed0ce4874efd317463a7489796a0939fa66824dd542125a192
+proxy_tools==0.1.0 \
+    --hash=sha256:ccb3751f529c047e2d8a58440d86b205303cf0fe8146f784d1cbcd94f0a28010
+pycparser==3.0 \
+    --hash=sha256:b727414169a36b7d524c1c3e31839a521725078d7b2ff038656844266160a992
+pythonnet==3.1.0 \
+    --hash=sha256:7bdd4de03df3547a48122a3989265c8b31d5be0d19dadffa009eec7df8085e0b
+pywebview==5.3.2 \
+    --hash=sha256:55f5a4bcfaa56738f2d6206977bd3d2864784249b0646c67e84f402ba1740000
+pywin32-ctypes==0.2.3 \
+    --hash=sha256:8a1513379d709975552d202d942d9837758905c8d01eb82b8bcc30918929e7b8
+sqlcipher3-wheels==0.5.7 \
+    --hash=sha256:0b4eebca17f96ec1e59bd0e749a84fd1f3f2aa3e48cb22bef6382bda4bab9281
+typing_extensions==4.15.0 \
+    --hash=sha256:f0fa19c6845758ab08074a0cfa8b7aecb71c999ca73d62883bc25cc018c4e548
+winrt-runtime==3.2.1 \
+    --hash=sha256:c0a9046ae416808420a358c51705af8ae100acd40bc578be57ddfdd51cbb0f9c
+winrt-Windows.Devices.Enumeration==3.2.1 \
+    --hash=sha256:2a725d04b4cb43aa0e2af035f73a60d16a6c0ff165fcb6b763383e4e33a975fd
+winrt-Windows.Devices.Radios==3.2.1 \
+    --hash=sha256:f87745486d313ba1e7562ca97f25ad436ec01ad4b3b9ea349fb6b6f25cb41104
+winrt-Windows.Foundation==3.2.1 \
+    --hash=sha256:f3762be2f6e0f2aedf83a0742fd727290b397ffe3463d963d29211e4ebb53a7e
+winrt-Windows.Foundation.Collections==3.2.1 \
+    --hash=sha256:c646a5d442dd6540ade50890081ca118b41f073356e19032d0a5d7d0d38fbc89
+zipp==4.1.0 \
+    --hash=sha256:25ad4e16390cd314347dd8f1de67a2ac538ae658ed4ab9db16029c07c188e97f

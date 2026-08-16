@@ -1,0 +1,40 @@
+# NoaToDo: Abhängigkeiten (die lose Liste, mit der Begründung je Wahl).
+#
+# Es gibt vier Dateien, und sie haben verschiedene Aufgaben:
+#   requirements.txt              diese hier: was gebraucht wird und warum
+#   requirements.lock.txt         dasselbe, jede Version exakt festgenagelt
+#   requirements.lock.hashes.txt  dasselbe plus ein SHA-256 je Artefakt;
+#                                 das installiert der Release-Build, mit
+#                                 --require-hashes (Gate G11)
+#   requirements-dev.txt          pytest, PyInstaller, Pillow; nie im Bundle
+#
+# Zum Entwickeln reicht die Hash-Datei:
+#   python -m pip install --require-hashes -r requirements.lock.hashes.txt
+#
+# Fenster / WebView2-Wrapper
+pywebview
+
+# DPAPI-Pepper der Schlüsselableitung, sicher im Windows Credential Manager (siehe G18)
+keyring
+
+# --- Verschlüsselung (Doppel-Kaskade, siehe Bauplan B.7) ---
+# Schicht 1: SQLCipher / AES-256 (Pflicht)
+# Hinweis: sqlcipher3-binary hat keine Windows-Wheels. sqlcipher3-wheels
+# liefert vorgebaute Windows-Wheels mit identischer sqlcipher3-API.
+sqlcipher3-wheels
+# Schicht 2: ChaCha20-Poly1305 (Pflicht)
+cryptography
+# Passphrase-Hash + Schlüsselableitung
+argon2-cffi
+
+# --- Echter Windows-Flugmodus (N11.5, Gate G11) ---
+# Modulare PyWinRT-Pakete (schmalere Abhängigkeitsfläche als das Sammelpaket
+# winsdk, das nur die dokumentierte Rückfalloption bleibt). set_online schaltet
+# darüber die echten Funkgeräte (Windows.Devices.Radios). Foundation.Collections
+# wird zusätzlich gebraucht: die IVectorView aus GetRadiosAsync ist ohne ihre
+# Projektion nicht iterierbar.
+winrt-runtime
+winrt-Windows.Devices.Radios
+winrt-Windows.Devices.Enumeration
+winrt-Windows.Foundation
+winrt-Windows.Foundation.Collections

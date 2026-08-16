@@ -1,0 +1,38 @@
+# NoaToDo: alle Abhaengigkeiten auf eine exakte Version festgenagelt
+# (Gate G11). Erzeugt aus der Entwicklungsumgebung, Begruendungen stehen
+# in requirements.txt.
+#
+# Wer hier eine Version aendert, laesst danach tools/lock_hashes.py laufen:
+# requirements.lock.hashes.txt traegt zu jeder Zeile den Artefakt-Hash und
+# ist die Datei, die der Release-Build mit --require-hashes installiert.
+# Die beiden duerfen nie auseinanderlaufen.
+#
+# Nur Laufzeit: Werkzeuge (pytest, PyInstaller, Pillow) stehen bewusst
+# allein in requirements-dev.txt und gehoeren nicht ins Bundle.
+
+argon2-cffi==25.1.0
+argon2-cffi-bindings==25.1.0
+backports.tarfile==1.2.0
+bottle==0.13.4
+cffi==2.0.0
+clr_loader==0.3.1
+cryptography==48.0.0
+importlib_metadata==9.0.0
+jaraco.classes==3.4.0
+jaraco.context==6.1.2
+jaraco.functools==4.5.0
+keyring==25.7.0
+more-itertools==11.1.0
+proxy_tools==0.1.0
+pycparser==3.0
+pythonnet==3.1.0
+pywebview==5.3.2
+pywin32-ctypes==0.2.3
+sqlcipher3-wheels==0.5.7
+typing_extensions==4.15.0
+winrt-runtime==3.2.1
+winrt-Windows.Devices.Enumeration==3.2.1
+winrt-Windows.Devices.Radios==3.2.1
+winrt-Windows.Foundation==3.2.1
+winrt-Windows.Foundation.Collections==3.2.1
+zipp==4.1.0

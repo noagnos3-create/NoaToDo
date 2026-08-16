@@ -1,0 +1,111 @@
+name: CI
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: Tests (Windows, CPython 3.11)
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # Die Python-Version ist eine gepinnte Abhaengigkeit wie jedes Paket
+      # (Gate G11): sqlcipher3-wheels liefert Wheels nur fuer bestimmte
+      # CPython-Versionen, und tools/build_exe.py bricht auf allem anderen ab.
+      # Deshalb hier 3.11 fest, nie eine Matrix und nie "3.x".
+      - name: Set up CPython 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          architecture: "x64"
+
+      # Ubuntu kaeme hier nicht weit: sqlcipher3-wheels ist Windows-only, und
+      # ostheme, radio und wintheme haengen an WinReg, WinRT und WinForms.
+      # Der Import scheitert also schon vor dem ersten Test.
+      - name: Install pinned dependencies (hash-checked)
+        working-directory: src
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install --require-hashes -r requirements.lock.hashes.txt
+
+      - name: Install development tooling
+        working-directory: src
+        run: python -m pip install -r requirements-dev.txt
+
+      # conftest.py biegt vor jedem Test %LOCALAPPDATA% auf einen Temp-Ordner um
+      # und ersetzt keyring durch einen Stub, der bei jedem Aufruf auffliegt.
+      # Auf dem Runner gibt es ohnehin keinen befuellten Credential Manager,
+      # aber die Regel gilt hier wie lokal.
+      - name: Run tests
+        working-directory: src
+        run: python -m pytest -q
+
+  hygiene:
+    name: Repository hygiene
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # Hausregel des Projekts: keine Geviert- und Halbgeviertstriche, nirgends.
+      # Weder im Code noch in Kommentaren, UI-Texten, Doku oder Commit-Nachrichten.
+      # Der Baum ist heute strichfrei, und dieser Schritt haelt das so, statt es
+      # bei jeder Aenderung von Hand nachsehen zu muessen.
+      - name: No em dashes or en dashes
+        run: |
+          python - <<'PY'
+          import io, subprocess, sys
+
+          # Die beiden Zeichen werden bewusst als Escape-Folge gebaut und nicht
+          # hingeschrieben: staenden sie literal in dieser Datei, wuerde die
+          # Pruefung bei jedem Lauf ueber sich selbst stolpern.
+          EM_DASH = '\u2014'
+          EN_DASH = '\u2013'
+
+          SKIP = ('.woff2', '.ico', '.png', '.jpg', '.jpeg', '.gif', '.pdf')
+          files = subprocess.check_output(['git', 'ls-files']).decode().split('\n')
+          bad = []
+          for name in files:
+              if not name or name.endswith(SKIP):
+                  continue
+              try:
+                  text = io.open(name, encoding='utf-8').read()
+              except (UnicodeDecodeError, OSError):
+                  continue
+              for number, line in enumerate(text.split('\n'), 1):
+                  if EM_DASH in line or EN_DASH in line:
+                      bad.append('%s:%d: %s' % (name, number, line.strip()[:100]))
+
+          if bad:
+              print('Em dash (U+2014) or en dash (U+2013) found. Use commas,')
+              print('colons, parentheses or separate sentences instead; for ranges')
+              print('use "to" or a plain ASCII hyphen.')
+              print('')
+              for entry in bad:
+                  print('  ' + entry)
+              sys.exit(1)
+
+          print('Clean: no em dashes and no en dashes in %d tracked files.' % len(files))
+          PY
+
+      # Die Markierungen sind waehrend der Vorbereitung Absicht, aber sie duerfen
+      # nicht mit dem ersten Release stehenbleiben. Genau das ist im README des
+      # Schwesterprojekts passiert. Der Schritt warnt nur, er bricht nicht ab.
+      - name: Report open TODO(noa) markers
+        continue-on-error: true
+        run: |
+          # Diese Datei nennt die Markierung selbst und ist deshalb ausgenommen,
+          # sonst meldet der Schritt bei jedem Lauf drei Treffer aus sich heraus.
+          if git grep -n "TODO(noa)" -- . ':!.github/workflows/ci.yml' ; then
+            echo ""
+            echo "Open markers above. They are intentional while the repository is"
+            echo "being prepared, and they must be gone before the first release."
+          else
+            echo "No open TODO(noa) markers."
+          fi
