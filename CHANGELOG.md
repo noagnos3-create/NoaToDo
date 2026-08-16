@@ -7,16 +7,11 @@ All notable changes to this project are documented here. The format follows
 The version number is visible inside the app, in the status dialog, together with
 the build date and the commit the binary was built from.
 
-<!-- TODO(noa): Beim Anlegen des Releases das Datum unten eintragen und den Tag
-     v1.0.0 setzen. Solange kein Release existiert, bleibt "not yet released"
-     stehen: ein erfundenes Datum waere genau die Art von Behauptung, die dieses
-     Projekt sich sonst verbietet. -->
-
 ## [Unreleased]
 
 Nothing yet.
 
-## [1.0.0] - not yet released
+## [1.0.0] - 2026-08-16
 
 The first release. Everything below is new, so this entry describes the app
 rather than a diff against a predecessor.
